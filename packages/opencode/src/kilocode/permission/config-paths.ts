@@ -8,7 +8,7 @@ export namespace ConfigProtection {
    * Config directory prefixes (relative paths, forward-slash normalized).
    * Matches .kilo/ and legacy .kilocode/ at any depth within the project.
    */
-  const CONFIG_DIRS = [".kilo/", ".kilocode/"]
+  const CONFIG_DIRS = [".dustcode/", ".kilo/", ".kilocode/"]
 
   /**
    * Subdirectories under CONFIG_DIRS that are NOT config files (e.g. plan files).

@@ -1,5 +1,6 @@
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
+import { Profile } from "@opencode-ai/core/kilocode/profile"
 import { parse, type ParseError } from "jsonc-parser"
 import { ConfigPaths } from "@/config/paths"
 import { patchPluginConfig, type PatchDeps, type PatchInput } from "@/plugin/install"
@@ -12,7 +13,7 @@ export async function patchPlugin(input: PatchInput, write: PatchDeps["write"] =
   const completed: string[] = []
   try {
     const root = input.vcs === "git" && input.worktree !== "/" ? input.worktree : input.directory
-    const dir = input.global ? (input.config ?? Global.Path.config) : path.join(root, ".kilo")
+    const dir = input.global ? (input.config ?? Global.Path.config) : path.join(root, Profile.dir())
     // Preflight every target before any write. The upstream writer validates
     // again under its lock; failures caused by later changes are reported below.
     for (const target of input.targets) {

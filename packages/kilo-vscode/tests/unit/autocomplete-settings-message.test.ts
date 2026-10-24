@@ -1,6 +1,8 @@
 import { describe, it, expect, afterEach, beforeEach } from "bun:test"
 import * as vscode from "vscode"
 import { buildAutocompleteSettingsMessage, validAutocompleteSetting } from "../../src/services/autocomplete/settings"
+import { ensureBackendForAutocomplete } from "../../src/services/autocomplete/ensure-backend"
+import type { KiloConnectionService } from "../../src/services/cli-backend"
 
 type Stub = {
   getConfiguration: (section?: string) => {
@@ -13,7 +15,7 @@ const original = vscode.workspace.getConfiguration
 
 function stubConfig(state: Map<string, unknown>) {
   ;(vscode.workspace as unknown as Stub).getConfiguration = (section?: string) => {
-    if (section !== "kilo-code.new.autocomplete") {
+    if (section !== "dustcode.autocomplete") {
       return { get: <T>(_key: string, fallback?: T) => fallback }
     }
     return {
@@ -39,6 +41,26 @@ describe("buildAutocompleteSettingsMessage", () => {
 
     expect(msg.settings.provider).toBeNull()
     expect(msg.settings.model).toBeNull()
+    expect(msg.settings.enableAutoTrigger).toBe(false)
+  })
+
+  it("preserves an explicit autocomplete opt-in", () => {
+    state.set("enableAutoTrigger", true)
+    expect(buildAutocompleteSettingsMessage().settings.enableAutoTrigger).toBe(true)
+  })
+
+  it("starts no backend without explicit autocomplete opt-in", () => {
+    const calls: string[] = []
+    const connection = {
+      connect: async (dir: string) => {
+        calls.push(dir)
+      },
+    } as unknown as KiloConnectionService
+    ensureBackendForAutocomplete(connection)
+    expect(calls).toEqual([])
+    state.set("enableAutoTrigger", true)
+    ensureBackendForAutocomplete(connection)
+    expect(calls).toEqual(["/repo"])
   })
 
   it("passes an explicit BYOK selection through verbatim", () => {

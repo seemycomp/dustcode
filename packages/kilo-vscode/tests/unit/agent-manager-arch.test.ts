@@ -554,11 +554,9 @@ describe("Agent Manager Worktree Actions", () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf-8")) as {
       contributes: { keybindings: { command: string; key?: string; mac?: string }[] }
     }
-    const dialog = manifest.contributes.keybindings.find(
-      (item) => item.command === "kilo-code.new.agentManager.newWorktree",
-    )
+    const dialog = manifest.contributes.keybindings.find((item) => item.command === "dustcode.agentManager.newWorktree")
     const quick = manifest.contributes.keybindings.find(
-      (item) => item.command === "kilo-code.new.agentManager.quickWorktree",
+      (item) => item.command === "dustcode.agentManager.quickWorktree",
     )
 
     expect(dialog).toMatchObject({ key: "ctrl+n", mac: "cmd+n" })
@@ -568,15 +566,15 @@ describe("Agent Manager Worktree Actions", () => {
     expect(bindings).toContain('quickWorktree: isMac ? "⌘⇧N" : "Ctrl+Shift+N"')
   })
 
-  it("reserves Cmd+Shift+M for the Agent Manager instead of Problems", () => {
+  it("leaves global Agent Manager and Problems shortcuts untouched", () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf-8")) as {
       contributes: { keybindings: { command: string; key?: string; mac?: string }[] }
     }
     const removed = manifest.contributes.keybindings.find((item) => item.command === "-workbench.actions.view.problems")
-    const manager = manifest.contributes.keybindings.find((item) => item.command === "kilo-code.new.agentManagerOpen")
+    const manager = manifest.contributes.keybindings.find((item) => item.command === "dustcode.agentManagerOpen")
 
-    expect(removed).toMatchObject({ key: "ctrl+shift+m", mac: "cmd+shift+m" })
-    expect(manager).toMatchObject({ key: "ctrl+shift+m", mac: "cmd+shift+m" })
+    expect(removed).toBeUndefined()
+    expect(manager).toBeUndefined()
   })
 
   it("routes prompt and side-terminal shortcut actions separately", () => {
@@ -607,8 +605,8 @@ describe("Agent Manager Worktree Actions", () => {
 
   it("forwards the quick-worktree command to immediate creation", () => {
     const source = fs.readFileSync(path.join(ROOT, "src/extension.ts"), "utf-8")
-    const start = source.indexOf('vscode.commands.registerCommand("kilo-code.new.agentManager.quickWorktree"')
-    const end = source.indexOf('vscode.commands.registerCommand("kilo-code.new.agentManager.openWorktree"', start)
+    const start = source.indexOf('vscode.commands.registerCommand("dustcode.agentManager.quickWorktree"')
+    const end = source.indexOf('vscode.commands.registerCommand("dustcode.agentManager.openWorktree"', start)
     const command = source.slice(start, end)
 
     expect(start).toBeGreaterThanOrEqual(0)

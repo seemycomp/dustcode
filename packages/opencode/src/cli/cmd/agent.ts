@@ -2,6 +2,7 @@ import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { Global } from "@opencode-ai/core/global"
+import { Profile } from "@opencode-ai/core/kilocode/profile" // kilocode_change
 import path from "path"
 import fs from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
@@ -109,7 +110,7 @@ const AgentCreateCommand = effectCmd({
           scope = scopeResult
         }
         targetPath = path.join(
-          scope === "global" ? Global.Path.config : path.join(ctx.worktree, ".kilo"), // kilocode_change
+          scope === "global" ? Global.Path.config : path.join(ctx.worktree, Profile.dir()), // kilocode_change
           "agents",
         )
       }

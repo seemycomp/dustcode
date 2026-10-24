@@ -66,11 +66,11 @@ describe("commit-message service", () => {
       expect(disposables.length).toBeGreaterThan(0)
     })
 
-    it("registers the kilo-code.new.generateCommitMessage command", () => {
+    it("registers the dustcode.generateCommitMessage command", () => {
       registerCommitMessageService(mockContext, mockConnectionService)
 
       expect(vscode.commands.registerCommand).toHaveBeenCalledWith(
-        "kilo-code.new.generateCommitMessage",
+        "dustcode.generateCommitMessage",
         expect.any(Function),
       )
     })
@@ -130,7 +130,7 @@ describe("commit-message service", () => {
       await commandCallback()
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        "Failed to connect to Kilo backend. Please try again.",
+        "Failed to connect to Dustcode backend. Please try again.",
       )
     })
 

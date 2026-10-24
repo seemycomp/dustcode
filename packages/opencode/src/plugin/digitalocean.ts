@@ -3,6 +3,7 @@ import type { Model } from "@kilocode/sdk/v2"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { createServer } from "http"
 import { openUrl } from "@opencode-ai/core/open" // kilocode_change - backport upstream browser URL validation
+import { Branding } from "@opencode-ai/core/kilocode/branding" // kilocode_change
 
 const DO_OAUTH_CLIENT_ID = "b1a6c5158156caac821fd1b30253ca8acb52454a48fa744420e41889cb589f82"
 const DO_AUTHORIZE_URL = "https://cloud.digitalocean.com/v1/oauth/authorize"
@@ -63,7 +64,7 @@ const HTML_CALLBACK = `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Kilo - DigitalOcean Authorization</title>
+    <title>${Branding.name()} - DigitalOcean Authorization</title>
     <style>
       body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #0b1220; color: #e8eef9; }
       .container { text-align: center; padding: 2rem; max-width: 32rem; }
@@ -106,7 +107,7 @@ const HTML_CALLBACK = `<!doctype html>
             return
           }
           titleEl.textContent = "Authorization Successful"
-          msgEl.textContent = "You can close this window and return to Kilo."
+          msgEl.textContent = "You can close this window and return to ${Branding.name()}."
           setTimeout(function () { window.close() }, 2000)
         } catch (e) {
           titleEl.textContent = "Authorization Failed"
@@ -341,8 +342,9 @@ export async function DigitalOceanAuthPlugin(input: PluginInput): Promise<Hooks>
             await openUrl(url).catch(() => undefined) // kilocode_change
             return {
               url,
-              instructions:
-                "Sign in to DigitalOcean in your browser. Kilo will use your DigitalOcean API token directly for inference and load your Inference Routers. Re-run /connect to refresh routers later.",
+              // kilocode_change start
+              instructions: `Sign in to DigitalOcean in your browser. ${Branding.name()} will use your DigitalOcean API token directly for inference and load your Inference Routers. Re-run /connect to refresh routers later.`,
+              // kilocode_change end
               method: "auto" as const,
               async callback() {
                 try {

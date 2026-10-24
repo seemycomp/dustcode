@@ -8,8 +8,8 @@ import type { AgentManagerSettingsHandler } from "./kilo-provider/options"
 type PanelView = "settings" | "profile" | "indexing"
 
 const PANEL_TITLES: Record<PanelView, string> = {
-  settings: "Kilo Settings",
-  profile: "Kilo Profile",
+  settings: "Dustcode Settings",
+  profile: "Dustcode Profile",
   indexing: "Codebase Indexing",
 }
 
@@ -51,9 +51,9 @@ export class SettingsEditorProvider implements vscode.Disposable {
     return resolvePanelProjectDirectory(active, vscode.workspace.workspaceFolders)
   }
 
-  /** Extract the PanelView from a viewType string like "kilo-code.new.settingsPanel". */
+  /** Extract the PanelView from a viewType string like "dustcode.settingsPanel". */
   static viewFromType(type: string): PanelView | undefined {
-    const match = type.match(/^kilo-code\.new\.(\w+)Panel$/)
+    const match = type.match(/^dustcode\.(\w+)Panel$/)
     if (!match) return undefined
     const view = match[1] as PanelView
     if (!(view in PANEL_TITLES)) return undefined
@@ -85,7 +85,7 @@ export class SettingsEditorProvider implements vscode.Disposable {
     }
 
     const panel = vscode.window.createWebviewPanel(
-      `kilo-code.new.${view}Panel`,
+      `dustcode.${view}Panel`,
       PANEL_TITLES[view],
       vscode.ViewColumn.Active,
       {
@@ -119,10 +119,7 @@ export class SettingsEditorProvider implements vscode.Disposable {
   }
 
   private wirePanel(panel: vscode.WebviewPanel, view: PanelView, projectDirectory: string | null): void {
-    panel.iconPath = {
-      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-light.svg"),
-      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-dark.svg"),
-    }
+    panel.iconPath = vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "dustcode.png")
 
     // Create a dedicated KiloProvider for this panel so it has full
     // backend connectivity (config, providers, agents, profile, auth).
@@ -175,7 +172,7 @@ export class SettingsEditorProvider implements vscode.Disposable {
 
     const title = PANEL_TITLES[view]
     panel.onDidDispose(() => {
-      console.log(`[Kilo New] ${title} panel disposed`)
+      console.log(`[Dustcode] ${title} panel disposed`)
       closePanelDisposable.dispose()
       readyDisposable.dispose()
       tabDisposable.dispose()

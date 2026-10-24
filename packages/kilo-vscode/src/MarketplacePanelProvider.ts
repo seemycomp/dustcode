@@ -33,7 +33,7 @@ interface MarketplaceMessage {
 }
 
 export class MarketplacePanelProvider implements vscode.Disposable {
-  public static readonly viewType = "kilo-code.new.marketplacePanel"
+  public static readonly viewType = "dustcode.marketplacePanel"
 
   private panel: vscode.WebviewPanel | undefined
   private project: string | null = null
@@ -47,7 +47,7 @@ export class MarketplacePanelProvider implements vscode.Disposable {
   private subscriptions: Array<() => void> = []
   private readonly marketplace = new MarketplaceService()
   private readonly extensionVersion =
-    vscode.extensions.getExtension("kilocode.kilo-code")?.packageJSON?.version ?? "unknown"
+    vscode.extensions.getExtension("dustcode.dustcode")?.packageJSON?.version ?? "unknown"
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -76,7 +76,7 @@ export class MarketplacePanelProvider implements vscode.Disposable {
 
     const panel = vscode.window.createWebviewPanel(
       MarketplacePanelProvider.viewType,
-      "Kilo Marketplace",
+      "Dustcode Marketplace",
       vscode.ViewColumn.One,
       {
         enableScripts: true,
@@ -115,10 +115,7 @@ export class MarketplacePanelProvider implements vscode.Disposable {
     this.panel = panel
     this.project = project
     this.ready = false
-    panel.iconPath = {
-      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-light.svg"),
-      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-dark.svg"),
-    }
+    panel.iconPath = vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "dustcode.png")
     panel.webview.options = {
       enableScripts: true,
       localResourceRoots: [this.extensionUri],
@@ -201,7 +198,7 @@ export class MarketplacePanelProvider implements vscode.Disposable {
     if (!this.ready) return
     const info = this.connection.getServerInfo()
     if (info) {
-      const cfg = vscode.workspace.getConfiguration("kilo-code.new")
+      const cfg = vscode.workspace.getConfiguration("dustcode")
       this.post({
         type: "ready",
         serverInfo: info,
@@ -218,7 +215,7 @@ export class MarketplacePanelProvider implements vscode.Disposable {
       const client = this.connection.getClient()
       await seedSessionStatuses(client, this.directory(), this.statuses, (msg) => this.post(msg), reconcile)
     } catch (err) {
-      console.warn("[Kilo New] Marketplace session status sync failed:", err)
+      console.warn("[Dustcode] Marketplace session status sync failed:", err)
     }
   }
 
@@ -325,7 +322,7 @@ export class MarketplacePanelProvider implements vscode.Disposable {
     } catch (err) {
       if (generation !== this.generation) return
       const error = err instanceof Error ? err.message : String(err)
-      console.warn("[Kilo New] Marketplace data fetch failed:", err)
+      console.warn("[Dustcode] Marketplace data fetch failed:", err)
       this.post({
         type: "marketplaceData",
         marketplaceItems: [],
@@ -413,7 +410,7 @@ export class MarketplacePanelProvider implements vscode.Disposable {
   private post(msg: unknown): void {
     if (!this.panel || !this.ready) return
     void this.panel.webview.postMessage(msg).then(undefined, (err) => {
-      console.warn("[Kilo New] Marketplace panel postMessage failed:", err)
+      console.warn("[Dustcode] Marketplace panel postMessage failed:", err)
     })
   }
 
@@ -423,7 +420,7 @@ export class MarketplacePanelProvider implements vscode.Disposable {
       styleUri: webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "marketplace.css")),
       iconsBaseUri: webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "assets", "icons")),
       workerUri: webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "shiki-worker.js")),
-      title: "Kilo Marketplace",
+      title: "Dustcode Marketplace",
       port: this.connection.getServerInfo()?.port,
     })
   }

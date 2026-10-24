@@ -64,7 +64,7 @@ interface DefaultCandidate {
 /**
  * Validate that a resolved script file is safe to execute:
  * - Real path must resolve to a regular file (not a directory, device, etc.)
- * - If the entry is a symlink, the resolved target must live inside the .kilo directory
+ * - If the entry is a symlink, the resolved target must live inside the .dustcode directory
  */
 function validated(file: string, dir: string): boolean {
   try {

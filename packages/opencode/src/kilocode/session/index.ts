@@ -12,6 +12,7 @@ import { and, desc, eq, gte, inArray, isNull, like, lt, or, type SQL } from "dri
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { Profile } from "@opencode-ai/core/kilocode/profile"
 import { Filesystem } from "@/util/filesystem"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import * as Log from "@opencode-ai/core/util/log"
@@ -443,7 +444,7 @@ export namespace KiloSession {
           if (!Filesystem.contains(root, dir) || nested(root, dir)) continue
           const rel = path.relative(root, dir)
           const parts = rel.split(path.sep)
-          if ((parts[0] === ".kilo" || parts[0] === ".kilocode") && parts[1] === "worktrees" && parts[2]) {
+          if (Profile.dirs().includes(parts[0] ?? "") && parts[1] === "worktrees" && parts[2]) {
             return path.join(root, parts[0], parts[1], parts[2])
           }
           return root

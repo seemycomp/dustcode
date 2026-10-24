@@ -90,13 +90,13 @@ export async function copySandboxResources(source: string, target: string): Prom
 export async function copyKiloSandboxWorker(source: string, target: string): Promise<void> {
   const from = kiloSandboxWorkerForBinary(source)
   const to = kiloSandboxWorkerForBinary(target)
-  if (!fs.existsSync(from)) throw new Error(`Kilo sandbox mutation worker not found at ${from}`)
+  if (!fs.existsSync(from)) throw new Error(`Dustcode sandbox mutation worker not found at ${from}`)
   await fs.promises.copyFile(from, to)
 }
 
 function cacheRoot() {
   const root = process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), ".cache")
-  return path.join(root, "kilo-vscode", "bwrap")
+  return path.join(root, "dustcode-vscode", "bwrap")
 }
 
 function bwrapLicenseDir(bin: string) {

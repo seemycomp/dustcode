@@ -6,12 +6,14 @@ import { Global } from "@opencode-ai/core/global"
 import { unique } from "remeda"
 import * as Effect from "effect/Effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Profile } from "@opencode-ai/core/kilocode/profile" // kilocode_change
 
 export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
   name: string,
   directory: string,
   worktree?: string,
 ) {
+  if (Profile.enabled) return [] // kilocode_change - project files live only inside .dustcode
   const afs = yield* FSUtil.Service
   return (yield* afs.up({
     targets: [`${name}.jsonc`, `${name}.json`],
@@ -26,17 +28,20 @@ export const directories = Effect.fn("ConfigPaths.directories")(function* (direc
     Global.Path.config,
     ...(!Flag.KILO_DISABLE_PROJECT_CONFIG
       ? yield* afs.up({
-          targets: [".kilocode", ".kilo"], // kilocode_change
+          targets: Profile.dirs(), // kilocode_change
           start: directory,
           stop: worktree,
         })
       : []),
-    ...(yield* afs.up({
-      targets: [".kilocode", ".kilo"], // kilocode_change
-      start: Global.Path.home,
-      stop: Global.Path.home,
-    })),
-    ...(Flag.KILO_CONFIG_DIR ? [Flag.KILO_CONFIG_DIR] : []),
+    ...(!Profile.enabled
+      ? yield* afs.up({
+          // kilocode_change
+          targets: [".kilocode", ".kilo"], // kilocode_change
+          start: Global.Path.home,
+          stop: Global.Path.home,
+        })
+      : []), // kilocode_change
+    ...(!Profile.enabled && Flag.KILO_CONFIG_DIR ? [Flag.KILO_CONFIG_DIR] : []), // kilocode_change
   ])
 })
 

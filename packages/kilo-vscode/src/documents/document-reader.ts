@@ -1,6 +1,6 @@
 import * as fs from "fs"
-import * as os from "os"
 import * as path from "path"
+import { home } from "../isolation"
 
 const MAX_TEXT_BYTES = 2_000_000
 const MAX_IMAGE_BYTES = 5_000_000
@@ -38,8 +38,8 @@ export function isInsideWorktree(
  * projects plan files legitimately live here, outside the worktree, and the
  * CLI's plan-file logic already admits the dir — see #14588.
  */
-export function plansDir(dataHome = process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share")): string {
-  return path.join(dataHome, "kilo", "plans")
+export function plansDir(dataHome?: string): string {
+  return path.join(home(dataHome ? { XDG_DATA_HOME: dataHome } : process.env), "data", "plans")
 }
 
 /** Whether `resolved` lives in the canonical plans dir (realpath-folded for tmpfs/symlink cases). */
@@ -83,7 +83,7 @@ export function readDocument(root: string, file: string): DocumentResult {
     if (content.includes(0)) return { error: "Binary files cannot be previewed." }
     return { file: relative, kind: "text", content: content.toString("utf8") }
   } catch (error) {
-    console.error("[Kilo New] AgentManagerProvider: Cannot read document:", error)
+    console.error("[Dustcode] AgentManagerProvider: Cannot read document:", error)
     return { error: "Document could not be read." }
   }
 }

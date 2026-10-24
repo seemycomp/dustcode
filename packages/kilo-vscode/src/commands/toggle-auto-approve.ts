@@ -24,7 +24,7 @@ export interface AutoApproveController {
   onChange(listener: (active: boolean) => void): { dispose(): void }
 }
 
-const CONFIG = "kilo-code.new.autoApprove"
+const CONFIG = "dustcode.autoApprove"
 const KEY = "enabled"
 
 /**
@@ -79,7 +79,7 @@ export function registerToggleAutoApprove(
           await replyOnce(client, req.id, dir, () => generation === snapshot)
         }
       } catch (err) {
-        console.error("[Kilo New] toggleAutoApprove: failed to list pending permissions:", err)
+        console.error("[Dustcode] toggleAutoApprove: failed to list pending permissions:", err)
       }
     }
 
@@ -107,7 +107,7 @@ export function registerToggleAutoApprove(
     }),
   )
 
-  context.subscriptions.push(vscode.commands.registerCommand("kilo-code.new.toggleAutoApprove", toggle))
+  context.subscriptions.push(vscode.commands.registerCommand("dustcode.toggleAutoApprove", toggle))
 
   return {
     active: () => active,

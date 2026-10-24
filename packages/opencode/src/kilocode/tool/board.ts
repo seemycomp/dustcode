@@ -7,6 +7,7 @@ import { Tool } from "@/tool/tool"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { BoardEnabled } from "@/kilocode/board/enabled"
 import { BoardStore } from "@/kilocode/board/store"
+import { Branding } from "@opencode-ai/core/kilocode/branding"
 
 const Read = Schema.Struct({
   since: Schema.optional(Schema.NullOr(Schema.String)).annotate({
@@ -100,7 +101,9 @@ export const BoardReadTool = Tool.define<
           const cfg = yield* config.get()
           if (!BoardEnabled.on(cfg, flags)) {
             return yield* Effect.fail(
-              new Error("The shared agent board is disabled. Enable Kilo Swarm in Agent Behaviour settings."),
+              new Error(
+                `The shared agent board is disabled. Enable ${Branding.name()} Swarm in Agent Behaviour settings.`,
+              ),
             )
           }
           yield* ctx.ask({ permission: "board_read", patterns: ["*"], always: ["*"], metadata: {} })
@@ -165,7 +168,9 @@ export const BoardPostTool = Tool.define<
           const cfg = yield* config.get()
           if (!BoardEnabled.on(cfg, flags)) {
             return yield* Effect.fail(
-              new Error("The shared agent board is disabled. Enable Kilo Swarm in Agent Behaviour settings."),
+              new Error(
+                `The shared agent board is disabled. Enable ${Branding.name()} Swarm in Agent Behaviour settings.`,
+              ),
             )
           }
           yield* ctx.ask({

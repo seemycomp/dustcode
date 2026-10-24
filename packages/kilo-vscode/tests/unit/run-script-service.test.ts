@@ -14,7 +14,7 @@ describe("RunScriptService", () => {
 
   beforeEach(() => {
     root = tmpdir()
-    dir = path.join(root, ".kilo")
+    dir = path.join(root, ".dustcode")
     fs.mkdirSync(dir)
   })
 

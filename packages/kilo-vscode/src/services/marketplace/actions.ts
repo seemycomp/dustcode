@@ -103,7 +103,7 @@ export async function removeMarketplaceItemFromAllScopes(
     const global = await removeScoped(ctx, item, "global", dir)
     return (local?.success ?? true) && global.success
   } catch (err) {
-    console.warn("[Kilo New] Marketplace removal failed:", err)
+    console.warn("[Dustcode] Marketplace removal failed:", err)
     return false
   }
 }
@@ -126,7 +126,7 @@ async function invalidate(ctx: MarketplaceActionContext, dir: string): Promise<v
     const client = await ctx.connection.getClientAsync(dir)
     await client.instance.dispose({ directory: dir })
   } catch (err) {
-    console.warn("[Kilo New] instance.dispose() after marketplace change failed:", err)
+    console.warn("[Dustcode] instance.dispose() after marketplace change failed:", err)
   }
 }
 
@@ -138,8 +138,7 @@ async function removeLegacyMcp(
 ): Promise<boolean> {
   const files: vscode.Uri[] = []
   if (project && scope !== "global") {
-    files.push(vscode.Uri.file(path.join(project, ".kilo", "mcp.json")))
-    files.push(vscode.Uri.file(path.join(project, ".kilocode", "mcp.json")))
+    files.push(vscode.Uri.file(path.join(project, ".dustcode", "mcp.json")))
   }
 
   if (ctx.storage && scope !== "project") files.push(vscode.Uri.joinPath(ctx.storage, "settings", "mcp_settings.json"))
@@ -160,7 +159,7 @@ async function removeLegacyMcp(
       await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(parsed, null, 2), "utf8"))
       removed = true
     } catch (err) {
-      console.warn("[Kilo New] Failed to remove legacy MCP from", uri.fsPath, err)
+      console.warn("[Dustcode] Failed to remove legacy MCP from", uri.fsPath, err)
     }
   }
   return removed

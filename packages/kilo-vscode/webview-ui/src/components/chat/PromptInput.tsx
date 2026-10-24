@@ -524,7 +524,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       },
       {
         name: "caffeinate",
-        description: "Keep the computer awake while Kilo agents work",
+        description: "Keep the computer awake while Dustcode agents work",
         hints: ["caffenate", "keep-awake"],
         action: () => vscode.postMessage({ type: "toggleCaffeination" }),
       },

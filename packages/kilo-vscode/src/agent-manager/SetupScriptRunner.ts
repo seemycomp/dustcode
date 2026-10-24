@@ -55,7 +55,7 @@ export function buildSetupTaskCommand(script: SetupScriptInfo): { command: strin
  */
 export function setupTaskIdentity(config: SetupTaskConfig) {
   return {
-    definition: { type: "kilo-worktree-setup", script: config.command, worktree: config.cwd },
+    definition: { type: "dustcode-worktree-setup", script: config.command, worktree: config.cwd },
     name: `Worktree Setup (${path.basename(config.cwd)})`,
   }
 }

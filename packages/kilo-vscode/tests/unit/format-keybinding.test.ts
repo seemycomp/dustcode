@@ -78,15 +78,15 @@ describe("formatKeybinding", () => {
 
 describe("buildKeybindingMap", () => {
   it("maps the configurable Agent Manager search shortcut", () => {
-    const bindings = [{ command: "kilo-code.new.agentManager.search", key: "ctrl+f", mac: "cmd+f" }]
+    const bindings = [{ command: "dustcode.agentManager.search", key: "ctrl+f", mac: "cmd+f" }]
     expect(buildKeybindingMap(bindings, true).search).toBe("⌘F")
     expect(buildKeybindingMap(bindings, false).search).toBe("Ctrl+F")
   })
 
   it("maps the shared session tab shortcuts", () => {
     const bindings = [
-      { command: "kilo-code.new.agentManager.previousTab", key: "ctrl+alt+left", mac: "cmd+alt+left" },
-      { command: "kilo-code.new.agentManager.nextTab", key: "ctrl+alt+right", mac: "cmd+alt+right" },
+      { command: "dustcode.agentManager.previousTab", key: "ctrl+alt+left", mac: "cmd+alt+left" },
+      { command: "dustcode.agentManager.nextTab", key: "ctrl+alt+right", mac: "cmd+alt+right" },
     ]
     expect(buildKeybindingMap(bindings, true)).toMatchObject({ previousTab: "⌘⌥←", nextTab: "⌘⌥→" })
     expect(buildKeybindingMap(bindings, false)).toMatchObject({ previousTab: "Ctrl+Alt+←", nextTab: "Ctrl+Alt+→" })
@@ -102,16 +102,16 @@ describe("buildKeybindingMap", () => {
   it("keeps prompt and side-terminal shortcuts separate", () => {
     const bindings = [
       {
-        command: "kilo-code.new.agentManager.newTerminalTab",
+        command: "dustcode.agentManager.newTerminalTab",
         key: "ctrl+shift+t",
         mac: "cmd+shift+t",
-        when: "activeWebviewPanelId == 'kilo-code.new.AgentManagerPanel' && kilo-code.new.agentManagerPromptFocused",
+        when: "activeWebviewPanelId == 'dustcode.AgentManagerPanel' && dustcode.agentManagerPromptFocused",
       },
       {
-        command: "kilo-code.new.agentManager.newSideTerminal",
+        command: "dustcode.agentManager.newSideTerminal",
         key: "ctrl+t",
         mac: "cmd+t",
-        when: "activeWebviewPanelId == 'kilo-code.new.AgentManagerPanel' && kilo-code.new.agentManagerSideTerminalFocused",
+        when: "activeWebviewPanelId == 'dustcode.AgentManagerPanel' && dustcode.agentManagerSideTerminalFocused",
       },
     ]
     expect(buildKeybindingMap(bindings, true)).toMatchObject({

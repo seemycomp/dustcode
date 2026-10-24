@@ -45,7 +45,7 @@ function metaFile(slot: string): string {
   const pointer = readFileSync(path.join(slot, ".git"), "utf-8")
   return path.join(
     path.resolve(slot, pointer.match(/^gitdir:\s*(.+)$/m)![1]!.trim()),
-    "kilo-agent-manager-metadata.json",
+    "dustcode-agent-manager-metadata.json",
   )
 }
 

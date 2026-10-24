@@ -9,11 +9,11 @@ function setupRoot(): string {
 }
 
 function scriptPath(root: string, name: string): string {
-  return path.join(root, ".kilo", name)
+  return path.join(root, ".dustcode", name)
 }
 
 function writeScript(root: string, name: string, content = "echo ok\n"): string {
-  const dir = path.join(root, ".kilo")
+  const dir = path.join(root, ".dustcode")
   fs.mkdirSync(dir, { recursive: true })
   const script = path.join(dir, name)
   fs.writeFileSync(script, content, "utf-8")

@@ -10,6 +10,7 @@ import { Effect, Schema } from "effect"
 import { enabled as sandboxed } from "@kilocode/sandbox"
 import DESCRIPTION from "./background-process.txt"
 import path from "path"
+import { Branding } from "@opencode-ai/core/kilocode/branding"
 
 const Action = Schema.Literals(["start", "monitor", "list", "status", "logs", "stop", "restart"])
 type Action = Schema.Schema.Type<typeof Action>
@@ -47,7 +48,7 @@ export const Params = Schema.Struct({
     description: "For subagents only: transfer the process to the parent session when this session ends",
   }),
   persistent: Schema.optional(Schema.Boolean).annotate({
-    description: "Keep the process running and manageable after the session or Kilo exits",
+    description: `Keep the process running and manageable after the session or ${Branding.name()} exits`,
   }),
 }).check(
   Schema.makeFilter(
@@ -224,7 +225,7 @@ function monitor(params: Params, ctx: Tool.Context<Meta>, info: BackgroundProces
 export const BackgroundProcessTool = Tool.define<typeof Params, Meta, never, "background_process">(
   "background_process",
   Effect.succeed({
-    description: DESCRIPTION,
+    description: Branding.prompt(DESCRIPTION),
     parameters: Params,
     execute: (params, ctx) =>
       Effect.gen(function* () {

@@ -12,7 +12,7 @@ export function LoadingScreen(props: { variant: Variant }) {
       }}
       role="status"
       aria-live="polite"
-      aria-label="Loading Kilo Console"
+      aria-label="Loading Dustcode Console"
     >
       <LoadingLogo />
     </section>

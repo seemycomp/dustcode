@@ -8,6 +8,7 @@ import { parse } from "jsonc-parser"
 import z from "zod"
 import * as Log from "@opencode-ai/core/util/log"
 import { Global } from "@opencode-ai/core/global"
+import { Profile } from "@opencode-ai/core/kilocode/profile"
 import { ConfigAgent } from "@/config/agent"
 import { Config } from "@/config/config"
 import { ConfigParse } from "@/config/parse"
@@ -84,8 +85,8 @@ export namespace KilocodeConfigOverlay {
     sources: KilocodeConfigSources.Source[]
   }
 
-  const files = ["kilo.jsonc", "kilo.json", "opencode.jsonc", "opencode.json"] as const
-  const dirs = [".kilocode", ".kilo"] as const
+  const files = KilocodeConfig.ALL_CONFIG_FILES
+  const dirs = Profile.dirs()
 
   const fieldPaths = [
     ["model"],
@@ -144,13 +145,13 @@ export namespace KilocodeConfigOverlay {
 
   export async function projectTarget(input: { directory: string; worktree?: string }) {
     const found = await Filesystem.findUp(dirs.toReversed(), input.directory, input.worktree)
-    const roots = await Filesystem.findUp([...files], input.directory, input.worktree)
+    const roots = Profile.enabled ? [] : await Filesystem.findUp([...files], input.directory, input.worktree)
     const candidates = [...found.flatMap((dir) => files.map((file) => path.join(dir, file))), ...roots]
-    return candidates.find((file) => existsSync(file)) ?? path.join(input.directory, ".kilo", "kilo.jsonc")
+    return candidates.find((file) => existsSync(file)) ?? path.join(input.directory, Profile.dir(), "kilo.jsonc")
   }
 
   export function globalTarget() {
-    const candidates = ["kilo.jsonc", "kilo.json", "opencode.jsonc", "opencode.json", "config.json"].map((file) =>
+    const candidates = [...files, ...(Profile.enabled ? [] : ["config.json"])].map((file) =>
       path.join(Global.Path.config, file),
     )
     return candidates.find((file) => existsSync(file)) ?? candidates[0]
@@ -262,7 +263,9 @@ export namespace KilocodeConfigOverlay {
   }
 
   async function projectFiles(input: { directory: string; worktree?: string }) {
-    const roots = await Filesystem.findUp([...files], input.directory, input.worktree, { rootFirst: true })
+    const roots = Profile.enabled
+      ? []
+      : await Filesystem.findUp([...files], input.directory, input.worktree, { rootFirst: true })
     const found = await Filesystem.findUp([...dirs], input.directory, input.worktree)
     const nested = found.flatMap((dir) => files.map((file) => path.join(dir, file)))
     const checks = await Promise.all(
@@ -276,6 +279,7 @@ export namespace KilocodeConfigOverlay {
   }
 
   function globalDirs() {
+    if (Profile.enabled) return [Global.Path.config]
     return [Global.Path.config, path.join(Global.Path.home, ".kilocode"), path.join(Global.Path.home, ".kilo")]
   }
 

@@ -1,7 +1,7 @@
 /**
  * WorktreeStateManager - Centralized persistent state for agent manager worktrees and sessions.
  *
- * Persists to `.kilo/agent-manager.json`. Decouples worktrees from sessions
+ * Persists to `.dustcode/agent-manager.json`. Decouples worktrees from sessions
  * (many sessions per worktree) and provides CRUD operations for both.
  *
  * Data model:
@@ -735,7 +735,7 @@ export class WorktreeStateManager {
   // ---------------------------------------------------------------------------
 
   async load(): Promise<StateLoadResult> {
-    // Migrate Agent Manager data from .kilocode → .kilo before first read
+    // Migration is intentionally a no-op so legacy state is never adopted.
     let migration: MigrationResult = { refsFixed: 0 }
     if (!this.migrated) {
       this.migrated = true
@@ -787,12 +787,7 @@ export class WorktreeStateManager {
     this.reviewDiffStyle = "unified"
 
     for (const [id, wt] of Object.entries(data.worktrees ?? {})) {
-      // Rewrite stale .kilocode paths while preserving the separator style already stored.
-      const fixed =
-        wt.path?.replace(/([/\\])\.kilocode([/\\])/g, (_match, leadingSep, trailingSep) => {
-          return `${leadingSep}.kilo${trailingSep}`
-        }) ?? wt.path
-      this.worktrees.set(id, { id, ...wt, path: fixed })
+      this.worktrees.set(id, { id, ...wt })
     }
     let pruned = 0
     for (const [id, s] of Object.entries(data.sessions ?? {})) {

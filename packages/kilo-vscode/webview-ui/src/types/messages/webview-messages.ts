@@ -647,7 +647,7 @@ export interface OpenSettingsTabRequest {
 
 export interface UpdateConfigMessage {
   type: "updateConfig"
-  /** Global config patch written to ~/.config/kilo/kilo.json. */
+  /** Global config patch written to ~/.local/share/dustcode/config/kilo.json. */
   config: Partial<Config>
   globalUnset?: string[][]
   /** Project config patch written to the workspace's .kilo/kilo.jsonc or existing project config. */

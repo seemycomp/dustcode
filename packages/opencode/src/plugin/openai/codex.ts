@@ -7,6 +7,7 @@ import os from "os"
 import { setTimeout as sleep } from "node:timers/promises"
 import { createServer } from "http"
 import { refreshCodexAuth } from "@/kilocode/provider/codex-refresh" // kilocode_change
+import { Branding } from "@opencode-ai/core/kilocode/branding" // kilocode_change
 import { OpenAIWebSocketPool } from "./ws-pool"
 
 const log = Log.create({ service: "plugin.codex" }) // kilocode_change
@@ -168,12 +169,12 @@ async function refreshAccessToken(refreshToken: string, issuer = ISSUER, signal?
   return response.json()
 }
 
-// kilocode_change start - retain Kilo-branded OAuth callback until the shared page supports Kilo branding
+// kilocode_change start - retain profile-branded OAuth callback until the shared page supports branding
 const HTML_SUCCESS = `<!doctype html>
 <html>
   <head>
     <!-- kilocode_change start -->
-    <title>Kilo - Codex Authorization Successful</title>
+    <title>${Branding.name()} - Codex Authorization Successful</title>
     <!-- kilocode_change end -->
     <style>
       body {
@@ -206,7 +207,7 @@ const HTML_SUCCESS = `<!doctype html>
     <div class="container">
       <h1>Authorization Successful</h1>
       <!-- kilocode_change start -->
-      <p>You can close this window and return to Kilo.</p>
+      <p>You can close this window and return to ${Branding.name()}.</p>
       <!-- kilocode_change end -->
     </div>
     <script>
@@ -219,7 +220,7 @@ export const renderOAuthError = (error: string) => `<!doctype html>
 <html>
   <head>
     <!-- kilocode_change start -->
-    <title>Kilo - Codex Authorization Failed</title>
+    <title>${Branding.name()} - Codex Authorization Failed</title>
     <!-- kilocode_change end -->
     <style>
       body {

@@ -1,6 +1,8 @@
 // kilocode_change - new file
 
 import { Global } from "@opencode-ai/core/global"
+import { Profile } from "@opencode-ai/core/kilocode/profile"
+import { Branding } from "@opencode-ai/core/kilocode/branding"
 import { Effect } from "effect"
 import { staticEnvLines, type EditorContext } from "@/kilocode/editor-context"
 import { KiloMemory } from "@kilocode/kilo-memory/effect"
@@ -26,7 +28,9 @@ export namespace KilocodeSystemPrompt {
         `  Is directory a git repo: ${input.ctx.project.vcs === "git" ? "yes" : "no"}`,
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
-        `  Project config: .kilo/command/*.md, .kilo/agent/*.md, kilo.json, AGENTS.md. Put new commands and agents in .kilo/. Do not use .kilocode/ or .opencode/.`,
+        Profile.enabled
+          ? `  Project config: .dustcode/command/*.md, .dustcode/agent/*.md, .dustcode/kilo.json, AGENTS.md. Put new config, commands and agents in .dustcode/. Do not write .kilo/, .kilocode/ or .opencode/.`
+          : `  Project config: .kilo/command/*.md, .kilo/agent/*.md, kilo.json, AGENTS.md. Put new commands and agents in .kilo/. Do not use .kilocode/ or .opencode/.`,
         `  Global config: ${Global.Path.config}/ (same structure)`,
         ...staticEnvLines(input.editor),
         `</env>`,
@@ -61,7 +65,7 @@ export namespace KilocodeSystemPrompt {
       const blocks = project?.blocks ?? []
       // Emit the memory guidance once per prompt, not repeated per injected block.
       const guidance = [
-        "The following Kilo memory blocks are saved project memory from this project's previous sessions. You do have this prior-session context; never claim you lack memory of earlier work here while these blocks are present.",
+        `The following ${Branding.name()} memory blocks are saved project memory from this project's previous sessions. You do have this prior-session context; never claim you lack memory of earlier work here while these blocks are present.`,
         "The latest_session_digest record is the most recent session; prefer it for continuity unless the request clearly refers to older or different work.",
         "When the user asks about prior work, where things stopped, what was happening, or wants to continue — however they phrase it — answer directly from latest_session_digest or the newest relevant session_digest record below.",
         "Use saved memory when it is directly relevant to the user's request, especially matching corrections, constraints, conventions, and prior decisions.",
@@ -78,9 +82,7 @@ export namespace KilocodeSystemPrompt {
         "Do not recall memory for current memory status, sidebar token accounting, or implementation debugging unless the user asks what prior memory says.",
       ].join("\n")
       return {
-        blocks: blocks.length
-          ? [guidance, ...blocks.map((block) => block.text.trim())]
-          : [],
+        blocks: blocks.length ? [guidance, ...blocks.map((block) => block.text.trim())] : [],
         marker: MemoryMarker.fromBlocks(blocks),
       }
     })

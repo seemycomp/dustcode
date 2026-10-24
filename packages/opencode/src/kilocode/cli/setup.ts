@@ -1,6 +1,7 @@
 import type { Argv } from "yargs"
 import type { Auth } from "@/auth"
 import * as Log from "@opencode-ai/core/util/log"
+import { Profile } from "@opencode-ai/core/kilocode/profile"
 import { InstallationBuildKind, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { KiloShutdown } from "@/kilocode/cli/shutdown"
 import { createHelpCommand } from "@/kilocode/help-command"
@@ -115,10 +116,7 @@ export namespace KiloCli {
     }
 
     // Migrate legacy Kilo CLI auth (~/.kilocode/cli/config.json) into auth.json if present.
-    await migrateLegacyKiloAuth(
-      async () => (await getAuth()) !== undefined,
-      setAuth,
-    )
+    if (!Profile.enabled) await migrateLegacyKiloAuth(async () => (await getAuth()) !== undefined, setAuth)
 
     const auth = await getAuth()
     if (auth) {

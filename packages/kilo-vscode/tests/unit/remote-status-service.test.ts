@@ -270,7 +270,9 @@ describe("RemoteStatusService", () => {
       const svc = service()
       svc.setClient(client({ status: { enabled: true, connected: true } }) as never)
       await svc.refresh()
-      // Service is functional — status bar is managed internally. We verify no errors.
+      const bar = (svc as unknown as { bar: { text: string; tooltip: string } }).bar
+      expect(bar.text).toBe("$(radio-tower) Dustcode Remote")
+      expect(bar.tooltip).toBe("Dustcode Remote: Connected")
       svc.dispose()
     })
 
@@ -278,6 +280,9 @@ describe("RemoteStatusService", () => {
       const svc = service()
       svc.setClient(client({ status: { enabled: true, connected: false } }) as never)
       await svc.refresh()
+      const bar = (svc as unknown as { bar: { text: string; tooltip: string } }).bar
+      expect(bar.text).toBe("$(radio-tower) Dustcode Remote \u2026")
+      expect(bar.tooltip).toBe("Dustcode Remote: Connecting\u2026")
       svc.dispose()
     })
   })

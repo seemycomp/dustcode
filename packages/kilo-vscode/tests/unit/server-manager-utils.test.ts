@@ -111,17 +111,17 @@ describe("scanServerPort", () => {
 
 describe("cli tree-sitter resources", () => {
   it("resolves resources next to the VS Code bundled CLI", () => {
-    const root = "/Users/test/.vscode/extensions/kilocode.kilo-code-7.2.50-darwin-arm64"
-    const bin = `${root}/bin/kilo`
+    const root = path.join("Users", "test", ".vscode", "extensions", "dustcode.dustcode-7.2.50-darwin-arm64")
+    const bin = path.join(root, "bin", "kilo")
 
-    expect(treeSitterDirForBinary(bin)).toBe(`${root}/bin/tree-sitter`)
-    expect(treeSitterDirForExtension(root)).toBe(`${root}/bin/tree-sitter`)
-    expect(kiloSandboxWorkerForBinary(bin)).toBe(`${root}/bin/kilo-sandbox-mutation-worker.js`)
-    expect(resolveTreeSitterEnv(root)).toEqual({ KILO_TREE_SITTER_WASM_DIR: `${root}/bin/tree-sitter` })
+    expect(treeSitterDirForBinary(bin)).toBe(path.join(root, "bin", "tree-sitter"))
+    expect(treeSitterDirForExtension(root)).toBe(path.join(root, "bin", "tree-sitter"))
+    expect(kiloSandboxWorkerForBinary(bin)).toBe(path.join(root, "bin", "kilo-sandbox-mutation-worker.js"))
+    expect(resolveTreeSitterEnv(root)).toEqual({ KILO_TREE_SITTER_WASM_DIR: path.join(root, "bin", "tree-sitter") })
   })
 
   it("resolves resources next to a Windows packaged CLI", () => {
-    const root = String.raw`C:\Users\test\.vscode\extensions\kilocode.kilo-code-7.2.50-win32-x64`
+    const root = String.raw`C:\Users\test\.vscode\extensions\dustcode.dustcode-7.2.50-win32-x64`
     const bin = String.raw`${root}\bin\kilo.exe`
 
     expect(treeSitterDirForBinary(bin)).toBe(String.raw`${root}\bin\tree-sitter`)
@@ -139,6 +139,9 @@ describe("cli tree-sitter resources", () => {
       const target = path.join(root, "extension", "bin", "kilo")
       await fs.mkdir(path.dirname(source), { recursive: true })
       await fs.mkdir(path.dirname(target), { recursive: true })
+      await expect(copyKiloSandboxWorker(source, target)).rejects.toThrow(
+        `Dustcode sandbox mutation worker not found at ${kiloSandboxWorkerForBinary(source)}`,
+      )
       await fs.writeFile(kiloSandboxWorkerForBinary(source), "worker")
 
       await copyKiloSandboxWorker(source, target)
@@ -202,7 +205,7 @@ describe("cli tree-sitter resources", () => {
 
       const copied = path.join(path.dirname(target), "bwrap")
       expect(await fs.readFile(copied, "utf8")).toBe("helper")
-      expect((await fs.stat(copied)).mode & 0o111).not.toBe(0)
+      if (process.platform !== "win32") expect((await fs.stat(copied)).mode & 0o111).not.toBe(0)
       expect(await fs.readFile(path.join(path.dirname(target), "licenses", "bubblewrap", "COPYING"), "utf8")).toBe(
         "LGPL",
       )
@@ -212,7 +215,7 @@ describe("cli tree-sitter resources", () => {
       expect(await fs.readFile(path.join(path.dirname(target), "kilo-sandbox-network-relay.js"), "utf8")).toBe("relay")
       const copiedSeccomp = path.join(path.dirname(target), "kilo-sandbox-seccomp")
       expect(await fs.readFile(copiedSeccomp, "utf8")).toBe("seccomp")
-      expect((await fs.stat(copiedSeccomp)).mode & 0o111).not.toBe(0)
+      if (process.platform !== "win32") expect((await fs.stat(copiedSeccomp)).mode & 0o111).not.toBe(0)
       expect(await fs.readFile(path.join(path.dirname(target), "licenses", "sandbox-runtime", "LICENSE"), "utf8")).toBe(
         "Apache-2.0",
       )
@@ -396,10 +399,14 @@ describe("server workspace helpers", () => {
         KILO_DISABLE_CHANNEL_DB: "false",
         KILO_EXPERIMENTAL_DISABLE_FILEWATCHER: "false",
       }),
-    ).toEqual({
+    ).toMatchObject({
       PATH: "/usr/bin",
       KILO_DISABLE_CHANNEL_DB: "true",
       KILO_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
+      DUSTCODE_HOME: expect.any(String),
+      KILO_DISABLE_AUTOUPDATE: "true",
+      KILO_DISABLE_CLAUDE_CODE: "true",
+      KILO_TELEMETRY_LEVEL: "off",
     })
   })
 

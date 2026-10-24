@@ -5,10 +5,16 @@ import { OmniSearch } from "./OmniSearch"
 export function AppHeader() {
   return (
     <header class="app-header">
-      <A class="header-brand" href="/projects" aria-label="Kilo Console home">
-        <img class="header-mark header-mark-logo" src={`${import.meta.env.BASE_URL}kilo-logo.svg`} alt="" width="28" height="28" />
+      <A class="header-brand" href="/projects" aria-label="Dustcode Console home">
+        <img
+          class="header-mark header-mark-logo"
+          src={`${import.meta.env.BASE_URL}kilo-logo.svg`}
+          alt=""
+          width="28"
+          height="28"
+        />
         <span class="header-title">
-          <span>Console</span>
+          <span>Dustcode Console</span>
         </span>
       </A>
 

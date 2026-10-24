@@ -31,16 +31,13 @@ export class SubAgentViewerProvider implements vscode.Disposable {
 
     const label = title ? `Sub-agent: ${title}` : "Sub-agent Viewer"
 
-    const panel = vscode.window.createWebviewPanel("kilo-code.new.SubAgentViewerPanel", label, vscode.ViewColumn.One, {
+    const panel = vscode.window.createWebviewPanel("dustcode.SubAgentViewerPanel", label, vscode.ViewColumn.One, {
       enableScripts: true,
       retainContextWhenHidden: true,
       localResourceRoots: [this.extensionUri],
     })
 
-    panel.iconPath = {
-      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-light.svg"),
-      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-dark.svg"),
-    }
+    panel.iconPath = vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "dustcode.png")
 
     const provider = new KiloProvider(this.extensionUri, this.connectionService, this.context, {
       hideTopBar: true,
@@ -70,10 +67,10 @@ export class SubAgentViewerProvider implements vscode.Disposable {
           .get({ sessionID, directory }, { throwOnError: true })
           .then(({ data: session }) => provider.registerSession(session))
           .catch((err: unknown) => {
-            console.error("[Kilo New] SubAgentViewerProvider: Failed to load session metadata:", err)
+            console.error("[Dustcode] SubAgentViewerProvider: Failed to load session metadata:", err)
           })
       } catch (err) {
-        console.error("[Kilo New] SubAgentViewerProvider: Failed to load session metadata:", err)
+        console.error("[Dustcode] SubAgentViewerProvider: Failed to load session metadata:", err)
       }
     })
 
@@ -88,7 +85,7 @@ export class SubAgentViewerProvider implements vscode.Disposable {
     this.providers.set(sessionID, provider)
 
     panel.onDidDispose(() => {
-      console.log("[Kilo New] Sub-agent viewer panel disposed:", sessionID)
+      console.log("[Dustcode] Sub-agent viewer panel disposed:", sessionID)
       closeDisposable.dispose()
       provider.dispose()
       this.panels.delete(sessionID)

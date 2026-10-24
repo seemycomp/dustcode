@@ -1,6 +1,6 @@
-# Contributing to Kilo CLI
+# Contributing to Dustcode
 
-See [the Documentation for details on contributing](https://kilo.ai/docs/contributing).
+Dustcode maintains the VS Code extension and its embedded backend. See the [README](README.md) for fork scope. The retained [upstream contribution documentation](https://kilo.ai/docs/contributing) describes Kilo Code, not this fork's release process.
 
 ## TL;DR
 
@@ -14,7 +14,7 @@ There are lots of ways to contribute to the project:
 
 Community pull requests are triaged twice a week. See [Community triage](docs/community-triage.md) for what to expect and how long we wait for replies.
 
-The Kilo Community is [on Discord](https://kilo.ai/discord).
+Report Dustcode issues and discuss changes in the [fork repository](https://github.com/seemycomp/dustcode).
 
 ## Prerequisites
 
@@ -53,7 +53,7 @@ The expected `Bun.revision` is `38afee6c84fcf48c0edb2466aa4b27d287a59c30`. The C
 
 The first CLI build needs access to the npm registry. The build caches verified Bun archives in a private, user-scoped temporary directory. Each build extracts a fresh executable before compilation.
 
-## Developing Kilo CLI
+## Developing the Embedded Backend
 
 - **Requirements:** Bun `1.4.4` at the exact revision above, Java 21 (see [Prerequisites](#prerequisites) above)
 - Install dependencies and start the CLI from the repo root:
@@ -72,10 +72,10 @@ From the repo root:
 ```bash
 bun install
 bun run lint
-bun run typecheck
+bun run typecheck:vscode
 ```
 
-`bun run typecheck` wraps `bun turbo typecheck`. Use `bun turbo typecheck --force` if you need to bypass the Turbo cache.
+`bun run typecheck:vscode` checks the extension, embedded backend, and console dependency graph without unrelated products. The broader `bun run typecheck` wraps `bun turbo typecheck` and includes retained upstream packages.
 
 Do **not** run `bun test` from the repo root. The root test script intentionally exits with failure so tests run from the package that owns them.
 
@@ -131,13 +131,13 @@ Build and launch the extension in an isolated VS Code instance:
 
 ```bash
 bun run extension                  # Build + launch in dev mode
-bun run extension:isolated         # Build + launch with persistent isolated IDE + Kilo state
+bun run extension:isolated         # Build + launch with persistent isolated IDE + Dustcode state
 bun run extension:isolated:clean   # Clear isolated state, then build + launch
 ```
 
 This auto-detects VS Code on macOS, Linux, and Windows. Override with `--app-path PATH` or `VSCODE_EXEC_PATH`. Use `--insiders` to prefer Insiders, pass a directory argument to open a specific folder, or use `--workspace PATH` for the same behavior.
 
-The isolated modes are for testing the extension without touching your primary VS Code profile or real Kilo config. `extension:isolated` reuses `.kilo-dev/` on each run, so installed extensions, VS Code settings, Kilo auth, sessions, config, state, and cache persist across launches. `extension:isolated:clean` deletes `.kilo-dev/` before launching, which simulates a fresh install while still keeping all state inside this repo checkout.
+The isolated modes are for testing Dustcode without touching your primary VS Code profile. `extension:isolated` reuses `.kilo-dev/` on each run, so installed extensions, VS Code settings, and backend state persist across launches. `extension:isolated:clean` deletes `.kilo-dev/` before launching, which simulates a fresh install while keeping development state inside this repo checkout. The directory name is retained for compatibility; the extension still uses its separate Dustcode profile.
 
 ```bash
 bun run extension:isolated -- ../sample-project

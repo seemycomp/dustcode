@@ -1,14 +1,12 @@
 import path from "path"
 import type { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect } from "effect"
+import { Profile } from "@opencode-ai/core/kilocode/profile"
 
 export namespace KilocodeGlobalConfigStamp {
-  const files = ["config.json", "kilo.json", "kilo.jsonc", "opencode.json", "opencode.jsonc", "config"]
+  const files = Profile.enabled ? Profile.files() : ["config.json", ...Profile.files(), "config"]
 
-  export const read = Effect.fnUntraced(function* (
-    fs: Pick<FSUtil.Interface, "readFileStringSafe">,
-    dir: string,
-  ) {
+  export const read = Effect.fnUntraced(function* (fs: Pick<FSUtil.Interface, "readFileStringSafe">, dir: string) {
     const entries = yield* Effect.forEach(
       files,
       Effect.fnUntraced(function* (file) {

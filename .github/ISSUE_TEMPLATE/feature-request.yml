@@ -1,5 +1,5 @@
-name: 🚀 Feature Request
-description: Suggest an idea, feature, or enhancement
+name: Feature Request # kilocode_change
+description: Suggest an improvement to the Dustcode VS Code extension # kilocode_change
 labels: [discussion]
 title: "[FEATURE]:"
 
@@ -24,16 +24,13 @@ body:
     id: component
     attributes:
       label: Component
-      description: Which part of Kilo is this about? It helps us route your request.
+      description: Which part of Dustcode is this about? This fork maintains only the VS Code extension and its bundled backend.
       options:
         - VS Code extension
-        - CLI / TUI
+        - Bundled backend
         - Agent Manager
-        - JetBrains plugin
-        - Desktop or web app
         - Documentation
-        - Kilo Gateway or account
-        - SDK
+        - Provider connection (including external Kilo Gateway)
         - Other / not sure
     validations:
       required: true

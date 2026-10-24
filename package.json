@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@kilocode/kilo",
-  "description": "AI-powered development tool",
+  "description": "Dustcode AI coding agent for VS Code",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.4",
@@ -13,6 +13,9 @@
     "check:architecture": "bun run script/check-architecture.ts",
     "check:duplication": "bun run script/check-kilocode-duplication.ts",
     "typecheck": "bun turbo typecheck",
+    "typecheck:vscode": "bun turbo typecheck --filter=dustcode... --filter=@kilocode/cli... --filter=@kilocode/kilo-console...",
+    "test:vscode": "bun run --cwd packages/kilo-vscode test:unit",
+    "build:vscode": "bun run script/kilocode/build-vscode.ts",
     "upgrade-opentui": "bun run script/upgrade-opentui.ts",
     "postinstall": "bun run --cwd packages/core fix-node-pty && bun run script/setup-git.ts",
     "prepare": "husky",
@@ -129,7 +132,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Kilo-Org/kilocode"
+    "url": "https://github.com/seemycomp/dustcode"
   },
   "license": "MIT",
   "prettier": {

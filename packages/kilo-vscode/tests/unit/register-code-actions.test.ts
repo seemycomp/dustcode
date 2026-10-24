@@ -119,7 +119,7 @@ describe("registerCodeActions", () => {
   it("keeps targeting Agent Manager after the code editor takes focus", async () => {
     const state = setup(false, true, "agent")
 
-    await state.commands.get("kilo-code.new.addToContext")?.()
+    await state.commands.get("dustcode.addToContext")?.()
 
     expect(state.recipients).toEqual(["agent"])
     expect(state.executed).toEqual([])
@@ -130,19 +130,19 @@ describe("registerCodeActions", () => {
   it.each(["sidebar", "tab"] as const)("prefers the last focused %s over the active panel", async (last) => {
     const state = setup(true, true, last)
 
-    await state.commands.get("kilo-code.new.addToContext")?.()
+    await state.commands.get("dustcode.addToContext")?.()
 
     expect(state.recipients).toEqual([last])
-    expect(state.executed).toEqual(last === "sidebar" ? [["kilo-code.SidebarProvider.focus"]] : [])
+    expect(state.executed).toEqual(last === "sidebar" ? [["dustcode.SidebarProvider.focus"]] : [])
     expectContextPost(state.posts.at(0))
   })
 
   it("uses the latest focused chat and falls back after it closes", async () => {
     const state = setup(false, true, "tab")
     state.focused.current = "agent"
-    await state.commands.get("kilo-code.new.addToContext")?.()
+    await state.commands.get("dustcode.addToContext")?.()
     state.focused.current = undefined
-    await state.commands.get("kilo-code.new.addToContext")?.()
+    await state.commands.get("dustcode.addToContext")?.()
 
     expect(state.recipients).toEqual(["agent", "sidebar"])
   })
@@ -150,7 +150,7 @@ describe("registerCodeActions", () => {
   it("does not reroute when the remembered Agent Manager closes while waiting", async () => {
     const state = setup(false, false, "agent")
 
-    await state.commands.get("kilo-code.new.addToContext")?.()
+    await state.commands.get("dustcode.addToContext")?.()
 
     expect(state.waits).toEqual(["agent"])
     expect(state.recipients).toEqual([])
@@ -160,8 +160,8 @@ describe("registerCodeActions", () => {
   it("keeps focus-only commands on their existing route", async () => {
     const state = setup(false, true, "agent")
 
-    await state.commands.get("kilo-code.new.focusChatInput")?.()
-    await state.commands.get("kilo-code.new.toggleChatSearch")?.()
+    await state.commands.get("dustcode.focusChatInput")?.()
+    await state.commands.get("dustcode.toggleChatSearch")?.()
 
     expect(state.recipients).toEqual(["sidebar", "sidebar"])
     expect(state.waits).toEqual(["provider", "provider"])
@@ -170,10 +170,10 @@ describe("registerCodeActions", () => {
   it("reveals the sidebar before adding selected code to context", async () => {
     const state = setup()
 
-    await state.commands.get("kilo-code.new.addToContext")?.()
+    await state.commands.get("dustcode.addToContext")?.()
 
     expect(state.events).toEqual(["focus", "wait", "post"])
-    expect(state.executed).toEqual([["kilo-code.SidebarProvider.focus"]])
+    expect(state.executed).toEqual([["dustcode.SidebarProvider.focus"]])
     expect(state.waits).toEqual(["provider"])
     expect(state.posts).toHaveLength(1)
     expectContextPost(state.posts[0])
@@ -182,7 +182,7 @@ describe("registerCodeActions", () => {
   it("adds selected code to the active Agent Manager without revealing the sidebar", async () => {
     const state = setup(true)
 
-    await state.commands.get("kilo-code.new.addToContext")?.()
+    await state.commands.get("dustcode.addToContext")?.()
 
     expect(state.events).toEqual(["wait", "post"])
     expect(state.executed).toEqual([])
@@ -194,7 +194,7 @@ describe("registerCodeActions", () => {
   it("does not post to the Agent Manager when its readiness wait is cancelled", async () => {
     const state = setup(true, false)
 
-    await state.commands.get("kilo-code.new.addToContext")?.()
+    await state.commands.get("dustcode.addToContext")?.()
 
     expect(state.events).toEqual(["wait"])
     expect(state.posts).toEqual([])
@@ -203,7 +203,7 @@ describe("registerCodeActions", () => {
   it("toggles chat search on the active Agent Manager once it is ready", async () => {
     const state = setup(true)
 
-    await state.commands.get("kilo-code.new.toggleChatSearch")?.()
+    await state.commands.get("dustcode.toggleChatSearch")?.()
 
     expect(state.events).toEqual(["wait", "post"])
     expect(state.posts).toEqual([{ type: "action", action: "focusSearch" }])
@@ -212,7 +212,7 @@ describe("registerCodeActions", () => {
   it("does not toggle chat search when Agent Manager readiness is cancelled", async () => {
     const state = setup(true, false)
 
-    await state.commands.get("kilo-code.new.toggleChatSearch")?.()
+    await state.commands.get("dustcode.toggleChatSearch")?.()
 
     expect(state.events).toEqual(["wait"])
     expect(state.posts).toEqual([])

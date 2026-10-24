@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, mock } from "bun:test"
+import path from "node:path"
 import { createKiloClient } from "@kilocode/sdk/v2/client"
 import * as vscode from "vscode"
 import { MarketplaceService } from "../../src/services/marketplace"
@@ -19,8 +20,9 @@ import type { MarketplaceItem } from "../../webview-ui/src/types/marketplace"
 
 const project = "/repo"
 const storage = vscode.Uri.file("/storage")
-const local = `${project}/.kilo/mcp.json`
-const legacy = `${project}/.kilocode/mcp.json`
+const local = path.join(project, ".dustcode", "mcp.json")
+const legacy = path.join(project, ".kilocode", "mcp.json")
+const original = path.join(project, ".kilo", "mcp.json")
 const global = `${storage.fsPath}/settings/mcp_settings.json`
 const item: McpMarketplaceItem = {
   id: "memory",
@@ -51,12 +53,13 @@ const fs = vscode.workspace.fs as unknown as {
   readFile: (uri: vscode.Uri) => Promise<Uint8Array>
   writeFile: (uri: vscode.Uri, data: Uint8Array) => Promise<void>
 }
-const original = { readFile: fs.readFile, writeFile: fs.writeFile }
+const saved = { readFile: fs.readFile, writeFile: fs.writeFile }
 
 function setup() {
   const files = new Map([
     [local, JSON.stringify({ mcpServers: { memory: {}, keep: {} } })],
     [legacy, JSON.stringify({ mcpServers: { memory: {}, keep: {} } })],
+    [original, JSON.stringify({ mcpServers: { memory: {}, keep: {} } })],
     [global, JSON.stringify({ mcpServers: { memory: {}, keep: {} } })],
   ])
   fs.readFile = async (uri) => {
@@ -83,8 +86,8 @@ function ctx(remove = mock(async () => ({ success: true, slug: item.id }))) {
 }
 
 afterEach(() => {
-  fs.readFile = original.readFile
-  fs.writeFile = original.writeFile
+  fs.readFile = saved.readFile
+  fs.writeFile = saved.writeFile
 })
 
 describe("Marketplace installation metadata", () => {
@@ -252,8 +255,9 @@ describe("Marketplace removal actions", () => {
     await removeMarketplaceItem(ctx(), item, "project", project, project)
 
     expect(has(files, local)).toBe(false)
-    expect(has(files, legacy)).toBe(false)
+    expect(has(files, legacy)).toBe(true)
     expect(has(files, global)).toBe(true)
+    expect(has(files, original)).toBe(true)
   })
 
   it("preserves project legacy config during global removal", async () => {
@@ -273,7 +277,7 @@ describe("Marketplace removal actions", () => {
     expect(remove).toHaveBeenCalledTimes(2)
     expect(remove.mock.calls.map((call) => call[2])).toEqual(["project", "global"])
     expect(has(files, local)).toBe(false)
-    expect(has(files, legacy)).toBe(false)
+    expect(has(files, legacy)).toBe(true)
     expect(has(files, global)).toBe(false)
   })
 

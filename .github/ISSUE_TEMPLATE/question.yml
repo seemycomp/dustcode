@@ -1,11 +1,11 @@
 name: Question
-description: Ask a question
+description: Ask about the Dustcode VS Code extension # kilocode_change
 labels: ["question"]
 body:
   - type: textarea
     id: question
     attributes:
       label: Question
-      description: What's your question?
+      description: What's your question about Dustcode? Kilo Gateway and other providers are external services, not services operated by this fork. Do not include credentials or private information. # kilocode_change
     validations:
       required: true

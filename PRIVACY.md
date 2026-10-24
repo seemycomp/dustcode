@@ -1,15 +1,16 @@
-# Kilo CLI Privacy Policy
+# Dustcode Privacy Information
 
-**Last Updated: March 7th, 2025**
+**Last Updated: October 24, 2026**
 
-Kilo CLI respects your privacy and is committed to transparency about how we handle your data. Below is a simple breakdown of where key pieces of data go—and, importantly, where they don't.
+Dustcode is a VS Code extension with a local agent backend. This document describes the fork's local storage and provider connections. Kilo Gateway and other external providers have their own privacy policies; their services are not operated by this fork.
 
 ### **Where Your Data Goes (And Where It Doesn't)**
 
-- **Code & Files**: Kilo CLI accesses files on your local machine when needed for AI-assisted features. When you send commands to Kilo CLI, relevant files may be transmitted to your chosen AI model provider (e.g., OpenAI, Anthropic, OpenRouter) to generate responses. We do not have access to this data, but AI providers may store it per their privacy policies.
-- **Commands**: Any commands executed through Kilo CLI happen on your local environment. However, when you use AI-powered features, the relevant code and context from your commands may be transmitted to your chosen AI model provider (e.g., OpenAI, Anthropic, OpenRouter) to generate responses. We do not have access to or store this data, but AI providers may process it per their privacy policies.
-- **Prompts & AI Requests**: When you use AI-powered features, your prompts and relevant project context are sent to your chosen AI model provider (e.g., OpenAI, Anthropic, OpenRouter) to generate responses. We do not store or process this data. These AI providers have their own privacy policies and may store data per their terms of service.
-- **API Keys & Credentials**: If you enter an API key (e.g., to connect an AI model), it is stored locally on your device and never sent to us or any third party, except the provider you have chosen.
+- **Code & Files**: Dustcode accesses local files for AI-assisted features. Relevant code and context may be sent to the model provider you configure, including through Kilo Gateway when selected. Provider retention and processing are governed by their policies.
+- **Commands**: Agent commands run on your machine. Their output and related context may be included in subsequent model requests. Tools, MCP servers, plugins, and browser automation may contact additional services according to the actions you authorize.
+- **Prompts & Sessions**: Prompts, responses, and session history are stored locally in Dustcode's isolated profile. AI requests send prompts and relevant project context to your configured provider. Optional cloud features can transmit session data to the external service you enable.
+- **API Keys & Credentials**: Configured provider credentials are stored locally and used to authenticate to the selected services. Dustcode does not import credentials or sessions from your Kilo Code installation.
+- **Telemetry**: The Dustcode extension's telemetry proxy is disabled. External providers and services may collect their own operational data under their policies.
 
 ### **Your Choices & Control**
 
@@ -21,8 +22,8 @@ We take reasonable measures to secure your data, but no system is 100% secure. I
 
 ### **Contact Us**
 
-For any privacy-related questions, you can reach out to us at hi@kilo.ai.
+Report Dustcode privacy concerns in the [fork repository](https://github.com/seemycomp/dustcode). Do not post credentials, private code, or session transcripts in a public issue. Questions about a provider's handling of data belong with that provider.
 
 ---
 
-By using Kilo CLI, you agree to this Privacy Policy.
+Upstream Kilo Code privacy statements and contact addresses do not describe the operator of this fork.

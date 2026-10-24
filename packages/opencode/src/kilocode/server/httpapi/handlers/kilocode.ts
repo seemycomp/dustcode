@@ -58,6 +58,7 @@ import { clearPtys } from "@/kilocode/worktree/pty-cleanup"
 import { Snapshot } from "@/snapshot"
 import { KiloSnapshotPrepare } from "@/kilocode/snapshot/prepare"
 import { Global } from "@opencode-ai/core/global"
+import { Profile } from "@opencode-ai/core/kilocode/profile"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import path from "path"
@@ -432,7 +433,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       // Lexical checks only, like KiloSnapshotCleanup.remove: a symlinked `.kilo/worktrees` in an
       // untrusted repository must not widen the directories this endpoint can tear down.
       // `contains` rejects `..` and absolute escapes; one component rejects nested paths.
-      const managed = path.resolve(instance.worktree, ".kilo", "worktrees")
+      const managed = path.resolve(instance.worktree, Profile.dir(), "worktrees")
       const worktree = path.resolve(ctx.payload.worktree)
       const child = path.relative(managed, worktree).split(path.sep).filter(Boolean)
       if (!path.isAbsolute(ctx.payload.worktree) || !FSUtil.contains(managed, worktree) || child.length !== 1)

@@ -15,6 +15,7 @@ import type { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionRetry } from "@/session/retry"
 import { computeMetrics as computeMetricsHelper, type TokenRates } from "@/kilocode/session/metrics"
 import { InvalidArgumentsError } from "@/tool/tool"
+import { Branding } from "@opencode-ai/core/kilocode/branding"
 
 export type ReviewTelemetry = {
   mode: "review"
@@ -45,8 +46,7 @@ export namespace KiloSessionProcessor {
   export const OUTPUT_LENGTH_WARNING = "The model hit its output limit, so this response may be incomplete."
   export const REASONING_LENGTH_WARNING =
     "The model hit its output limit while reasoning and produced no actionable output. Try disabling reasoning or increasing the output limit."
-  export const PROVIDER_FINISH_ERROR_MESSAGE =
-    "The provider ended the response with an error before returning details. Start a new message to retry; Kilo will compact the oversized conversation first if needed."
+  export const PROVIDER_FINISH_ERROR_MESSAGE = `The provider ended the response with an error before returning details. Start a new message to retry; ${Branding.name()} will compact the oversized conversation first if needed.`
 
   export function reviewTelemetry(command: string | undefined): ReviewTelemetry | undefined {
     const cmd = reviewCommandName(command)
@@ -230,7 +230,10 @@ export namespace KiloSessionProcessor {
 
   // Dynamic import: app-runtime depends on this module, so a static import would
   // be circular; the annotated return type keeps the AppLayer type graph acyclic.
-  async function providerBaseURL(id: ProviderV2.ID | undefined, apiUrl: string | undefined): Promise<string | undefined> {
+  async function providerBaseURL(
+    id: ProviderV2.ID | undefined,
+    apiUrl: string | undefined,
+  ): Promise<string | undefined> {
     const url = (id ? await configured(id) : undefined) ?? apiUrl
     if (!url) return url
     // varsLoaders vars from resolveSDK are unreachable here; unexpanded names

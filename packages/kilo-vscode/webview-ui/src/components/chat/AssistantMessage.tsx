@@ -231,7 +231,7 @@ function BashToolCard(props: { part: ToolPart; defaultOpen: boolean }) {
  * rate across the turn's model-generation steps (output + reasoning
  * tokens over active generation time).
  *
- * Visibility is gated by the same `kilo-code.new.showTokenThroughput`
+ * Visibility is gated by the same `dustcode.showTokenThroughput`
  * toggle that previously controlled the multi-row badge. The metric only
  * renders when the message has at least one step-finish part carrying both
  * a token count and elapsed timing.

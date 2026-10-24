@@ -10,7 +10,7 @@ describe("Kilo OAuth branding", () => {
 
     expect(src).toContain('originator: "kilo"')
     expect(src).toContain('"User-Agent": `kilo/${InstallationVersion}`')
-    expect(src).toContain("return to Kilo")
+    expect(src).toContain("return to ${Branding.name()}")
     expect(src).not.toContain('originator: "opencode"')
     expect(src).not.toContain("return to OpenCode")
   })
@@ -38,7 +38,16 @@ describe("Kilo OAuth branding", () => {
   test("MCP OAuth callback page uses Kilo branding", async () => {
     const src = await Bun.file(path.join(root, "src", "mcp", "oauth-callback.ts")).text()
 
-    expect(src).toContain("return to Kilo")
+    expect(src).toContain("return to ${Branding.name() /* kilocode_change */}")
     expect(src).not.toContain("return to OpenCode")
+  })
+
+  test("DigitalOcean OAuth uses the active local product name", async () => {
+    const src = await Bun.file(path.join(root, "src", "plugin", "digitalocean.ts")).text()
+    expect(src).toContain("${Branding.name()} - DigitalOcean Authorization")
+    expect(src).toContain("return to ${Branding.name()}")
+    expect(src).toContain("${Branding.name()} will use your DigitalOcean API token")
+    expect(src).toContain('provider: "digitalocean"')
+    expect(src).not.toContain("return to Kilo")
   })
 })

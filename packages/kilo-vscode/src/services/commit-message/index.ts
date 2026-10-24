@@ -34,7 +34,7 @@ export function registerCommitMessageService(
   connectionService: KiloConnectionService,
 ): vscode.Disposable[] {
   const command = vscode.commands.registerCommand(
-    "kilo-code.new.generateCommitMessage",
+    "dustcode.generateCommitMessage",
     async (arg?: vscode.SourceControl) => {
       const extension = vscode.extensions.getExtension<GitExtensionExports>("vscode.git")
       if (!extension) {
@@ -59,8 +59,8 @@ export function registerCommitMessageService(
       try {
         client = await connectionService.getClientAsync(path)
       } catch (err) {
-        console.error("[Kilo New] Failed to connect to Kilo backend:", err)
-        vscode.window.showErrorMessage("Failed to connect to Kilo backend. Please try again.")
+        console.error("[Dustcode] Failed to connect to Dustcode backend:", err)
+        vscode.window.showErrorMessage("Failed to connect to Dustcode backend. Please try again.")
         return
       }
 
@@ -102,7 +102,7 @@ export function registerCommitMessageService(
               repository.inputBox.value = message
               lastGeneratedMessage = message
               lastWorkspacePath = path
-              console.log("[Kilo New] Commit message generated successfully")
+              console.log("[Dustcode] Commit message generated successfully")
             } finally {
               clearTimeout(timer)
             }
@@ -110,16 +110,16 @@ export function registerCommitMessageService(
         )
         .then(undefined, (error: unknown) => {
           if (userCancelled) {
-            console.log("[Kilo New] Commit message generation was cancelled by user")
+            console.log("[Dustcode] Commit message generation was cancelled by user")
             return
           }
           if (timedOut) {
-            console.log("[Kilo New] Commit message generation timed out")
+            console.log("[Dustcode] Commit message generation timed out")
             vscode.window.showErrorMessage("Commit message generation timed out. Please try again.")
             return
           }
           const msg = getErrorMessage(error)
-          console.error("[Kilo New] Failed to generate commit message:", msg)
+          console.error("[Dustcode] Failed to generate commit message:", msg)
           vscode.window.showErrorMessage(msg || "Failed to generate commit message. Please try again.")
         })
     },

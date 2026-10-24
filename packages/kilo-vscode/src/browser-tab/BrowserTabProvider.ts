@@ -117,21 +117,13 @@ export class BrowserTabProvider {
       this.log("Browser tab open rejected: session is not available", sessionId)
       return
     }
-    const panel = vscode.window.createWebviewPanel(
-      "kilo-code.new.browser",
-      "Integrated Browser",
-      vscode.ViewColumn.Active,
-      {
-        enableScripts: true,
-        enableForms: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [this.extensionUri],
-      },
-    )
-    panel.iconPath = {
-      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-light.svg"),
-      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-dark.svg"),
-    }
+    const panel = vscode.window.createWebviewPanel("dustcode.browser", "Integrated Browser", vscode.ViewColumn.Active, {
+      enableScripts: true,
+      enableForms: true,
+      retainContextWhenHidden: true,
+      localResourceRoots: [this.extensionUri],
+    })
+    panel.iconPath = vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "dustcode.png")
     panel.webview.html = this.html(panel.webview)
     const entry: Panel = { panel, sessionId, ready: false }
     this.panels.set(sessionId, entry)
@@ -289,7 +281,7 @@ export class BrowserTabProvider {
       return
     }
     if (message.type === "browserTab.openSettings") {
-      void vscode.commands.executeCommand("kilo-code.new.settingsButtonClicked", "experimental")
+      void vscode.commands.executeCommand("dustcode.settingsButtonClicked", "experimental")
       return
     }
     if (message.type === "browserTab.openExternal") {
@@ -313,7 +305,7 @@ export class BrowserTabProvider {
       controlBrowserFailure(
         control,
         this.surface(entry),
-        "Browser automation is disabled. Enable it in Kilo Settings > Experimental.",
+        "Browser automation is disabled. Enable it in Dustcode Settings > Experimental.",
       )
       return
     }

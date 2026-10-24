@@ -4,6 +4,7 @@ import { existsSync } from "fs"
 import os from "os"
 import path from "path"
 import { Process } from "@/util/process"
+import { Profile } from "@opencode-ai/core/kilocode/profile" // kilocode_change
 
 const MANAGED_PLIST_DOMAIN = "ai.opencode.managed"
 
@@ -29,6 +30,7 @@ function systemManagedConfigDir(): string {
 }
 
 export function managedConfigDir() {
+  if (Profile.enabled) return undefined // kilocode_change - original managed policy is not fork configuration
   return process.env.KILO_TEST_MANAGED_CONFIG_DIR || systemManagedConfigDir()
 }
 
@@ -41,6 +43,7 @@ export function parseManagedPlist(json: string): string {
 }
 
 export async function readManagedPreferences() {
+  if (Profile.enabled) return // kilocode_change
   if (process.platform !== "darwin") return
 
   const user = (() => {

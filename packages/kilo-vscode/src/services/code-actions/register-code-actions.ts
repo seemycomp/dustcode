@@ -13,7 +13,7 @@ export function registerCodeActions(
 ): void {
   const target = () => (agentManager?.isActive() ? agentManager : (activeTabProvider?.() ?? provider))
   const reveal = async () => {
-    await vscode.commands.executeCommand("kilo-code.SidebarProvider.focus")
+    await vscode.commands.executeCommand("dustcode.SidebarProvider.focus")
     await provider.waitForReady()
   }
   // Only the sidebar `provider` branch used to await readiness before
@@ -41,7 +41,7 @@ export function registerCodeActions(
   }
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("kilo-code.new.explainCode", async () => {
+    vscode.commands.registerCommand("dustcode.explainCode", async () => {
       const ctx = getEditorContext()
       if (!ctx) return
       const prompt = createPrompt("EXPLAIN", {
@@ -55,7 +55,7 @@ export function registerCodeActions(
       provider.postMessage({ type: "triggerTask", text: prompt, injectedTitle: "Explain selected code" })
     }),
 
-    vscode.commands.registerCommand("kilo-code.new.fixCode", async () => {
+    vscode.commands.registerCommand("dustcode.fixCode", async () => {
       const ctx = getEditorContext()
       if (!ctx) return
       const prompt = createPrompt("FIX", {
@@ -70,7 +70,7 @@ export function registerCodeActions(
       provider.postMessage({ type: "triggerTask", text: prompt, injectedTitle: "Fix code problems" })
     }),
 
-    vscode.commands.registerCommand("kilo-code.new.improveCode", async () => {
+    vscode.commands.registerCommand("dustcode.improveCode", async () => {
       const ctx = getEditorContext()
       if (!ctx) return
       const prompt = createPrompt("IMPROVE", {
@@ -84,7 +84,7 @@ export function registerCodeActions(
       provider.postMessage({ type: "triggerTask", text: prompt, injectedTitle: "Improve selected code" })
     }),
 
-    vscode.commands.registerCommand("kilo-code.new.addToContext", async () => {
+    vscode.commands.registerCommand("dustcode.addToContext", async () => {
       const ctx = getEditorContext()
       if (!ctx) return
       const view = lastFocusedChat?.() ?? target()
@@ -101,7 +101,7 @@ export function registerCodeActions(
       })
     }),
 
-    vscode.commands.registerCommand("kilo-code.new.focusChatInput", async () => {
+    vscode.commands.registerCommand("dustcode.focusChatInput", async () => {
       const view = target()
       if (!(await revealTarget(view))) return
       view.postMessage({ type: "action", action: "focusInput" })
@@ -113,7 +113,7 @@ export function registerCodeActions(
     // focus; invoking straight from the palette sidesteps that path
     // entirely, the same way terminalAddToContext etc. do. Toggles: the
     // webview closes the search bar itself if it's already open.
-    vscode.commands.registerCommand("kilo-code.new.toggleChatSearch", async () => {
+    vscode.commands.registerCommand("dustcode.toggleChatSearch", async () => {
       const view = target()
       if (!(await revealTarget(view))) return
       view.postMessage({ type: "action", action: "focusSearch" })

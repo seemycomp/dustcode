@@ -14,8 +14,10 @@ const packageJsonPath = join(import.meta.dir, "..", "package.json")
 const packageJson = await Bun.file(packageJsonPath).json()
 const version = process.env.KILO_VERSION ? process.env.KILO_VERSION : packageJson.version
 const prerelease = process.env.KILO_PRE_RELEASE === "true"
+const single = process.argv.includes("--single")
+const platform = `${process.platform}-${process.arch}`
 
-console.log(`Building VSCode extension version: ${version}${prerelease ? " (pre-release)" : ""}`)
+console.log(`Building Dustcode VSCode extension version: ${version}${prerelease ? " (pre-release)" : ""}`)
 
 if (packageJson.version !== version) {
   console.log(`Updating package.json version from ${packageJson.version} to ${version}`)
@@ -39,7 +41,9 @@ const targets = [
   { target: "darwin-arm64", cliDir: "@kilocode/cli-darwin-arm64", binary: "kilo" },
   { target: "win32-x64", cliDir: "@kilocode/cli-windows-x64", binary: "kilo.exe" },
   { target: "win32-arm64", cliDir: "@kilocode/cli-windows-arm64", binary: "kilo.exe" },
-]
+].filter((config) => !single || config.target === platform)
+
+if (targets.length === 0) throw new Error(`No VSIX target configured for ${platform}`)
 
 const binDir = join(import.meta.dir, "..", "bin")
 const distDir = join(import.meta.dir, "..", "dist")
@@ -61,6 +65,7 @@ await $`bun run --cwd ${join(import.meta.dir, "..", "..", "sdk", "js")} build`
 
 console.log("\n📦 Compiling extension...")
 await $`bun run check-types`
+await $`bun run check-types:webview`
 await $`bun run lint`
 await $`node ${join(import.meta.dir, "..", "esbuild.js")} --production`
 
@@ -84,6 +89,8 @@ for (const config of targets) {
   await copyTreeSitterResources(sourceBinary, targetBinary)
   await copySandboxResources(sourceBinary, targetBinary)
   await copyKiloSandboxWorker(sourceBinary, targetBinary)
+  const assets = join(cliDistDir, config.cliDir, "bin", "console")
+  if (existsSync(assets)) await $`cp -R ${assets} ${join(binDir, "console")}`
 
   if (config.binary !== "kilo.exe") {
     chmodSync(targetBinary, 0o755)
@@ -95,7 +102,7 @@ for (const config of targets) {
   await ensureFfmpegForTarget(config.target, binDir)
 
   console.log(`  📦 Packaging .vsix for ${config.target}${prerelease ? " (pre-release)" : ""}...`)
-  const vsixPath = join(outDir, `kilo-vscode-${config.target}.vsix`)
+  const vsixPath = join(outDir, `dustcode-${config.target}.vsix`)
   const args = ["--no-dependencies", "--skip-license", "--target", config.target, "-o", vsixPath]
   if (prerelease) args.push("--pre-release")
   await $`vsce package ${args}`.env({

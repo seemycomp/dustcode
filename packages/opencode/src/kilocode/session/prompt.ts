@@ -24,6 +24,7 @@ import { environmentDetails } from "@/kilocode/editor-context"
 import { Identifier } from "@/id/id"
 import { Filesystem } from "@/util/filesystem"
 import NATIVE_PLAN_PROMPT from "@/kilocode/session/native-plan-prompt.txt"
+import { Branding } from "@opencode-ai/core/kilocode/branding"
 import { KiloMemory } from "@kilocode/kilo-memory/effect"
 import { MemoryPaths } from "@kilocode/kilo-memory/effect/paths"
 import { MemoryMarker } from "@/kilocode/memory/marker"
@@ -536,7 +537,7 @@ export namespace KiloSessionPrompt {
     const ctx = Instance.bind(() => Instance.current)()
     const plan = Session.plan(input.session, ctx)
 
-    if (mode(input.agent.name) === "plan") add(`\n\n${NATIVE_PLAN_PROMPT}`)
+    if (mode(input.agent.name) === "plan") add(`\n\n${Branding.prompt(NATIVE_PLAN_PROMPT)}`)
 
     const file = input.messages ? PlanFile.latest(input.messages) : undefined
     const saved = PlanFile.resolve(file, ctx)

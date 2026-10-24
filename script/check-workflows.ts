@@ -26,47 +26,7 @@ const ROOT = path.resolve(import.meta.dir, "..")
 const DIR = path.join(ROOT, ".github", "workflows")
 
 // Workflows we have deliberately accepted into CI. Sort alphabetically.
-const active = new Set([
-  "auto-docs.yml",
-  "beta.yml",
-  "check-forbidden-strings.yml",
-  "check-kilo-generated-artifacts.yml",
-  "check-md-table-padding.yml",
-  "check-opencode-annotations.yml",
-  "check-org-member.yml",
-  "codeql-kotlin.yml",
-  "codeql.yml",
-  "community-label.yml",
-  "community-sweep.yml",
-  "community-triage-test.yml",
-  "containers.yml",
-  "dependabot-auto-merge.yml",
-  "docs-build.yml",
-  "docs-check-links.yml",
-  "docs-sync.yml",
-  "generate.yml",
-  "kilo-auto-close.yml",
-  "nix-eval.yml",
-  "nix-hashes.yml",
-  "outdated-kilo-deps.yml",
-  "prepare-jetbrains-release.yml",
-  "publish-jetbrains-bundled.yml",
-  "publish-jetbrains.yml",
-  "publish.yml",
-  "security-findings-notify.yml",
-  "smoke-test.yml",
-  "source-check-links.yml",
-  "stale-alerts-report.yml",
-  "stale-bot-pr-notify.yml",
-  "test-jetbrains.yml",
-  "test-vscode.yml",
-  "test.yml",
-  "typecheck.yml",
-  "validate-cli-smoke.yml",
-  "v2-port-tracker.yml",
-  "visual-regression.yml",
-  "watch-opencode-releases.yml",
-])
+const active = new Set(["codeql.yml", "test-vscode.yml"])
 
 // GitHub picks up both .yml and .yaml in .github/workflows/. We accept both so
 // an upstream `.yaml` addition also shows up as unexpected drift.

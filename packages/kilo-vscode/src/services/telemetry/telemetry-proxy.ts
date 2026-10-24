@@ -1,4 +1,3 @@
-import * as vscode from "vscode"
 import { TelemetryEventName, type TelemetryPropertiesProvider } from "./types"
 import { buildTelemetryPayload, buildTelemetryAuthHeader } from "./telemetry-proxy-utils"
 
@@ -37,7 +36,7 @@ export class TelemetryProxy {
   }
 
   isVSCodeTelemetryEnabled(): boolean {
-    return vscode.env.isTelemetryEnabled
+    return false
   }
 
   /**
@@ -59,7 +58,7 @@ export class TelemetryProxy {
         "Content-Type": "application/json",
       },
       body: payload,
-    }).catch((err) => console.error("[Kilo New] Telemetry capture failed:", err))
+    }).catch((err) => console.error("[Dustcode] Telemetry capture failed:", err))
   }
 
   /**
@@ -68,7 +67,7 @@ export class TelemetryProxy {
    * VS Code telemetry consent leaves the CLI's PostHog client stuck on its
    * spawn-time state until the process restarts.
    */
-  setEnabled(enabled: boolean) {
+  setEnabled(_enabled: boolean) {
     if (!this.url || !this.password) return
 
     const auth = buildTelemetryAuthHeader(this.password)
@@ -78,8 +77,8 @@ export class TelemetryProxy {
         Authorization: auth,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ enabled }),
-    }).catch((err) => console.error("[Kilo New] Telemetry setEnabled failed:", err))
+      body: JSON.stringify({ enabled: false }),
+    }).catch((err) => console.error("[Dustcode] Telemetry setEnabled failed:", err))
   }
 
   /**

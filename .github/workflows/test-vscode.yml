@@ -1,55 +1,144 @@
-name: test-vscode
+# kilocode_change - new file
+name: VS Code
 
 on:
   push:
-    branches:
-      - main
-      - dev
-    paths:
-      - "packages/kilo-vscode/**"
-      - "packages/ui/**"
-      - "packages/kilo-ui/**"
-      - ".github/workflows/test-vscode.yml"
+    branches: [main, dev]
   pull_request:
-    paths:
-      - "packages/kilo-vscode/**"
-      - "packages/ui/**"
-      - "packages/kilo-ui/**"
-      - ".github/workflows/test-vscode.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: vscode-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  KILO_RELEASE: ""
+  KILO_TELEMETRY_LEVEL: "off"
+
 jobs:
-  unit:
-    name: unit tests
-    runs-on: ${{ github.repository == 'Kilo-Org/kilocode' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }} # kilocode_change
-    defaults:
-      run:
-        shell: bash
+  check:
+    name: Extension and backend checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6 # kilocode_change
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-bun
+      - uses: ./.github/actions/setup-linux-sandbox
 
-      - name: Setup Bun
-        uses: ./.github/actions/setup-bun
+      - name: Allow sandbox test user namespaces on the ephemeral runner
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
-      - name: Run unit tests
-        working-directory: packages/kilo-vscode
-        run: bun run test:unit
+      - name: Check fork CI configuration
+        run: |
+          bun run script/check-workflows.ts
+          bun test ./script/kilocode/vscode-ci.test.ts
+          bun run script/check-architecture.ts
+          bun run script/check-opencode-promise-facades.ts
+          bun run script/check-model-tool-network.ts
 
-      - name: Check lint (ESLint)
-        working-directory: packages/kilo-vscode
+      - name: Build SDK
+        run: bun run --cwd packages/kilo-vscode prepare:sdk
+
+      - name: Typecheck extension and backend dependencies
+        run: bun run typecheck:vscode
+
+      - name: Lint workspace
         run: bun run lint
 
-      - name: Check formatting (prettier)
+      - name: Check extension
         working-directory: packages/kilo-vscode
-        run: bun run format:check
+        run: |
+          bun run lint
+          bun run format:check
+          bun run knip
+          bun run check-kilocode-change
+          bun run test:unit
 
-      - name: Check for dead code (knip)
-        working-directory: packages/kilo-vscode
-        run: bun run knip
+      - name: Test backend services and sandbox
+        run: |
+          bun run --cwd packages/core test
+          bun run --cwd packages/kilo-sandbox test
 
-      - name: Check for kilocode_change markers
-        working-directory: packages/kilo-vscode
-        run: bun run check-kilocode-change
+      - name: Test backend API, sessions, tools and permissions
+        working-directory: packages/opencode
+        run: bun run test --concurrency 2 test/server/ test/session/ test/tool/ test/permission/ test/config/ test/kilocode/
+        env:
+          KILO_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
+
+  package:
+    name: VSIX (${{ matrix.target }})
+    needs: check
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: linux-x64
+          - runner: macos-15-intel
+            target: darwin-x64
+          - runner: macos-15
+            target: darwin-arm64
+          - runner: windows-2025
+            target: win32-x64
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-bun
+      - uses: ./.github/actions/setup-sbom
+        if: runner.os == 'Linux'
+
+      - name: Setup Zig for bundled Linux sandbox
+        if: runner.os == 'Linux'
+        run: |
+          curl --fail --location --retry 3 \
+            https://ziglang.org/download/0.14.0/zig-linux-x86_64-0.14.0.tar.xz \
+            --output "$RUNNER_TEMP/zig.tar.xz"
+          echo "473ec26806133cf4d1918caf1a410f8403a13d979726a9045b421b685031a982  $RUNNER_TEMP/zig.tar.xz" | sha256sum --check --status
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/zig-linux-x86_64-0.14.0" >> "$GITHUB_PATH"
+
+      - name: Build bundled backend and platform VSIX
+        run: bun run build:vscode
+
+      - name: Upload VSIX and SBOM evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: dustcode-${{ matrix.target }}
+          path: packages/kilo-vscode/out/*
+          if-no-files-found: error
+          retention-days: 14
+
+  inventory:
+    name: Scan packaged VSIX contents
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-sbom
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: dustcode-*
+          path: artifacts
+
+      - name: Scan every platform artifact with pinned Syft
+        run: |
+          for file in artifacts/*/*.vsix; do
+            syft scan "file:$file" -o "cyclonedx-json=$file.physical.cdx.json" -q
+          done
+
+      - name: Upload physical component inventories
+        uses: actions/upload-artifact@v7
+        with:
+          name: vscode-physical-inventories
+          path: artifacts/**/*.physical.cdx.json
+          if-no-files-found: error
+          retention-days: 14

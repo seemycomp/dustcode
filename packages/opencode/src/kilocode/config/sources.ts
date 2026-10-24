@@ -4,6 +4,7 @@ import { unique } from "remeda"
 import z from "zod"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
+import { Profile } from "@opencode-ai/core/kilocode/profile"
 import { Auth } from "@/auth"
 import { ConfigManaged } from "@/config/managed"
 import { Filesystem } from "@/util/filesystem"
@@ -56,8 +57,8 @@ export namespace KilocodeConfigSources {
 
   type Pending = Omit<Source, "order">
 
-  const roots = [".kilocode", ".kilo"] as const
-  const global = ["config.json", "kilo.json", "kilo.jsonc", "opencode.json", "opencode.jsonc"] as const
+  const roots = Profile.dirs()
+  const global = KilocodeConfig.GLOBAL_CONFIG_FILES
 
   export async function list(input: Input): Promise<Result> {
     const project = Flag.KILO_DISABLE_PROJECT_CONFIG ? [] : await projectSources(input)
@@ -106,7 +107,7 @@ export namespace KilocodeConfigSources {
   }
 
   async function envFileSources(): Promise<Pending[]> {
-    if (!Flag.KILO_CONFIG) return []
+    if (Profile.enabled || !Flag.KILO_CONFIG) return []
     return [
       await fileSource({
         kind: "env-file",
@@ -119,6 +120,7 @@ export namespace KilocodeConfigSources {
   }
 
   async function projectSources(input: Input): Promise<Pending[]> {
+    if (Profile.enabled) return []
     const kilo = await projectFiles("kilo", input)
     const opencode = await projectFiles("opencode", input)
     return Promise.all(
@@ -134,8 +136,8 @@ export namespace KilocodeConfigSources {
 
   async function configDirSources(input: Input): Promise<Pending[]> {
     const project = await Filesystem.findUp([...roots], input.directory, input.worktree)
-    const home = await Filesystem.findUp([...roots], Global.Path.home, Global.Path.home)
-    const env = Flag.KILO_CONFIG_DIR ? [Flag.KILO_CONFIG_DIR] : []
+    const home = Profile.enabled ? [] : await Filesystem.findUp([...roots], Global.Path.home, Global.Path.home)
+    const env = !Profile.enabled && Flag.KILO_CONFIG_DIR ? [Flag.KILO_CONFIG_DIR] : []
     const dirs = unique([Global.Path.config, ...project, ...home, ...env]).filter((dir) =>
       KilocodeConfig.isConfigDir(dir, Flag.KILO_CONFIG_DIR),
     )
@@ -181,7 +183,7 @@ export namespace KilocodeConfigSources {
         reason: "Inline config content from the process environment; value is not exposed.",
       })
     }
-    if (Flag.KILO_CONFIG_DIR) {
+    if (!Profile.enabled && Flag.KILO_CONFIG_DIR) {
       sources.push({
         kind: "runtime-env",
         scope: "env",
@@ -224,6 +226,7 @@ export namespace KilocodeConfigSources {
 
   async function managedSources(): Promise<Pending[]> {
     const dir = ConfigManaged.managedConfigDir()
+    if (!dir) return []
     const files = await Promise.all(
       KilocodeConfig.ALL_CONFIG_FILES.map((name) =>
         fileSource({

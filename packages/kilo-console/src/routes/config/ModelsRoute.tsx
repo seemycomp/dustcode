@@ -148,7 +148,7 @@ export function ModelsDefaultRoute() {
     <Show when={state.snap()}>
       <ConfigPage
         title="Model defaults"
-        description="The models Kilo uses when an agent or command doesn't pin its own."
+        description="The models Dustcode uses when an agent or command doesn't pin its own."
       >
         <div class="resolved-grid model-defaults model-default-fields">
           <For each={slots}>

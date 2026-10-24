@@ -14,7 +14,7 @@ import type { KiloConnectionService } from "../cli-backend"
 import { hasValidCredentials, fimModel as notebookModel } from "./fim"
 import { DEFAULT_AUTOCOMPLETE_MODEL, getAutocompleteModel } from "../../shared/autocomplete-models"
 
-const CONFIG_SECTION = "kilo-code.new.autocomplete"
+const CONFIG_SECTION = "dustcode.autocomplete"
 
 export function selector(kind: "classic" | "next-edit"): vscode.DocumentSelector {
   return kind === "classic" ? [{ scheme: "file" }, { scheme: "vscode-notebook-cell" }] : [{ scheme: "file" }]
@@ -35,7 +35,7 @@ function readSettings(): AutocompleteServiceSettings {
   const config = vscode.workspace.getConfiguration(CONFIG_SECTION)
   const info = getAutocompleteModel(config.get<string>("provider"), config.get<string>("model"))
   return {
-    enableAutoTrigger: config.get<boolean>("enableAutoTrigger") ?? true,
+    enableAutoTrigger: config.get<boolean>("enableAutoTrigger") ?? false,
     enableSmartInlineTaskKeybinding: config.get<boolean>("enableSmartInlineTaskKeybinding") ?? true,
     enableChatAutocomplete: config.get<boolean>("enableChatAutocomplete") ?? true,
     provider: info.providerID,
@@ -173,7 +173,7 @@ export class AutocompleteServiceManager {
     )
 
     this.config = vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration("kilo-code.new.language")) {
+      if (event.affectsConfiguration("dustcode.language")) {
         this.updateStatusBar()
       }
     })
@@ -373,7 +373,7 @@ export class AutocompleteServiceManager {
   private async updateGlobalContext() {
     await vscode.commands.executeCommand(
       "setContext",
-      "kilocode.autocomplete.enableSmartInlineTaskKeybinding",
+      "dustcode.autocomplete.enableSmartInlineTaskKeybinding",
       this.settings?.enableSmartInlineTaskKeybinding || false,
     )
   }
@@ -456,7 +456,7 @@ export class AutocompleteServiceManager {
     if (response === disableCopilot) {
       await vscode.commands.executeCommand("github.copilot.completions.disable")
     } else if (response === disableInlineAssist) {
-      await vscode.commands.executeCommand("kilo-code.new.autocomplete.disable")
+      await vscode.commands.executeCommand("dustcode.autocomplete.disable")
     }
   }
 

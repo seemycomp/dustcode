@@ -3,6 +3,7 @@ import { OAUTH_DUMMY_KEY } from "../auth"
 import { createServer } from "http"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { escapeHtml } from "@/util/html" // kilocode_change - retained OAuth error page uses escaped diagnostics
+import { Branding } from "@opencode-ai/core/kilocode/branding" // kilocode_change
 
 // Public Grok-CLI OAuth client. xAI's auth server rejects loopback OAuth from
 // non-allowlisted clients, so we reuse the Grok-CLI client_id that xAI ships
@@ -291,7 +292,7 @@ export async function pollDeviceCodeToken(
 const HTML_SUCCESS = `<!doctype html>
 <html>
   <head>
-    <title>Kilocode - xAI Authorization Successful</title>
+    <title>${Branding.name("Kilocode")} - xAI Authorization Successful</title>
     <style>
       body {
         font-family:
@@ -322,7 +323,7 @@ const HTML_SUCCESS = `<!doctype html>
   <body>
     <div class="container">
       <h1>Authorization Successful</h1>
-      <p>You can close this window and return to Kilocode.</p>
+      <p>You can close this window and return to ${Branding.name("Kilocode")}.</p>
     </div>
     <script>
       setTimeout(() => window.close(), 2000)
@@ -333,7 +334,7 @@ const HTML_SUCCESS = `<!doctype html>
 const HTML_ERROR = (error: string) => `<!doctype html>
 <html>
   <head>
-    <title>Kilocode - xAI Authorization Failed</title>
+    <title>${Branding.name("Kilocode")} - xAI Authorization Failed</title>
     <style>
       body {
         font-family:

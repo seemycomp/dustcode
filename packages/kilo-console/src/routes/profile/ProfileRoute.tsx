@@ -200,7 +200,7 @@ export function ProfileRoute() {
               <div class="profile-connect-copy">
                 <p class="eyebrow">Kilo Account</p>
                 <h1>Connect your Kilo account</h1>
-                <p>Sign in to view your credits, organizations, and account details in Kilo Console.</p>
+                <p>Sign in to view your credits, organizations, and account details in Dustcode Console.</p>
               </div>
               <A
                 class="profile-primary-link"
@@ -216,8 +216,8 @@ export function ProfileRoute() {
 
           <Show when={!server.query() && !server.discoverable()}>
             <Card class="profile-banner" variant="warning">
-              <strong>Kilo server not found</strong>
-              <span>Start Kilo Console from a running Kilo server or pass a server URL with ?server=.</span>
+              <strong>Dustcode server not found</strong>
+              <span>Start Dustcode Console from the running Dustcode backend or pass a server URL with ?server=.</span>
             </Card>
           </Show>
 

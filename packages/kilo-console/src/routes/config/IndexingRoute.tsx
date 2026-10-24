@@ -26,7 +26,7 @@ type Field = { key: string; label: string; placeholder: string; secret?: boolean
 
 const providers = [
   { value: "", label: "Automatic" },
-  { value: "kilo", label: "Kilo" },
+  { value: "kilo", label: "Kilo Gateway" },
   { value: "openai", label: "OpenAI" },
   { value: "ollama", label: "Ollama (local)" },
   { value: "openai-compatible", label: "OpenAI-compatible" },
@@ -346,8 +346,8 @@ export function IndexingRoute() {
 
               <Show when={provider() === "kilo"}>
                 <div class="indexing-note">
-                  Kilo embeddings use the account currently signed in to this Kilo server. Model dimensions are supplied
-                  by the catalog.
+                  Kilo embeddings use the account currently signed in to this Dustcode server. Model dimensions are
+                  supplied by the catalog.
                 </div>
               </Show>
 
@@ -430,7 +430,7 @@ export function IndexingRoute() {
                   >
                     <input
                       value={view().lancedb?.directory ?? ""}
-                      placeholder="Default Kilo state directory"
+                      placeholder="Default Dustcode state directory"
                       disabled={Boolean(ctx.saving())}
                       onInput={(event) =>
                         update({ lancedb: { ...draft().lancedb, directory: event.currentTarget.value || undefined } })

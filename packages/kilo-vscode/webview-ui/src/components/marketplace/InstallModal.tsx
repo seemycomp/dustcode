@@ -60,12 +60,12 @@ export const InstallModal = (props: Props) => {
   } | null>(null)
 
   const destination = (target = scope().value) => {
-    const base = target === "project" ? ".kilo" : "~/.config/kilo"
+    const base = target === "project" ? ".dustcode" : "~/.local/share/dustcode/config"
     if (props.item.type === "mcp") return `${base}/kilo.json`
     if (props.item.type === "agent") return `${base}/agents/${props.item.id}.md`
     if (props.item.type === "plugin") return `${base}/`
-    if (target === "project") return `.kilo/skills/${props.item.id}/`
-    return `~/.kilo/skills/${props.item.id}/`
+    if (target === "project") return `.dustcode/skills/${props.item.id}/`
+    return `~/.local/share/dustcode/config/skills/${props.item.id}/`
   }
   const about = () => t(`marketplace.install.about.${props.item.type}`)
   const skills = () => (props.item.type === "mcp" ? (props.item.skills ?? []) : [])
@@ -301,7 +301,11 @@ export const InstallModal = (props: Props) => {
                 {(skill) => (
                   <div class="install-modal-destination">
                     <span>{skill.id}</span>
-                    <code>{`${scope().value === "global" ? "~/" : ""}.kilo/skills/${skill.id}/`}</code>
+                    <code>
+                      {scope().value === "global"
+                        ? `~/.local/share/dustcode/config/skills/${skill.id}/`
+                        : `.dustcode/skills/${skill.id}/`}
+                    </code>
                   </div>
                 )}
               </For>

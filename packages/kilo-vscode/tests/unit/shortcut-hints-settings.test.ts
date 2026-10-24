@@ -20,7 +20,7 @@ const original = {
 
 function stubConfig(state: Map<string, unknown>) {
   ;(vscode.workspace as unknown as Stub).getConfiguration = (section?: string) => {
-    if (section !== "kilo-code.new") {
+    if (section !== "dustcode") {
       return { get: <T>(_key: string, fallback?: T) => fallback }
     }
     return {
@@ -66,18 +66,18 @@ describe("shortcut hints settings", () => {
       for (const listener of listeners) listener({ affectsConfiguration: (name) => name === key })
     }
 
-    emit("kilo-code.new.agentManager.autoBranchNaming")
+    emit("dustcode.agentManager.autoBranchNaming")
     expect(parent).toEqual([])
     expect(child).toEqual([])
 
     state.set("showShortcutHints", false)
-    emit("kilo-code.new.showShortcutHints")
+    emit("dustcode.showShortcutHints")
     expect(parent).toEqual([{ type: "shortcutHintsSettingLoaded", visible: false }])
     expect(child).toEqual(parent)
 
     viewer.dispose()
     state.set("showShortcutHints", true)
-    emit("kilo-code.new.showShortcutHints")
+    emit("dustcode.showShortcutHints")
     expect(parent).toHaveLength(2)
     expect(child).toHaveLength(1)
 

@@ -43,6 +43,7 @@
 import { Duration, Effect, Fiber, Option } from "effect"
 import { applyEdits, modify } from "jsonc-parser"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Branding } from "@opencode-ai/core/kilocode/branding"
 import { Question } from "@/question"
 import type { MessageID, PartID, SessionID } from "@/session/schema"
 import { PartID as PartIDSchema } from "@/session/schema"
@@ -612,8 +613,7 @@ export namespace KiloSnapshotTrack {
                     {
                       label: ANSWER_DISABLE,
                       labelKey: "snapshot.slowRepo.answer.disable",
-                      description:
-                        "Turn off Kilo's snapshots for this project. You will lose undo/redo of Kilo file changes, but git still tracks everything.",
+                      description: `Turn off ${Branding.name()}'s snapshots for this project. You will lose undo/redo of ${Branding.name()} file changes, but git still tracks everything.`,
                       descriptionKey: "snapshot.slowRepo.answer.disable.description",
                     },
                   ],

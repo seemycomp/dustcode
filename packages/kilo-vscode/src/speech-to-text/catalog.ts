@@ -21,7 +21,7 @@ export async function fetchSpeechToTextModels(
   if (hasCustomSource(source)) return await fetchCustomModels(source, signal)
 
   const cfg = connection.getServerConfig()
-  if (!cfg) return fail("Not connected to the Kilo backend")
+  if (!cfg) return fail("Not connected to the Dustcode backend")
 
   const auth = Buffer.from(`kilo:${cfg.password}`).toString("base64")
   const url = new URL(PATH, cfg.baseUrl)

@@ -154,7 +154,7 @@ interface StateMessage {
   staleWorktreeIds?: string[]
   /** Why each unhealthy worktree is unhealthy; healthy worktrees are omitted. */
   worktreeHealth?: Record<string, WorktreeHealth>
-  /** Directories under `.kilo/worktrees/` that no worktree claims. Never removed automatically. */
+  /** Directories under `.dustcode/worktrees/` that no worktree claims. Never removed automatically. */
   orphanDirectories?: OrphanDirectory[]
   tabOrder?: Record<string, string[]>
   pinnedTabs?: Record<string, string[]>
@@ -691,7 +691,7 @@ interface RestoreWorktreeIn {
   worktreeId: string
 }
 
-/** Delete directories under `.kilo/worktrees/` that no worktree claims. */
+/** Delete directories under `.dustcode/worktrees/` that no worktree claims. */
 interface CleanOrphanDirectoriesIn {
   type: "agentManager.cleanOrphanDirectories"
   projectId?: string

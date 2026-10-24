@@ -101,7 +101,7 @@ export class QdrantVectorStore implements IVectorStore {
         modelId: "",
         dimension: vectorSize,
       } as EmbeddingProfile)
-    this.collectionName = `ws-${hash.substring(0, 16)}`
+    this.collectionName = `${process.env.DUSTCODE_HOME ? "dustcode-ws" : "ws"}-${hash.substring(0, 16)}`
   }
 
   /**

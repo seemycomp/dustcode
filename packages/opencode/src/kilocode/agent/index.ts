@@ -8,6 +8,7 @@ import type { Info as AgentInfo } from "../../agent/agent"
 import { Schema } from "effect"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
+import { Profile } from "@opencode-ai/core/kilocode/profile"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser"
 import type { RuntimeFlags } from "@/effect/runtime-flags"
@@ -275,7 +276,7 @@ function baseline(
 function planEditRules(worktree: string) {
   return {
     "*": "deny" as const,
-    [path.join(".kilo", "plans", "*.md")]: "allow" as const,
+    [path.join(Profile.dir(), "plans", "*.md")]: "allow" as const,
     [path.join("plans", "*.md")]: "allow" as const,
     [path.join(".plans", "*.md")]: "allow" as const,
     [path.join(".opencode", "plans", "*.md")]: "allow" as const,
@@ -705,7 +706,7 @@ export async function remove(input: {
       return []
     }),
   )
-  const dirs = input.scope ? input.dirs.filter((dir) => roots.has(dir)) : input.dirs
+  const dirs = input.scope || Profile.enabled ? input.dirs.filter((dir) => roots.has(dir)) : input.dirs
 
   // 1. Delete .md files from config directories
   const patterns = ["{agent,agents}/**/" + input.name + ".md", "{mode,modes}/" + input.name + ".md"]
@@ -722,6 +723,11 @@ export async function remove(input: {
   }
 
   if (await removeConfigAgent(input.name, sources)) found = true
+
+  if (Profile.enabled) {
+    if (!found) throw new RemoveError({ name: input.name, message: "no agent file found on disk" })
+    return
+  }
 
   // 2. Remove from legacy .kilocodemodes YAML files (read by ModesMigrator)
   const { ModesMigrator } = await import("@/kilocode/modes-migrator")

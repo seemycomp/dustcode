@@ -1,4 +1,5 @@
 // kilocode_change - new file
+import { Branding } from "@opencode-ai/core/kilocode/branding"
 // SessionPrompt.command intercepts `/goal` before it looks a command up, so a command
 // registered under that name can never run under that name. Rather than dropping it,
 // expose it as `name:command` -- the same source-suffix convention skills (`:skill`) and
@@ -47,7 +48,7 @@ export function rename(commands: Record<string, Entry> | undefined, name: string
 export function notice(name: string, key?: string) {
   return [
     `Ignoring the "${name}" command registered by your config or a plugin:`,
-    `/${name} is reserved for Kilo's own command.`,
+    `/${name} is reserved for ${Branding.name()}'s own command.`,
     key ? `Run yours as /${key} instead.` : "",
     "Rename it, or turn it off in the plugin that registers it, to stop this warning.",
   ]

@@ -75,7 +75,7 @@ describe("readDocument", () => {
 describe("plansDir", () => {
   it("honors XDG_DATA_HOME", () => {
     withDataHome(() => {
-      expect(plansDir()).toEqual(path.join(process.env.XDG_DATA_HOME!, "kilo", "plans"))
+      expect(plansDir()).toEqual(path.join(process.env.XDG_DATA_HOME!, "dustcode", "data", "plans"))
     })
   })
 
@@ -83,7 +83,7 @@ describe("plansDir", () => {
     const previous = process.env.XDG_DATA_HOME
     delete process.env.XDG_DATA_HOME
     try {
-      expect(plansDir()).toEqual(path.join(os.homedir(), ".local", "share", "kilo", "plans"))
+      expect(plansDir()).toEqual(path.join(os.homedir(), ".local", "share", "dustcode", "data", "plans"))
     } finally {
       if (previous !== undefined) process.env.XDG_DATA_HOME = previous
     }

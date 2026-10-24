@@ -31,19 +31,28 @@ import { KilocodeSystemPrompt } from "../kilocode/system-prompt"
 import { isLing } from "../kilocode/model-match"
 import { Config } from "@/config/config"
 import * as KiloReference from "@/kilocode/reference"
+import { Branding } from "@opencode-ai/core/kilocode/branding"
 // kilocode_change end
 
 // kilocode_change start
 export function instructions() {
-  return PROMPT_CODEX.trim()
+  return Branding.prompt(PROMPT_CODEX.trim())
 }
 
 export function soul() {
-  return SOUL.trim()
+  return Branding.prompt(SOUL.trim())
 }
 // kilocode_change end
 
+// kilocode_change start - brand only built-in prompts, not custom agent or user instructions
 export function provider(model: Provider.Model) {
+  return select(model).map(Branding.prompt)
+}
+// kilocode_change end
+
+// kilocode_change start
+function select(model: Provider.Model) {
+  // kilocode_change end
   // kilocode_change start
   function prompt() {
     switch (model.prompt) {

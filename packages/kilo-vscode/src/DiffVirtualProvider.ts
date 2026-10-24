@@ -26,7 +26,7 @@ export class DiffVirtualProvider implements vscode.Disposable {
   private fontConfigDisposable: vscode.Disposable | undefined
 
   constructor(private readonly extensionUri: vscode.Uri) {
-    this.outputChannel = vscode.window.createOutputChannel("Kilo Diff Virtual")
+    this.outputChannel = vscode.window.createOutputChannel("Dustcode Diff Virtual")
   }
 
   private log(...args: unknown[]) {
@@ -48,16 +48,13 @@ export class DiffVirtualProvider implements vscode.Disposable {
       return
     }
 
-    const panel = vscode.window.createWebviewPanel("kilo-code.new.DiffVirtualPanel", title, vscode.ViewColumn.One, {
+    const panel = vscode.window.createWebviewPanel("dustcode.DiffVirtualPanel", title, vscode.ViewColumn.One, {
       enableScripts: true,
       retainContextWhenHidden: true,
       localResourceRoots: [this.extensionUri],
     })
 
-    panel.iconPath = {
-      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-light.svg"),
-      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-dark.svg"),
-    }
+    panel.iconPath = vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "dustcode.png")
 
     panel.webview.html = this.getHtml(panel.webview)
     panel.webview.onDidReceiveMessage((msg) => this.onMessage(msg))
@@ -81,7 +78,7 @@ export class DiffVirtualProvider implements vscode.Disposable {
       this.post({
         type: "ready",
         vscodeLanguage: vscode.env.language,
-        languageOverride: vscode.workspace.getConfiguration("kilo-code.new").get<string>("language"),
+        languageOverride: vscode.workspace.getConfiguration("dustcode").get<string>("language"),
         fontSize: getWebviewFontSize(),
         workspaceDirectory: getWorkspaceRoot(),
       })

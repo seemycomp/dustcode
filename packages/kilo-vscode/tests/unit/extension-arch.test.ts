@@ -71,7 +71,7 @@ describe("Extension — package.json command sync", () => {
     // Commands generated via template literals can't be extracted by regex,
     // so verify the dynamic registration pattern exists in source instead.
     const dynamic: Record<string, string> = {
-      "kilo-code.new.agentManager.jumpTo": "registerCommand(`kilo-code.new.agentManager.jumpTo${",
+      "dustcode.agentManager.jumpTo": "registerCommand(`dustcode.agentManager.jumpTo${",
     }
 
     const missing: string[] = []
@@ -94,74 +94,88 @@ describe("Extension — package.json command sync", () => {
   })
 
   /**
-   * All declared commands must use the kilo-code.new. prefix.
-   * The legacy kilo-code.* namespace (without .new.) belongs to the old
-   * extension and must not be reintroduced.
+   * All declared commands must use the dustcode. prefix.
+   * The kilo-code.* namespaces belong to the original extension.
    */
-  it("all declared commands use the kilo-code.new. prefix", () => {
-    const bad = declared.filter((cmd) => !cmd.startsWith("kilo-code.new."))
+  it("all declared commands use the dustcode. prefix", () => {
+    const bad = declared.filter((cmd) => !cmd.startsWith("dustcode."))
     expect(
       bad,
-      `Commands without "kilo-code.new." prefix — use the namespaced form:\n` + bad.map((b) => `  - ${b}`).join("\n"),
+      `Commands without "dustcode." prefix: use the namespaced form:\n` + bad.map((b) => `  - ${b}`).join("\n"),
     ).toEqual([])
+  })
+
+  it("does not mutate terminal shell interception settings on activation", () => {
+    const extension = fs.readFileSync(EXTENSION_FILE, "utf-8")
+    expect(extension).not.toContain("commandsToSkipShell")
+    expect(extension).not.toContain("ensureCommandsSkipShell")
+  })
+
+  it("previews only fork marketplace installation destinations", () => {
+    const modal = fs.readFileSync(path.join(ROOT, "webview-ui/src/components/marketplace/InstallModal.tsx"), "utf-8")
+    expect(modal).toContain('".dustcode" : "~/.local/share/dustcode/config"')
+    expect(modal).toContain(".dustcode/skills/")
+    expect(modal).toContain("~/.local/share/dustcode/config/skills/")
+    expect(modal).not.toContain(".kilo/skills/")
+    expect(modal).not.toContain("~/.config/kilo")
   })
 
   it("scopes Agent Manager search to the panel and leaves the integrated terminal alone", () => {
     const binding = pkg.contributes?.keybindings?.find(
-      (item: { command: string }) => item.command === "kilo-code.new.agentManager.search",
+      (item: { command: string }) => item.command === "dustcode.agentManager.search",
     )
     expect(binding).toMatchObject({
       key: "ctrl+f",
       mac: "cmd+f",
-      when: "activeWebviewPanelId == 'kilo-code.new.AgentManagerPanel' && !terminalFocus",
+      when: "activeWebviewPanelId == 'dustcode.AgentManagerPanel' && !terminalFocus",
     })
   })
 
   it("keeps Agent Manager session and terminal shortcuts focus-aware", () => {
     const terminal = pkg.contributes?.keybindings?.find(
-      (item: { command: string }) => item.command === "kilo-code.new.agentManager.showTerminal",
+      (item: { command: string }) => item.command === "dustcode.agentManager.showTerminal",
     )
     const create = pkg.contributes?.keybindings?.find(
-      (item: { command: string }) => item.command === "kilo-code.new.agentManager.newTerminalTab",
+      (item: { command: string }) => item.command === "dustcode.agentManager.newTerminalTab",
     )
     const sessionCreate = pkg.contributes?.keybindings?.find(
-      (item: { command: string }) => item.command === "kilo-code.new.agentManager.newTab",
+      (item: { command: string }) => item.command === "dustcode.agentManager.newTab",
     )
     expect(terminal).toMatchObject({
       key: "ctrl+/",
       mac: "cmd+/",
-      when: "activeWebviewPanelId == 'kilo-code.new.AgentManagerPanel' && !kilo-code.new.sidebarFocused",
+      when: "activeWebviewPanelId == 'dustcode.AgentManagerPanel' && !dustcode.sidebarFocused",
     })
     expect(create).toMatchObject({
       key: "ctrl+shift+t",
       mac: "cmd+shift+t",
-      when: "activeWebviewPanelId == 'kilo-code.new.AgentManagerPanel' && !kilo-code.new.agentManagerSideTerminalFocused",
+      when: "activeWebviewPanelId == 'dustcode.AgentManagerPanel' && !dustcode.agentManagerSideTerminalFocused",
     })
     expect(sessionCreate).toMatchObject({
       key: "ctrl+t",
       mac: "cmd+t",
-      when: "activeWebviewPanelId == 'kilo-code.new.AgentManagerPanel' && !kilo-code.new.agentManagerSideTerminalFocused",
+      when: "activeWebviewPanelId == 'dustcode.AgentManagerPanel' && !dustcode.agentManagerSideTerminalFocused",
     })
     const terminalCreate = pkg.contributes?.keybindings?.find(
       (item: { command: string; key?: string; mac?: string; when?: string }) =>
-        item.command === "kilo-code.new.agentManager.newSideTerminal" && item.key === "ctrl+t",
+        item.command === "dustcode.agentManager.newSideTerminal" && item.key === "ctrl+t",
     )
     expect(terminalCreate).toMatchObject({
       key: "ctrl+t",
       mac: "cmd+t",
-      when: "activeWebviewPanelId == 'kilo-code.new.AgentManagerPanel' && kilo-code.new.agentManagerSideTerminalFocused",
+      when: "activeWebviewPanelId == 'dustcode.AgentManagerPanel' && dustcode.agentManagerSideTerminalFocused",
     })
     expect(
       pkg.contributes?.keybindings?.some(
         (item: { command: string }) =>
-          item.command === "kilo-code.new.agentManager.newTerminal" ||
-          item.command === "kilo-code.new.agentManager.newMainTerminal",
+          item.command === "dustcode.agentManager.newTerminal" ||
+          item.command === "dustcode.agentManager.newMainTerminal",
       ),
     ).toBe(false)
   })
 
   it("declares the Agent Manager terminal destination setting", () => {
-    const setting = pkg.contributes?.configuration?.properties?.["kilo-code.new.agentManager.terminalButtonDestination"]
+    const setting = pkg.contributes?.configuration?.properties?.["dustcode.agentManager.terminalButtonDestination"]
     expect(setting).toMatchObject({
       type: "string",
       scope: "application",
@@ -173,28 +187,28 @@ describe("Extension — package.json command sync", () => {
 
   it("scopes the open PR shortcut to Agent Manager", () => {
     const binding = pkg.contributes?.keybindings?.find(
-      (item: { command: string }) => item.command === "kilo-code.new.agentManager.openPR",
+      (item: { command: string }) => item.command === "dustcode.agentManager.openPR",
     )
     expect(binding).toMatchObject({
       key: "ctrl+shift+r",
       mac: "cmd+shift+r",
-      when: "activeWebviewPanelId == 'kilo-code.new.AgentManagerPanel'",
+      when: "activeWebviewPanelId == 'dustcode.AgentManagerPanel'",
     })
   })
 
   it("scopes agent mode shortcuts to focused Kilo webviews", () => {
     const bindings = pkg.contributes?.keybindings?.filter(
       (item: { command: string }) =>
-        item.command === "kilo-code.new.cycleAgentMode" || item.command === "kilo-code.new.cyclePreviousAgentMode",
+        item.command === "dustcode.cycleAgentMode" || item.command === "dustcode.cyclePreviousAgentMode",
     )
     const when =
-      "kilo-code.new.sidebarFocused || activeWebviewPanelId == 'kilo-code.new.AgentManagerPanel' || activeWebviewPanelId == 'kilo-code.new.TabPanel'"
+      "dustcode.sidebarFocused || activeWebviewPanelId == 'dustcode.AgentManagerPanel' || activeWebviewPanelId == 'dustcode.TabPanel'"
 
     expect(bindings).toHaveLength(2)
     expect(bindings).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ command: "kilo-code.new.cycleAgentMode", when }),
-        expect.objectContaining({ command: "kilo-code.new.cyclePreviousAgentMode", when }),
+        expect.objectContaining({ command: "dustcode.cycleAgentMode", when }),
+        expect.objectContaining({ command: "dustcode.cyclePreviousAgentMode", when }),
       ]),
     )
   })
@@ -203,18 +217,18 @@ describe("Extension — package.json command sync", () => {
     const commands = pkg.contributes?.commands ?? []
     expect(commands).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ command: "kilo-code.new.closeTask", title: "Close Task", category: "Kilo Code" }),
+        expect.objectContaining({ command: "dustcode.closeTask", title: "Close Task", category: "Dustcode" }),
         expect.objectContaining({
-          command: "kilo-code.new.closeAllTasks",
+          command: "dustcode.closeAllTasks",
           title: "Close All Tasks",
-          category: "Kilo Code",
+          category: "Dustcode",
         }),
       ]),
     )
 
     const source = fs.readFileSync(EXTENSION_FILE, "utf-8")
-    const closeTask = sliceBlock(source, source.indexOf('vscode.commands.registerCommand("kilo-code.new.closeTask"'))
-    const closeAll = sliceBlock(source, source.indexOf('vscode.commands.registerCommand("kilo-code.new.closeAllTasks"'))
+    const closeTask = sliceBlock(source, source.indexOf('vscode.commands.registerCommand("dustcode.closeTask"'))
+    const closeAll = sliceBlock(source, source.indexOf('vscode.commands.registerCommand("dustcode.closeAllTasks"'))
     expect(closeTask).toContain('taskTarget().postMessage({ type: "action", action: "closeTask" })')
     expect(closeAll).toContain('taskTarget().postMessage({ type: "action", action: "closeAllTasks" })')
 
@@ -308,7 +322,7 @@ describe("Extension — KiloProvider handler wiring", () => {
 
   it("new and restored tabs use shared setup and retain disposal", () => {
     expect(ext).toContain("openKiloInNewTab(context, tabPanels, attach)")
-    for (const name of ["function openKiloInNewTab", '"kilo-code.new.TabPanel"']) {
+    for (const name of ["function openKiloInNewTab", '"dustcode.TabPanel"']) {
       const start = ext.indexOf(name)
       expect(start, `${name} must exist`).toBeGreaterThan(-1)
       const body = sliceBlock(ext, start)

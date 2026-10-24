@@ -420,7 +420,7 @@ function withGlobalSpeechToTextMessage(message: unknown): unknown {
 }
 
 export class KiloProvider implements vscode.WebviewViewProvider, TelemetryPropertiesProvider {
-  public static readonly viewType = "kilo-code.SidebarProvider"
+  public static readonly viewType = "dustcode.SidebarProvider"
   private readonly instanceId = crypto.randomUUID()
 
   private webview: vscode.Webview | null = null
@@ -432,7 +432,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private loginAttempt = 0
   private isWebviewReady = false
   private readonly extensionVersion =
-    vscode.extensions.getExtension("kilocode.kilo-code")?.packageJSON?.version ?? "unknown"
+    vscode.extensions.getExtension("dustcode.dustcode")?.packageJSON?.version ?? "unknown"
   private cachedProvidersMessage: unknown = null
   /** Directory the cached provider payload was loaded for, so recovery is keyed to the active project. */
   private cachedProvidersDirectory: string | null = null
@@ -682,7 +682,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     }
     this.checkpoints.set(sid, pending)
     void pending.then(cleanup, (error) => {
-      console.error("[Kilo New] checkpoint mutation failed:", error)
+      console.error("[Dustcode] checkpoint mutation failed:", error)
       cleanup()
     })
   }
@@ -799,10 +799,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   private openMarketplacePanel(directory: unknown): void {
     if (typeof directory === "string" && directory) {
-      vscode.commands.executeCommand("kilo-code.new.marketplaceButtonClicked", directory)
+      vscode.commands.executeCommand("dustcode.marketplaceButtonClicked", directory)
       return
     }
-    vscode.commands.executeCommand("kilo-code.new.marketplaceButtonClicked", this.projectDirectory)
+    vscode.commands.executeCommand("dustcode.marketplaceButtonClicked", this.projectDirectory)
   }
 
   // Strip metadata unused by the webview to keep session switches fast.
@@ -861,7 +861,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   private async syncWebviewState(reason: string): Promise<void> {
     const serverInfo = this.connectionService.getServerInfo()
-    console.log("[Kilo New] KiloProvider: 🔄 syncWebviewState()", {
+    console.log("[Dustcode] KiloProvider: 🔄 syncWebviewState()", {
       reason,
       isWebviewReady: this.isWebviewReady,
       connectionState: this.connectionState,
@@ -870,7 +870,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     })
 
     if (!this.isWebviewReady) {
-      console.log("[Kilo New] KiloProvider: ⏭️ syncWebviewState skipped (webview not ready)")
+      console.log("[Dustcode] KiloProvider: ⏭️ syncWebviewState skipped (webview not ready)")
       return
     }
 
@@ -880,7 +880,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
     // Re-send ready so the webview can recover after refresh.
     if (serverInfo) {
-      const langConfig = vscode.workspace.getConfiguration("kilo-code.new")
+      const langConfig = vscode.workspace.getConfiguration("dustcode")
       this.postMessage({
         type: "ready",
         serverInfo,
@@ -895,10 +895,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     // Profile returns 401 when user isn't logged into Kilo Gateway — that's expected.
     // Use fire-and-forget (no throwOnError) to match old getProfile() which returned null on error.
     if (this.connectionState === "connected" && this.client) {
-      console.log("[Kilo New] KiloProvider: 👤 syncWebviewState fetching profile...")
+      console.log("[Dustcode] KiloProvider: 👤 syncWebviewState fetching profile...")
       const profileResult = await retry(() => this.client!.kilo.profile())
       const profileData = profileResult.data ?? null
-      console.log("[Kilo New] KiloProvider: 👤 syncWebviewState profile:", profileData ? "received" : "null")
+      console.log("[Dustcode] KiloProvider: 👤 syncWebviewState profile:", profileData ? "received" : "null")
       this.postMessage({
         type: "profileData",
         data: profileData,
@@ -949,7 +949,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private setSidebarVisible(visible: boolean): void {
     this.setStatsVisible(visible)
     this.setStreamVisibility(visible)
-    vscode.commands.executeCommand("setContext", "kilo-code.new.sidebarVisible", visible)
+    vscode.commands.executeCommand("setContext", "dustcode.sidebarVisible", visible)
     if (!visible) this.opts.onHidden?.()
     if (!visible && this.opts.focusContext) {
       void vscode.commands.executeCommand("setContext", this.opts.focusContext, false)
@@ -1096,7 +1096,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     return retry(() => client.session.get({ sessionID: sessionId, directory }, { throwOnError: true }))
       .then((result) => result.data)
       .catch((error: unknown) => {
-        console.warn("[Kilo New] KiloProvider: Failed to resolve managed session:", error)
+        console.warn("[Dustcode] KiloProvider: Failed to resolve managed session:", error)
         return undefined
       })
   }
@@ -1305,7 +1305,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           board: (msg) => this.handleBoardMessage(msg),
           cancelBackgroundJob: (jobID, sessionID, requestID) => this.cancelBackgroundJob(jobID, sessionID, requestID),
           promoteBackgroundJob: (jobID, sessionID) => this.promoteBackgroundJob(jobID, sessionID),
-          caffeination: () => void vscode.commands.executeCommand("kilo-code.new.toggleCaffeination"),
+          caffeination: () => void vscode.commands.executeCommand("dustcode.toggleCaffeination"),
         })
       ) {
         return
@@ -1326,10 +1326,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (
         await handleSidebarWorktreeMessage(message, {
           post: (msg) => this.postMessage(msg),
-          openAgentManager: () => vscode.commands.executeCommand("kilo-code.new.agentManagerOpen"),
-          openAdvancedWorktree: () => vscode.commands.executeCommand("kilo-code.new.agentManager.advancedWorktree"),
+          openAgentManager: () => vscode.commands.executeCommand("dustcode.agentManagerOpen"),
+          openAdvancedWorktree: () => vscode.commands.executeCommand("dustcode.agentManager.advancedWorktree"),
           openChanges: (sessionId?: string, turnId?: string) => this.openChanges(sessionId, turnId),
-          openProfile: () => vscode.commands.executeCommand("kilo-code.new.profileButtonClicked"),
+          openProfile: () => vscode.commands.executeCommand("dustcode.profileButtonClicked"),
           currentSessionId: this.currentSession?.id,
           createWorktree: async (baseBranch, branchName) => {
             await this.createWorktreeHandler?.(baseBranch, branchName)
@@ -1353,7 +1353,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           this.sendWorkspaceScope()
           break
         case "webviewReady":
-          console.log("[Kilo New] KiloProvider: ✅ webviewReady received")
+          console.log("[Dustcode] KiloProvider: ✅ webviewReady received")
           this.isWebviewReady = true
           for (const event of this.connectionService.getPendingCompletions()) {
             this.postMessage(mapSSEEventToWebviewMessage(event, event.properties.sessionID))
@@ -1436,7 +1436,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           break
         case "loadSessions":
           this.handleLoadSessions(message.more === true).catch((e) =>
-            console.error("[Kilo New] handleLoadSessions failed:", e),
+            console.error("[Dustcode] handleLoadSessions failed:", e),
           )
           break
         case "requestSessionModelUsage":
@@ -1460,7 +1460,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           }
           break
         case "openSettingsPanel":
-          vscode.commands.executeCommand("kilo-code.new.settingsButtonClicked", message.tab, message.projectId)
+          vscode.commands.executeCommand("dustcode.settingsButtonClicked", message.tab, message.projectId)
           break
         case "openVSCodeSettings":
           vscode.commands.executeCommand("workbench.action.openSettings", message.query)
@@ -1473,21 +1473,21 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           break
         case "forkSession":
           handleForkSession(this.forkCtx, message.sessionId, message.messageId).catch((e) =>
-            console.error("[Kilo New] handleForkSession failed:", e),
+            console.error("[Dustcode] handleForkSession failed:", e),
           )
           break
         case "retryConnection":
-          console.log("[Kilo New] KiloProvider: 🔄 Retrying connection...")
+          console.log("[Dustcode] KiloProvider: 🔄 Retrying connection...")
           this.initializeConnection().catch((e) =>
-            console.error("[Kilo New] KiloProvider: ❌ Retry connection failed:", e),
+            console.error("[Dustcode] KiloProvider: ❌ Retry connection failed:", e),
           )
           break
         case "reload":
-          this.handleReload().catch((e) => console.error("[Kilo New] KiloProvider: Reload failed:", e))
+          this.handleReload().catch((e) => console.error("[Dustcode] KiloProvider: Reload failed:", e))
           break
         case "openSubAgentViewer":
           vscode.commands.executeCommand(
-            "kilo-code.new.openSubAgentViewer",
+            "dustcode.openSubAgentViewer",
             message.sessionID,
             message.title,
             this.getWorkspaceDirectory(message.parentSessionID),
@@ -1496,7 +1496,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         case "saveImage":
           return saveImage(this.getWorkspaceDirectory(this.currentSession?.id), message)
         case "requestProviders":
-          this.fetchAndSendProviders().catch((e) => console.error("[Kilo New] fetchAndSendProviders failed:", e))
+          this.fetchAndSendProviders().catch((e) => console.error("[Dustcode] fetchAndSendProviders failed:", e))
           break
         case "connectProvider":
         case "authorizeProviderOAuth":
@@ -1519,28 +1519,28 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           break
         case "fetchCustomProviderModels":
           this.handleFetchCustomProviderModels(message).catch((e) =>
-            console.error("[Kilo New] fetchCustomProviderModels failed:", e),
+            console.error("[Dustcode] fetchCustomProviderModels failed:", e),
           )
           break
         case "compact":
           await this.handleCompact(message.sessionID, message.providerID, message.modelID)
           break
         case "requestAgents":
-          this.fetchAndSendAgents().catch((e) => console.error("[Kilo New] fetchAndSendAgents failed:", e))
+          this.fetchAndSendAgents().catch((e) => console.error("[Dustcode] fetchAndSendAgents failed:", e))
           break
         case "requestSkills":
-          this.fetchAndSendSkills().catch((e) => console.error("[Kilo New] fetchAndSendSkills failed:", e))
+          this.fetchAndSendSkills().catch((e) => console.error("[Dustcode] fetchAndSendSkills failed:", e))
           break
         case "requestCommands":
-          this.fetchAndSendCommands().catch((e) => console.error("[Kilo New] fetchAndSendCommands failed:", e))
+          this.fetchAndSendCommands().catch((e) => console.error("[Dustcode] fetchAndSendCommands failed:", e))
           break
         case "removeSkill":
           this.removeSkillViaCli(message.location).catch((e: unknown) =>
-            console.error("[Kilo New] removeSkill failed:", e),
+            console.error("[Dustcode] removeSkill failed:", e),
           )
           break
         case "removeAgent":
-          this.handleRemoveAgent(message.name).catch((e) => console.error("[Kilo New] handleRemoveAgent failed:", e))
+          this.handleRemoveAgent(message.name).catch((e) => console.error("[Dustcode] handleRemoveAgent failed:", e))
           break
         case "questionReply":
           this.noteFollowup(message.answers, message.sessionID)
@@ -1568,14 +1568,14 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           await this.handleToggleSandbox(message)
           break
         case "requestConfig":
-          this.fetchAndSendConfig().catch((e) => console.error("[Kilo New] fetchAndSendConfig failed:", e))
+          this.fetchAndSendConfig().catch((e) => console.error("[Dustcode] fetchAndSendConfig failed:", e))
           break
         case "requestGlobalConfig":
-          this.fetchAndSendGlobalConfig().catch((e) => console.error("[Kilo New] fetchAndSendGlobalConfig failed:", e))
+          this.fetchAndSendGlobalConfig().catch((e) => console.error("[Dustcode] fetchAndSendGlobalConfig failed:", e))
           break
         case "requestIndexingStatus":
           this.fetchAndSendIndexingStatus().catch((e) =>
-            console.error("[Kilo New] fetchAndSendIndexingStatus failed:", e),
+            console.error("[Dustcode] fetchAndSendIndexingStatus failed:", e),
           )
           break
         case "requestIndexingSettings": {
@@ -1588,11 +1588,11 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           break
         case "requestKiloEmbeddingModels":
           this.fetchAndSendKiloEmbeddingModels().catch((e) =>
-            console.error("[Kilo New] fetchAndSendKiloEmbeddingModels failed:", e),
+            console.error("[Dustcode] fetchAndSendKiloEmbeddingModels failed:", e),
           )
           break
         case "requestImageModels":
-          this.fetchAndSendImageModels().catch((e) => console.error("[Kilo New] fetchAndSendImageModels failed:", e))
+          this.fetchAndSendImageModels().catch((e) => console.error("[Dustcode] fetchAndSendImageModels failed:", e))
           break
         case "updateConfig":
           await this.handleUpdateConfig(
@@ -1606,14 +1606,14 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           break
         case "openSettingsTab":
           if (message.tab === "indexing") {
-            await vscode.commands.executeCommand("kilo-code.new.openIndexingSettings")
+            await vscode.commands.executeCommand("dustcode.openIndexingSettings")
           } else if (message.tab === "agentBehaviour" && message.subtab === "mcpServers") {
-            await vscode.commands.executeCommand("kilo-code.new.openMcpSettings", message.focus)
+            await vscode.commands.executeCommand("dustcode.openMcpSettings", message.focus)
           }
           break
         case "setLanguage":
           await vscode.workspace
-            .getConfiguration("kilo-code.new")
+            .getConfiguration("dustcode")
             .update("language", message.locale || undefined, vscode.ConfigurationTarget.Global)
           this.connectionService.notifyLanguageChanged(message.locale as string)
           break
@@ -1647,7 +1647,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
             .then((s) => {
               if (s) this.sendRemoteStatus()
             })
-            .catch((err) => console.error("[Kilo New] remote message failed:", err))
+            .catch((err) => console.error("[Dustcode] remote message failed:", err))
           break
         case "deleteSession":
           await this.handleDeleteSession(message.sessionID)
@@ -1666,7 +1666,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           break
         case "requestNotifications":
           this.fetchAndSendNotifications().catch((e) =>
-            console.error("[Kilo New] fetchAndSendNotifications failed:", e),
+            console.error("[Dustcode] fetchAndSendNotifications failed:", e),
           )
           break
         case "requestCloudSessions":
@@ -1759,7 +1759,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
             .catch((err: unknown) => {
               const raw = getErrorMessage(err) || "Failed to enhance prompt"
               const msg = normalizeEnhancePromptErrorMessage(raw)
-              console.error("[Kilo New] KiloProvider: Failed to enhance prompt:", err)
+              console.error("[Dustcode] KiloProvider: Failed to enhance prompt:", err)
               vscode.window.showErrorMessage(`Enhance prompt failed: ${msg}`)
               this.postMessage({
                 type: "enhancePromptError",
@@ -1859,7 +1859,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (message.scope === "inspector") this.inspectorSessionIds.add(message.sessionID)
       const parent = typeof message.parentSessionID === "string" ? message.parentSessionID : undefined
       this.handleSyncSession(message.sessionID, parent).catch((e) =>
-        console.error("[Kilo New] handleSyncSession failed:", e),
+        console.error("[Dustcode] handleSyncSession failed:", e),
       )
       return true
     }
@@ -1905,7 +1905,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.diffViewerProvider.openFromCommand(args)
       return
     }
-    await vscode.commands.executeCommand("kilo-code.new.showChanges", args)
+    await vscode.commands.executeCommand("dustcode.showChanges", args)
   }
 
   private handleEditorOpenMessage(message: Parameters<typeof handleEditorAction>[0]): boolean {
@@ -2018,7 +2018,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private async doInitializeConnection(): Promise<void> {
-    console.log("[Kilo New] KiloProvider: 🔧 Starting initializeConnection...")
+    console.log("[Dustcode] KiloProvider: 🔧 Starting initializeConnection...")
 
     this.connectionState = "connecting"
     this.connectionGeneration++
@@ -2133,7 +2133,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
             await this.flushPendingSessionRefresh("sse-connected")
             this.recoverPendingPrompts()
           } catch (error) {
-            console.error("[Kilo New] KiloProvider: ❌ Failed during connected state handling:", error)
+            console.error("[Dustcode] KiloProvider: ❌ Failed during connected state handling:", error)
             this.postMessage({
               type: "error",
               message: getErrorMessage(error) || "Failed to sync after connecting",
@@ -2182,7 +2182,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.connectionState = this.connectionService.getConnectionState()
 
       if (serverInfo) {
-        const langConfig = vscode.workspace.getConfiguration("kilo-code.new")
+        const langConfig = vscode.workspace.getConfiguration("dustcode")
         this.postMessage({
           type: "ready",
           serverInfo,
@@ -2226,9 +2226,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.postMessage(buildShortcutContextMessage(this.extensionContext))
       this.postMessage({ type: "extensionDataReady" })
 
-      console.log("[Kilo New] KiloProvider: ✅ initializeConnection completed successfully")
+      console.log("[Dustcode] KiloProvider: ✅ initializeConnection completed successfully")
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: ❌ Failed to initialize connection:", error)
+      console.error("[Dustcode] KiloProvider: ❌ Failed to initialize connection:", error)
       this.connectionState = "error"
       this.postMessage({
         type: "connectionState",
@@ -2279,7 +2279,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         session: this.sessionToWebview(session),
       })
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to create session:", error)
+      console.error("[Dustcode] KiloProvider: Failed to create session:", error)
       this.postMessage({
         type: "error",
         message: getErrorMessage(error) || "Failed to create session",
@@ -2316,7 +2316,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         return r.data
       })
       .catch((e: unknown) => {
-        console.warn("[Kilo New] KiloProvider: getSession failed (non-critical):", e)
+        console.warn("[Dustcode] KiloProvider: getSession failed (non-critical):", e)
         return undefined
       })
     this.postMessage({ type: "workspaceDirectoryChanged", directory: this.getWorkspaceDirectory(sessionID) })
@@ -2346,7 +2346,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           if (this.accept(sid, status, dir, epoch)) this.publish(sid, status)
         }
       })
-      .catch((error: unknown) => console.error("[Kilo New] KiloProvider: Failed to fetch session statuses:", error))
+      .catch((error: unknown) => console.error("[Dustcode] KiloProvider: Failed to fetch session statuses:", error))
   }
 
   private fetchAndSendSessionModelUsage(sessionID: string, requestID: string): Promise<void> {
@@ -2359,7 +2359,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         this.postMessage({ type: "sessionModelUsageLoaded", sessionID, requestID, data: response.data })
       })
       .catch((error: unknown) => {
-        console.warn("[Kilo New] KiloProvider: Failed to load session model usage:", error)
+        console.warn("[Dustcode] KiloProvider: Failed to load session model usage:", error)
         this.postMessage({ type: "sessionModelUsageLoaded", sessionID, requestID })
       })
   }
@@ -2457,7 +2457,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.recoverPendingPrompts()
     } catch (error) {
       if (abort?.signal.aborted) return
-      console.error("[Kilo New] KiloProvider: Failed to load messages:", error)
+      console.error("[Dustcode] KiloProvider: Failed to load messages:", error)
       this.postMessage({ type: "error", message: getErrorMessage(error) || "Failed to load messages", sessionID })
     }
   }
@@ -2524,7 +2524,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.recoverPendingPrompts()
     } catch (err) {
       this.syncedChildSessions.delete(sessionID)
-      console.error("[Kilo New] KiloProvider: Failed to sync child session:", err)
+      console.error("[Dustcode] KiloProvider: Failed to sync child session:", err)
     }
   }
 
@@ -2580,7 +2580,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    */
   private async flushPendingSessionRefresh(reason: string): Promise<void> {
     if (!this.pendingSessionRefresh) return
-    console.log("[Kilo New] KiloProvider: 🔄 Flushing deferred sessions refresh", { reason })
+    console.log("[Dustcode] KiloProvider: 🔄 Flushing deferred sessions refresh", { reason })
     const revision = ++this.sessionRefreshRevision
     const scope = this.opts.projectQualifier?.()?.projectId
     if (scope !== undefined) this.projectID = undefined
@@ -2589,7 +2589,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       const resolved = await flushPendingSessionRefreshUtil(ctx)
       if (resolved && scope === this.opts.projectQualifier?.()?.projectId) this.projectID = resolved
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to flush session refresh:", error)
+      console.error("[Dustcode] KiloProvider: Failed to flush session refresh:", error)
     }
     this.pendingSessionRefresh = ctx.pendingSessionRefresh
   }
@@ -2610,7 +2610,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         if (resolved && scope === this.opts.projectQualifier?.()?.projectId) this.projectID = resolved
       }
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to load sessions:", error)
+      console.error("[Dustcode] KiloProvider: Failed to load sessions:", error)
       if (!more) {
         this.postMessage({
           type: "error",
@@ -2667,7 +2667,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         truncated: output.truncated,
       })
     } catch (error) {
-      console.error("[Kilo New] Failed to capture terminal context:", error)
+      console.error("[Dustcode] Failed to capture terminal context:", error)
       this.postMessage({
         type: "terminalContextError",
         requestId,
@@ -2748,7 +2748,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       }
       this.postMessage({ type: "sessionDeleted", sessionID })
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to delete session:", error)
+      console.error("[Dustcode] KiloProvider: Failed to delete session:", error)
       this.postMessage({
         type: "error",
         message: getErrorMessage(error) || "Failed to delete session",
@@ -2777,7 +2777,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       )
       this.postMessage({ ...result, success: response.data === true })
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to delete message:", error)
+      console.error("[Dustcode] KiloProvider: Failed to delete message:", error)
       this.postMessage({
         type: "error",
         message: getErrorMessage(error) || "Failed to delete message",
@@ -2801,7 +2801,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (this.currentSession?.id === sessionID) this.setCurrentSession(updated)
       this.postMessage({ type: "sessionUpdated", session: this.sessionToWebview(updated) })
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to rename session:", error)
+      console.error("[Dustcode] KiloProvider: Failed to rename session:", error)
       this.postMessage({ type: "error", message: getErrorMessage(error) || "Failed to rename session" })
     }
   }
@@ -2822,7 +2822,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       })
       if (saved) void vscode.window.showInformationMessage("Session transcript exported as Markdown.")
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to export session transcript:", error)
+      console.error("[Dustcode] KiloProvider: Failed to export session transcript:", error)
       this.postMessage({
         type: "error",
         message: getErrorMessage(error) || "Failed to export session transcript",
@@ -2839,7 +2839,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         force ? client.kilocode.providerUsage.refresh({ directory }) : client.kilocode.providerUsage.get({ directory }),
       )
       .catch((error) => {
-        console.error("[Kilo New] KiloProvider: Failed to fetch provider usage:", error)
+        console.error("[Dustcode] KiloProvider: Failed to fetch provider usage:", error)
         return undefined
       })
     if (generation !== this.providerUsageGeneration) return
@@ -2897,7 +2897,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
             continue
           }
           this.storedProviderKeys = storedKeys
-          const settings = vscode.workspace.getConfiguration("kilo-code.new.model")
+          const settings = vscode.workspace.getConfiguration("dustcode.model")
           const message = {
             type: "providersLoaded",
             providers: indexProvidersById(response.all),
@@ -2931,7 +2931,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           // Keep backing off while the last loaded Kilo catalog was unavailable.
           const last = this.cachedProvidersMessage as { kiloUnavailable?: boolean } | null
           this.catalogRetry.update(last?.kiloUnavailable === true)
-          console.error("[Kilo New] KiloProvider: Failed to fetch providers:", error)
+          console.error("[Dustcode] KiloProvider: Failed to fetch providers:", error)
         }
         if (!this.providersQueued) return
         generation = this.providersGeneration
@@ -3037,7 +3037,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.cachedAgentsMessage = message
       this.postMessage(message)
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to fetch agents:", error)
+      console.error("[Dustcode] KiloProvider: Failed to fetch agents:", error)
     }
   }
 
@@ -3062,7 +3062,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.cachedSkillsMessage = message
       this.postMessage(message)
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to fetch skills:", error)
+      console.error("[Dustcode] KiloProvider: Failed to fetch skills:", error)
     }
   }
 
@@ -3086,7 +3086,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.cachedCommandsMessage = message
       this.postMessage(message)
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to fetch commands:", error)
+      console.error("[Dustcode] KiloProvider: Failed to fetch commands:", error)
     }
   }
 
@@ -3101,14 +3101,14 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       const dir = this.getWorkspaceDirectory()
       const result = await this.client.kilocode.removeSkill({ location, directory: dir })
       if (result.error) {
-        console.error("[Kilo New] removeSkill returned error:", result.error)
+        console.error("[Dustcode] removeSkill returned error:", result.error)
         this.cachedSkillsMessage = null
         this.clearCommandsCache()
         await Promise.all([this.fetchAndSendSkills(), this.fetchAndSendCommands()])
         return false
       }
     } catch (error) {
-      console.error("[Kilo New] Failed to remove skill:", error)
+      console.error("[Dustcode] Failed to remove skill:", error)
       this.cachedSkillsMessage = null
       this.cachedCommandsMessage = null
       await Promise.all([this.fetchAndSendSkills(), this.fetchAndSendCommands()])
@@ -3128,7 +3128,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       name,
     })
     if (!result.success) {
-      console.error("[Kilo New] Failed to remove agent:", result.error)
+      console.error("[Dustcode] Failed to remove agent:", result.error)
       void vscode.window.showErrorMessage(result.error ?? `Failed to remove agent "${name}".`)
     }
     this.cachedAgentsMessage = null
@@ -3141,7 +3141,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     bus.emit({ directory, name, phase: "removing" })
     const removed = await removeMcp(this.removeConfigItemCtx, name)
     if (!removed) {
-      console.error("[Kilo New] KiloProvider: Failed to remove MCP server:", name)
+      console.error("[Dustcode] KiloProvider: Failed to remove MCP server:", name)
     } else {
       bus.emit({ directory, name, phase: "removed" })
       // Clears the removed server's stale "needs sign-in" state via the same
@@ -3172,7 +3172,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         this.postMessage(message)
       }
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to fetch MCP status:", error)
+      console.error("[Dustcode] KiloProvider: Failed to fetch MCP status:", error)
     }
   }
 
@@ -3189,7 +3189,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private async routeMcpMessage(type: string, name: string | undefined, message: { notify?: unknown }): Promise<void> {
-    const fail = (e: unknown) => console.error("[Kilo New] handleMcpMessage failed:", type, e)
+    const fail = (e: unknown) => console.error("[Dustcode] handleMcpMessage failed:", type, e)
     if (type === "requestMcpStatus") return this.fetchAndSendMcpStatus().catch(fail)
     if (type === "requestMcpAuthState") return this.refreshMcpAuthConsumers().catch(fail)
     if (type === "requestMcpBundles") return this.fetchAndSendMcpBundles().catch(fail)
@@ -3275,7 +3275,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.cachedMcpBundlesMessage = message
       this.postMessage(message)
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to fetch MCP bundles:", error)
+      console.error("[Dustcode] KiloProvider: Failed to fetch MCP bundles:", error)
     }
   }
 
@@ -3303,7 +3303,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     try {
       await this.refreshConfig("configLoaded")
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to fetch config:", error)
+      console.error("[Dustcode] KiloProvider: Failed to fetch config:", error)
     }
   }
 
@@ -3315,7 +3315,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.cachedGlobalConfig = config ?? null
       this.postMessage({ type: "globalConfigLoaded", config })
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to fetch global config:", error)
+      console.error("[Dustcode] KiloProvider: Failed to fetch global config:", error)
     }
   }
 
@@ -3358,7 +3358,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.cachedIndexingStatusMessage = message
       this.postMessage(message)
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to fetch indexing status:", error)
+      console.error("[Dustcode] KiloProvider: Failed to fetch indexing status:", error)
     }
   }
 
@@ -3450,7 +3450,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       )
       this.postMessage({ type: "backgroundJobsLoaded", sessionID, requestID, jobs: data })
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to fetch background jobs:", error)
+      console.error("[Dustcode] KiloProvider: Failed to fetch background jobs:", error)
       this.postMessage({
         type: "backgroundJobsLoaded",
         sessionID,
@@ -3474,7 +3474,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       )
       await this.fetchAndSendBackgroundJobs(sessionID, requestID)
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to cancel background job:", error)
+      console.error("[Dustcode] KiloProvider: Failed to cancel background job:", error)
       this.postMessage({
         type: "backgroundJobsLoaded",
         sessionID,
@@ -3494,7 +3494,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         { throwOnError: true },
       )
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to promote background job:", error)
+      console.error("[Dustcode] KiloProvider: Failed to promote background job:", error)
     }
   }
 
@@ -3623,7 +3623,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         this.wakeupSessions = new Set([...this.wakeupSessions, ...seen])
       }
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to seed session wakeups:", error)
+      console.error("[Dustcode] KiloProvider: Failed to seed session wakeups:", error)
     } finally {
       this.wakeupSeeding = false
     }
@@ -3638,7 +3638,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     try {
       await this.refreshConfig("configUpdated")
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to fetch config after update:", error)
+      console.error("[Dustcode] KiloProvider: Failed to fetch config after update:", error)
     }
   }
 
@@ -3649,25 +3649,25 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    */
   private async checkConfigWarnings(from: string): Promise<void> {
     if (this.configWarningsShown) {
-      console.log("[Kilo New] KiloProvider: config warnings already shown", { from })
+      console.log("[Dustcode] KiloProvider: config warnings already shown", { from })
       return
     }
     if (!this.client) {
-      console.log("[Kilo New] KiloProvider: config warnings skipped (no client)", { from })
+      console.log("[Dustcode] KiloProvider: config warnings skipped (no client)", { from })
       return
     }
     try {
       const dir = this.getWorkspaceDirectory()
-      console.log("[Kilo New] KiloProvider: checking config warnings", { from, dir })
+      console.log("[Dustcode] KiloProvider: checking config warnings", { from, dir })
       const result = await this.client.config.warnings({ directory: dir })
       const list = result?.data ?? []
-      console.log("[Kilo New] KiloProvider: config warnings fetched", { from, count: list.length })
+      console.log("[Dustcode] KiloProvider: config warnings fetched", { from, count: list.length })
       if (list.length === 0) return
       this.configWarningsShown = true
 
       const first = list[0]!
       const summary = list.length === 1 ? first.message : `${first.message} (and ${list.length - 1} more)`
-      console.warn("[Kilo New] KiloProvider: showing config warnings", { from, count: list.length, path: first.path })
+      console.warn("[Dustcode] KiloProvider: showing config warnings", { from, count: list.length, path: first.path })
 
       const action = await vscode.window.showWarningMessage(`Config: ${summary}`, "Show Details")
       if (action === "Show Details") {
@@ -3675,13 +3675,13 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           const base = `${w.path}\n  ${w.message}`
           return w.detail ? `${base}\n  ${w.detail}` : base
         })
-        const channel = vscode.window.createOutputChannel("Kilo Config Warnings")
+        const channel = vscode.window.createOutputChannel("Dustcode Config Warnings")
         channel.clear()
         channel.appendLine(lines.join("\n\n"))
         channel.show()
       }
     } catch (err) {
-      console.warn("[Kilo New] KiloProvider: checkConfigWarnings failed:", { from, err })
+      console.warn("[Dustcode] KiloProvider: checkConfigWarnings failed:", { from, err })
     }
   }
 
@@ -3710,7 +3710,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   /** Read attention settings from VS Code config and push to webview. */
   private sendNotificationSettings(): void {
-    const attention = vscode.workspace.getConfiguration("kilo-code.new.attention")
+    const attention = vscode.workspace.getConfiguration("dustcode.attention")
     this.postMessage({
       type: "notificationSettingsLoaded",
       settings: {
@@ -3744,7 +3744,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         (status) => ({ status, error: undefined }),
         (error: unknown) => {
           const diagnostic = failure(error)
-          console.warn("[Kilo New] Session cleanup status request failed:", {
+          console.warn("[Dustcode] Session cleanup status request failed:", {
             ...diagnostic,
             connection: this.connectionState,
           })
@@ -3995,7 +3995,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         .set(data.enabled)
         .then(() => true)
         .catch((error) => {
-          console.error("[Kilo New] Failed to persist sandbox default:", error)
+          console.error("[Dustcode] Failed to persist sandbox default:", error)
           return false
         })
       this.postMessage({
@@ -4155,7 +4155,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         refreshProviders ? this.fetchAndSendProviders() : Promise.resolve(),
         refreshAgents ? this.fetchAndSendAgents() : Promise.resolve(),
         refreshSpeech ? this.fetchAndSendSpeechToTextModels() : Promise.resolve(),
-      ]).catch((error) => console.error("[Kilo New] KiloProvider: Post-config refresh failed:", error))
+      ]).catch((error) => console.error("[Dustcode] KiloProvider: Post-config refresh failed:", error))
     } catch (error) {
       this.postConfigFailure(error, completed, snapshot, dir)
     } finally {
@@ -4205,7 +4205,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     snapshot?: ConfigSnapshot,
     directory?: string,
   ): void {
-    console.error("[Kilo New] KiloProvider: Failed to update config:", error)
+    console.error("[Dustcode] KiloProvider: Failed to update config:", error)
     const bindings = snapshot && directory ? this.bindingsFor(directory, snapshot.targets) : undefined
     this.postMessage({
       type: "configUpdateFailed",
@@ -4350,7 +4350,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         }
 
         const delay = backoff(attempt, result.response?.headers)
-        console.log(`[Kilo New] KiloProvider: Retry on ${status}, attempt ${attempt}/${MAX_RETRIES}, delay ${delay}ms`)
+        console.log(`[Dustcode] KiloProvider: Retry on ${status}, attempt ${attempt}/${MAX_RETRIES}, delay ${delay}ms`)
 
         this.postMessage({
           type: "sessionStatus",
@@ -4388,23 +4388,21 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private maxCostSetting(): number {
-    return this.setMaxCost(vscode.workspace.getConfiguration("kilo-code.new").get<number>("maxCost", 0))
+    return this.setMaxCost(vscode.workspace.getConfiguration("dustcode").get<number>("maxCost", 0))
   }
 
   private commitMessageLanguageSetting(): string {
-    return vscode.workspace.getConfiguration("kilo-code.new").get<string>("languageCommitMessage", "sync")
+    return vscode.workspace.getConfiguration("dustcode").get<string>("languageCommitMessage", "sync")
   }
 
   private claudeMigrationSetting(): boolean {
-    return vscode.workspace.getConfiguration("kilo-code.new.experimental").get<boolean>("claudeMigration", false)
+    return vscode.workspace.getConfiguration("dustcode.experimental").get<boolean>("claudeMigration", false)
   }
   private conversationPromptHistorySetting(): boolean {
-    return vscode.workspace
-      .getConfiguration("kilo-code.new.experimental")
-      .get<boolean>("conversationPromptHistory", false)
+    return vscode.workspace.getConfiguration("dustcode.experimental").get<boolean>("conversationPromptHistory", false)
   }
   private browserAutomationSetting(): boolean {
-    return vscode.workspace.getConfiguration("kilo-code.new.experimental").get<boolean>("browserAutomation", false)
+    return vscode.workspace.getConfiguration("dustcode.experimental").get<boolean>("browserAutomation", false)
   }
 
   private async sendIndexingSettings(projectId?: string) {
@@ -4480,7 +4478,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private configSettings() {
-    const naming = vscode.workspace.getConfiguration("kilo-code.new.agentManager")
+    const naming = vscode.workspace.getConfiguration("dustcode.agentManager")
     return {
       maxCost: this.maxCostSetting(),
       languageCommitMessage: this.commitMessageLanguageSetting(),
@@ -4789,7 +4787,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         ),
       )
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to send message:", error)
+      console.error("[Dustcode] KiloProvider: Failed to send message:", error)
       this.postMessage({
         type: "sendMessageFailed",
         error: getErrorMessage(error) || "Failed to send message",
@@ -4888,7 +4886,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         this.postMessage({ type: "sessionCommandCompleted", messageID })
       }
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to send command:", error)
+      console.error("[Dustcode] KiloProvider: Failed to send command:", error)
       this.postMessage({
         type: "sendMessageFailed",
         error: getErrorMessage(error) || "Failed to send command",
@@ -4955,7 +4953,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       )
       this.postMessage({ type: "sessionResumeResult", sessionID, requestID })
     } catch (error) {
-      console.error("[Kilo New] Failed to resume session:", error)
+      console.error("[Dustcode] Failed to resume session:", error)
       this.postMessage({
         type: "sessionResumeResult",
         sessionID,
@@ -4977,7 +4975,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     const dir = this.getWorkspaceDirectory(sessionID)
     const { data, error } = await this.client.session.revert({ sessionID, messageID, partID, directory: dir })
     if (error) {
-      console.error("[Kilo New] KiloProvider: Failed to revert session:", error)
+      console.error("[Dustcode] KiloProvider: Failed to revert session:", error)
       this.postMessage({
         type: "error",
         message: getErrorMessage(error),
@@ -4997,7 +4995,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     const dir = this.getWorkspaceDirectory(sessionID)
     const { data, error } = await this.client.session.unrevert({ sessionID, directory: dir })
     if (error) {
-      console.error("[Kilo New] KiloProvider: Failed to unrevert session:", error)
+      console.error("[Dustcode] KiloProvider: Failed to unrevert session:", error)
       this.postMessage({
         type: "error",
         message: getErrorMessage(error),
@@ -5026,12 +5024,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
     const target = sessionID || this.currentSession?.id
     if (!target) {
-      console.error("[Kilo New] KiloProvider: No sessionID for compact")
+      console.error("[Dustcode] KiloProvider: No sessionID for compact")
       return
     }
 
     if (!providerID || !modelID) {
-      console.error("[Kilo New] KiloProvider: No model selected for compact")
+      console.error("[Dustcode] KiloProvider: No model selected for compact")
       this.postMessage({
         type: "error",
         message: "No model selected. Connect a provider to compact this session.",
@@ -5046,7 +5044,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         { throwOnError: true },
       )
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to compact session:", error)
+      console.error("[Dustcode] KiloProvider: Failed to compact session:", error)
       this.postMessage({
         type: "error",
         message: getErrorMessage(error) || "Failed to compact session",
@@ -5146,7 +5144,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
     await this.client.global
       .dispose()
-      .catch((e: unknown) => console.warn("[Kilo New] KiloProvider: global.dispose() after org switch failed:", e))
+      .catch((e: unknown) => console.warn("[Dustcode] KiloProvider: global.dispose() after org switch failed:", e))
 
     // Org switch succeeded — refresh profile and providers independently (best-effort)
     try {
@@ -5154,12 +5152,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       // Broadcast to all webviews (sidebar, profile tab, agent manager, etc.)
       this.connectionService.notifyProfileChanged(profileResult.data ?? null)
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to refresh profile after org switch:", error)
+      console.error("[Dustcode] KiloProvider: Failed to refresh profile after org switch:", error)
     }
     try {
       await this.fetchAndSendProviders()
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to refresh providers after org switch:", error)
+      console.error("[Dustcode] KiloProvider: Failed to refresh providers after org switch:", error)
     }
   }
 
@@ -5170,7 +5168,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     if (key === "maxCost") {
       const normalized = this.setMaxCost(value)
       await vscode.workspace
-        .getConfiguration("kilo-code.new")
+        .getConfiguration("dustcode")
         .update("maxCost", normalized, vscode.ConfigurationTarget.Global)
       for (const sid of this.trackedSessionIds) {
         const oldLimit = this.activeAlerts.get(sid)
@@ -5187,7 +5185,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     if (section === "autocomplete" && !validAutocompleteSetting(leaf, value)) return
     if (section === "indexing" && !validIndexingSetting(leaf, value)) return
     if (section === "chat" && !validChatSetting(leaf, value)) return
-    const config = vscode.workspace.getConfiguration(`kilo-code.new${section ? `.${section}` : ""}`)
+    const config = vscode.workspace.getConfiguration(`dustcode${section ? `.${section}` : ""}`)
     // Normalize a webview-side clear to `undefined` so VS Code removes the
     // key from settings.json rather than persisting a literal `null`. This
     // lets the runtime fall back to the resolved default.
@@ -5197,22 +5195,21 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   /**
-   * Reset all "kilo-code.new.*" extension settings to their defaults by reading
+   * Reset all "dustcode.*" extension settings to their defaults by reading
    * contributes.configuration from the extension's package.json at runtime.
-   * Only resets settings under the "kilo-code.new." namespace to avoid touching
-   * settings from the previous version of the extension which shares the same
-   * extension ID and "kilo-code.*" namespace.
+   * Only resets settings under the "dustcode." namespace to avoid touching
+   * settings owned by the original Kilo extension.
    */
   private async handleResetAllSettings(): Promise<void> {
     const confirmed = await vscode.window.showWarningMessage(
-      "Reset all Kilo Code extension settings to defaults?",
+      "Reset all Dustcode extension settings to defaults?",
       { modal: true },
       "Reset",
     )
     if (confirmed !== "Reset") return
 
-    const prefix = "kilo-code.new."
-    const ext = vscode.extensions.getExtension("kilocode.kilo-code")
+    const prefix = "dustcode."
+    const ext = vscode.extensions.getExtension("dustcode.dustcode")
     const properties = ext?.packageJSON?.contributes?.configuration?.properties as Record<string, unknown> | undefined
     if (!properties) return
 
@@ -5254,14 +5251,14 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     // Re-fetch notifications to reflect cleared dismissed IDs
     await this.fetchAndSendNotifications()
 
-    vscode.window.showInformationMessage("Kilo Code settings have been reset to defaults.")
+    vscode.window.showInformationMessage("Dustcode settings have been reset to defaults.")
   }
 
   /**
    * Read the current browser automation settings and push them to the webview.
    */
   private sendBrowserSettings(): void {
-    const config = vscode.workspace.getConfiguration("kilo-code.new.browserAutomation")
+    const config = vscode.workspace.getConfiguration("dustcode.browserAutomation")
     this.postMessage({
       type: "browserSettingsLoaded",
       settings: {
@@ -5276,7 +5273,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * Read the current Claude Code compatibility setting and push it to the webview.
    */
   private sendClaudeCompatSetting(): void {
-    const enabled = vscode.workspace.getConfiguration("kilo-code.new").get<boolean>("claudeCodeCompat", false)
+    const enabled = vscode.workspace.getConfiguration("dustcode").get<boolean>("claudeCodeCompat", false)
     this.postMessage({
       type: "claudeCompatSettingLoaded",
       enabled: enabled ?? false,
@@ -5304,7 +5301,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   /** Reload config, skills, agents, and commands from disk by rebooting the project's instances. */
   private async handleReload(): Promise<void> {
     if (!this.client) {
-      console.warn("[Kilo New] handleReload: no client connection")
+      console.warn("[Dustcode] handleReload: no client connection")
       return
     }
     const dir = this.getWorkspaceDirectory(this.currentSession?.id)
@@ -5321,7 +5318,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         )
         return
       }
-      console.error("[Kilo New] handleReload: reload endpoint failed:", err)
+      console.error("[Dustcode] handleReload: reload endpoint failed:", err)
       const detail = err instanceof Error && err.message ? err.message : "See extension logs for details."
       vscode.window.showErrorMessage(`Reload failed. ${detail}`)
       return
@@ -5686,7 +5683,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       }
       const childId = childID(part)
       if (childId && !this.trackedSessionIds.has(childId)) {
-        console.log("[Kilo New] KiloProvider: 🔗 Auto-adopting child session from task tool", { childId })
+        console.log("[Dustcode] KiloProvider: 🔗 Auto-adopting child session from task tool", { childId })
         void this.handleSyncSession(childId, part.sessionID ?? sessionID)
       }
     }
@@ -5763,12 +5760,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         typeof (payload as { type?: unknown }).type === "string"
           ? (payload as { type: string }).type
           : "<unknown>"
-      console.warn("[Kilo New] KiloProvider: ⚠️ postMessage dropped (no webview)", { type })
+      console.warn("[Dustcode] KiloProvider: ⚠️ postMessage dropped (no webview)", { type })
       return
     }
 
     void this.webview.postMessage(payload).then(undefined, (error) => {
-      console.error("[Kilo New] KiloProvider: ❌ postMessage failed", error)
+      console.error("[Dustcode] KiloProvider: ❌ postMessage failed", error)
     })
   }
 
@@ -5801,7 +5798,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         void vscode.window.showInformationMessage(`Project memory ${operation === "enable" ? "enabled" : "disabled"}.`)
       }
     } catch (error) {
-      console.error("[Kilo New] KiloProvider: Failed to toggle memory:", error)
+      console.error("[Dustcode] KiloProvider: Failed to toggle memory:", error)
       void vscode.window.showErrorMessage(getErrorMessage(error) || "Failed to toggle memory")
     }
   }
@@ -5832,7 +5829,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       const remote = repo.state?.remotes?.find((r: { name: string }) => r.name === "origin")
       return remote?.fetchUrl ?? remote?.pushUrl
     } catch (error) {
-      console.warn("[Kilo New] KiloProvider: Failed to get git remote URL:", error)
+      console.warn("[Dustcode] KiloProvider: Failed to get git remote URL:", error)
       return undefined
     }
   }
@@ -5889,7 +5886,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private async filterIgnored(dir: string, files: string[]): Promise<string[]> {
     if (!dir || !files.length) return files
     const controller = await this.getIgnoreController(dir).catch((err) => {
-      console.warn("[Kilo New] Failed to read ignore rules for", dir, err)
+      console.warn("[Dustcode] Failed to read ignore rules for", dir, err)
       return undefined
     })
     if (!controller) return files
@@ -5986,7 +5983,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     // Ambiguous ids degrade to the legacy resolution instead of throwing: this
     // runs eagerly per webview message, where a throw would drop the message.
     if (routed === null)
-      console.warn(`[Kilo New] KiloProvider: session ${sessionId} is ambiguous across projects, using workspace root`)
+      console.warn(`[Dustcode] KiloProvider: session ${sessionId} is ambiguous across projects, using workspace root`)
     if (routed) return routed
     return resolveWorkspaceDirectory({
       sessionID: sessionId,
@@ -5999,7 +5996,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     const routed = this.routeSessionDirectory(sessionId)
     if (routed === null)
       console.warn(
-        `[Kilo New] KiloProvider: session ${sessionId} is ambiguous across projects, using tracked directory`,
+        `[Dustcode] KiloProvider: session ${sessionId} is ambiguous across projects, using tracked directory`,
       )
     if (routed) return routed
     return this.sessionDirectories.get(sessionId) ?? session?.directory ?? this.getRootDirectory()
@@ -6107,7 +6104,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     const history = await retry(() =>
       this.client!.session.messages({ sessionID, directory, limit: 0 }, { throwOnError: true }),
     ).catch((error: unknown) => {
-      console.warn("[Kilo New] KiloProvider: Failed to recover session Git directory:", error)
+      console.warn("[Dustcode] KiloProvider: Failed to recover session Git directory:", error)
       return undefined
     })
     if (!history) {
@@ -6253,7 +6250,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       styleUri: webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", `${bundle}.css`)),
       iconsBaseUri: webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "assets", "icons")),
       workerUri: webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "shiki-worker.js")),
-      title: "Kilo Code",
+      title: "Dustcode",
       port: this.connectionService.getServerInfo()?.port,
       extraStyles: `.container { height: 100vh; }`,
       // Dedicated single-purpose panels (Settings, Profile, Sub-Agent Viewer)
@@ -6384,7 +6381,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     for (const pending of this.ignoreControllers.values()) {
       void pending.then(
         (controller) => controller.dispose(),
-        (err) => console.warn("[Kilo New] Failed to dispose ignore controller:", err),
+        (err) => console.warn("[Dustcode] Failed to dispose ignore controller:", err),
       )
     }
     this.ignoreControllers.clear()

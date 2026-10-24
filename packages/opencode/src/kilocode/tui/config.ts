@@ -4,6 +4,7 @@ import { Effect, Layer, Schema } from "effect"
 import { applyEdits, modify } from "jsonc-parser"
 import { mergeDeep } from "remeda"
 import { Global } from "@opencode-ai/core/global"
+import { Profile } from "@opencode-ai/core/kilocode/profile"
 import { ConfigParse } from "@/config/parse"
 import { CurrentWorkingDirectory } from "@/config/tui-cwd"
 import { TuiConfig } from "@/config/tui"
@@ -24,7 +25,7 @@ export namespace KilocodeTuiConfig {
   export type Editable = Omit<Patch, "keybinds"> & { keybinds?: Record<string, string> }
 
   const files = ["tui.jsonc", "tui.json"] as const
-  const dirs = [".kilo", ".kilocode"] as const
+  const dirs = Profile.dirs(true)
 
   export async function get(input: { directory: string }) {
     const cfg = await AppRuntime.runPromise(
@@ -79,9 +80,9 @@ export namespace KilocodeTuiConfig {
       }
     }
 
-    const roots = await Filesystem.findUp([...files], input.directory, input.worktree)
+    const roots = Profile.enabled ? [] : await Filesystem.findUp([...files], input.directory, input.worktree)
     if (roots[0]) return roots[0]
-    return path.join(input.directory, ".kilo", "tui.json")
+    return path.join(input.directory, Profile.dir(), "tui.json")
   }
 
   async function read(file: string) {

@@ -6,6 +6,7 @@ import { applyEdits, modify, parse as parseJsonc, type ParseError } from "jsonc-
 import { mergeDeep } from "remeda"
 import * as Log from "@opencode-ai/core/util/log"
 import { Global } from "@opencode-ai/core/global"
+import { Profile } from "@opencode-ai/core/kilocode/profile"
 import { NamedError } from "@opencode-ai/core/util/error"
 import type { FSUtil } from "@opencode-ai/core/fs-util"
 import { InstanceRef } from "@/effect/instance-ref"
@@ -38,10 +39,12 @@ export namespace KilocodeConfig {
   // ── Config file constants ────────────────────────────────────────────
 
   /** All config file names in precedence order (kilo + opencode). */
-  export const ALL_CONFIG_FILES = ["kilo.jsonc", "kilo.json", "opencode.jsonc", "opencode.json"] as const
+  export const ALL_CONFIG_FILES = Profile.enabled
+    ? ["kilo.jsonc", "kilo.json"]
+    : ["kilo.jsonc", "kilo.json", "opencode.jsonc", "opencode.json"]
 
   /** Config directory suffixes in update-target preference order. */
-  export const KILO_DIR_SUFFIXES = [".kilo", ".kilocode"] as const
+  export const KILO_DIR_SUFFIXES = Profile.dirs(true)
 
   /**
    * List every project config file the read chain can merge: config files in
@@ -56,9 +59,11 @@ export namespace KilocodeConfig {
     const dirs = yield* input.fs
       .up({ targets: [...KILO_DIR_SUFFIXES], start: input.directory, stop: input.worktree })
       .pipe(Effect.orDie)
-    const roots = yield* input.fs
-      .up({ targets: [...ALL_CONFIG_FILES], start: input.directory, stop: input.worktree })
-      .pipe(Effect.orDie)
+    const roots = Profile.enabled
+      ? []
+      : yield* input.fs
+          .up({ targets: [...ALL_CONFIG_FILES], start: input.directory, stop: input.worktree })
+          .pipe(Effect.orDie)
     return [...dirs.flatMap((dir) => ALL_CONFIG_FILES.map((file) => path.join(dir, file))), ...roots]
   })
 
@@ -73,7 +78,7 @@ export namespace KilocodeConfig {
     writable: (config: Config.Info) => Config.Info
   }) {
     const files = yield* projectConfigFiles(input)
-    const file = files.find((item) => existsSync(item)) ?? path.join(input.directory, ".kilo", "kilo.jsonc")
+    const file = files.find((item) => existsSync(item)) ?? path.join(input.directory, Profile.dir(), "kilo.jsonc")
     const source = yield* input.read(file)
     const before = source ?? "{}"
     const patch = input.writable(input.config)
@@ -351,6 +356,12 @@ export namespace KilocodeConfig {
     projectDir: string
     merge: MergeFn
   }): Promise<{ config: Config.Info; warnings: Config.Warning[] }> {
+    if (Profile.enabled) {
+      const permission = await IgnoreMigrator.loadIgnoreConfig(input.projectDir, true)
+      return Object.keys(permission).length > 0
+        ? { config: { permission }, warnings: [] }
+        : { config: {}, warnings: [] }
+    }
     const warnings: Config.Warning[] = []
     let result: Config.Info = {}
 
@@ -458,7 +469,7 @@ export namespace KilocodeConfig {
   // ── Bash permission migration ────────────────────────────────────────
 
   /** Global config file names in read-merge order (lowest-to-highest precedence). */
-  export const GLOBAL_CONFIG_FILES = ["config.json", "kilo.json", "kilo.jsonc", "opencode.json", "opencode.jsonc"]
+  export const GLOBAL_CONFIG_FILES = Profile.enabled ? Profile.files() : ["config.json", ...Profile.files()]
   const BASH_PERMISSION_MIGRATION = ".bash-permission-migrated"
 
   /**
@@ -471,6 +482,7 @@ export namespace KilocodeConfig {
    * the migration idempotent so subsequent user edits are not migrated again.
    */
   export async function migrateBashPermission() {
+    if (Profile.enabled) return
     const marker = path.join(Global.Path.config, BASH_PERMISSION_MIGRATION)
     if (existsSync(marker)) return
     const done = () =>
@@ -677,6 +689,7 @@ export namespace KilocodeConfig {
 
   /** Check whether a directory path should be treated as a config directory (for loading config files). */
   export function isConfigDir(dir: string, flagDir?: string): boolean {
+    if (Profile.enabled) return path.basename(dir) === Profile.dir() || dir === Global.Path.config
     return dir.endsWith(".kilo") || dir.endsWith(".kilocode") || dir === flagDir
   }
 
@@ -698,6 +711,7 @@ export namespace KilocodeConfig {
     worktree?: string
     scanProject: boolean
   }): string[] {
+    if (Profile.enabled) return []
     const found: string[] = []
 
     // Global opencode config dir (sibling of the kilo global config dir, e.g. ~/.config/opencode).

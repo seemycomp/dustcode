@@ -18,7 +18,7 @@ export interface DocumentViewerOptions {
 }
 
 export class DocumentViewerProvider implements vscode.Disposable {
-  public static readonly viewType = "kilo-code.new.DocumentsPanel"
+  public static readonly viewType = "dustcode.DocumentsPanel"
   private panel: vscode.WebviewPanel | undefined
   private pending: { file: string; sessionId?: string; directory?: string; line?: number; column?: number } | undefined
   private readonly contexts = new Map<string, Context>()
@@ -73,10 +73,7 @@ export class DocumentViewerProvider implements vscode.Disposable {
         localResourceRoots: [this.extensionUri],
       },
     )
-    panel.iconPath = {
-      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-light.svg"),
-      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-dark.svg"),
-    }
+    panel.iconPath = vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "dustcode.png")
     panel.webview.html = this.html(panel.webview)
     this.panel = panel
     this.disposables.push(
@@ -114,7 +111,7 @@ export class DocumentViewerProvider implements vscode.Disposable {
       if (resolved)
         vscode.env.clipboard
           .writeText(resolved)
-          .then(undefined, (err) => console.error("[Kilo New] DocumentViewerProvider: Failed to copy path:", err))
+          .then(undefined, (err) => console.error("[Dustcode] DocumentViewerProvider: Failed to copy path:", err))
       return
     }
     if (message.type === "document.close") this.panel?.dispose()

@@ -67,7 +67,7 @@ export class VscodeHost implements Host {
     worktreeDirectories?: () => string[]
   }): PanelContext {
     const panel = vscode.window.createWebviewPanel(
-      "kilo-code.new.AgentManagerPanel",
+      "dustcode.AgentManagerPanel",
       "Agent Manager",
       vscode.ViewColumn.One,
       {
@@ -110,10 +110,7 @@ export class VscodeHost implements Host {
       localResourceRoots: [this.extensionUri],
     }
 
-    panel.iconPath = {
-      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-light.svg"),
-      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-dark.svg"),
-    }
+    panel.iconPath = vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "dustcode.png")
 
     const port = this.connectionService.getServerInfo()?.port
     panel.webview.html = buildWebviewHtml(panel.webview, {
@@ -141,9 +138,9 @@ export class VscodeHost implements Host {
       disableViewedRegistration: true,
       disableStatsPolling: true,
       focusTargetContext: {
-        prompt: "kilo-code.new.agentManagerPromptFocused",
-        mainTerminal: "kilo-code.new.agentManagerMainTerminalFocused",
-        sideTerminal: "kilo-code.new.agentManagerSideTerminalFocused",
+        prompt: "dustcode.agentManagerPromptFocused",
+        mainTerminal: "dustcode.agentManagerMainTerminalFocused",
+        sideTerminal: "dustcode.agentManagerSideTerminalFocused",
       },
       onFocused: () => this.focus?.gained(),
       routeService: this.routes,
@@ -269,7 +266,7 @@ export class VscodeHost implements Host {
       const res = await client.session.list({ directory: dir, roots: true }, { throwOnError: true })
       return res.data
     } catch (err) {
-      console.warn(`[Kilo New] Agent Manager: failed to list project sessions for ${dir}:`, err)
+      console.warn(`[Dustcode] Agent Manager: failed to list project sessions for ${dir}:`, err)
       return []
     }
   }
@@ -408,7 +405,7 @@ export class VscodeHost implements Host {
   }
 
   browserAutomation(): boolean {
-    return vscode.workspace.getConfiguration("kilo-code.new.experimental").get("browserAutomation", false)
+    return vscode.workspace.getConfiguration("dustcode.experimental").get("browserAutomation", false)
   }
 
   async approveBrowserNavigation(origin: string): Promise<boolean> {
@@ -421,7 +418,7 @@ export class VscodeHost implements Host {
   }
 
   worktreePool(): boolean {
-    return vscode.workspace.getConfiguration("kilo-code.new.agentManager").get("worktreePool", true)
+    return vscode.workspace.getConfiguration("dustcode.agentManager").get("worktreePool", true)
   }
 
   readProjects(): unknown {
@@ -454,7 +451,7 @@ export class VscodeHost implements Host {
 
   onDidChangeWorktreePool(cb: (enabled: boolean) => void): Disposable {
     return vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration("kilo-code.new.agentManager.worktreePool")) cb(this.worktreePool())
+      if (e.affectsConfiguration("dustcode.agentManager.worktreePool")) cb(this.worktreePool())
     })
   }
 
@@ -463,7 +460,7 @@ export class VscodeHost implements Host {
   }
 
   autoBranchNaming(): { enabled: boolean; prefix: string } {
-    const cfg = vscode.workspace.getConfiguration("kilo-code.new.agentManager")
+    const cfg = vscode.workspace.getConfiguration("dustcode.agentManager")
     return {
       enabled: cfg.get("autoBranchNaming", true),
       prefix: cfg.get("branchPrefix", ""),
@@ -482,7 +479,7 @@ export class VscodeHost implements Host {
 
   revealInOS(path: string): void {
     if (vscode.env.remoteName) {
-      console.warn(`[Kilo New] Cannot reveal ${path} in the OS file manager on a remote workspace`)
+      console.warn(`[Dustcode] Cannot reveal ${path} in the OS file manager on a remote workspace`)
       return
     }
     void vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(path))
@@ -548,7 +545,7 @@ export class VscodeHost implements Host {
   }
 
   openSettings(tab?: string, projectId?: string): void {
-    void vscode.commands.executeCommand("kilo-code.new.settingsButtonClicked", tab, projectId)
+    void vscode.commands.executeCommand("dustcode.settingsButtonClicked", tab, projectId)
   }
 
   refreshGit(): void {

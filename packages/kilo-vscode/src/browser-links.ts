@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 import { integratedBrowserLinkDestination } from "./services/browser-automation/chrome-setting"
 
-const BROWSER_AUTOMATION = "kilo-code.new.experimental"
+const BROWSER_AUTOMATION = "dustcode.experimental"
 
 /** True when the URL is an http(s) web link, which is all the browser handles. */
 export function isWebLink(url: string): boolean {
@@ -43,7 +43,7 @@ function openerAccepted(openIntegrated?: () => boolean): boolean {
   try {
     return openIntegrated()
   } catch (error) {
-    console.warn("[Kilo New] Integrated Browser open failed, opening externally:", error)
+    console.warn("[Dustcode] Integrated Browser open failed, opening externally:", error)
     return false
   }
 }

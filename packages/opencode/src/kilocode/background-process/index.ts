@@ -960,7 +960,7 @@ export namespace BackgroundProcess {
     if (logpath) {
       await secure(state.shared)
       if (!(await claim(state.shared)))
-        throw new Error("Persistent processes for this project are managed by another Kilo process")
+        throw new Error("Persistent processes for this project are managed by another agent process")
       await Filesystem.write(logpath, "", 0o600)
     }
     const cmd =

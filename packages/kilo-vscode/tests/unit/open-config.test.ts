@@ -13,10 +13,9 @@ const dirs: string[] = []
 const env = {
   HOME: process.env.HOME,
   KILO_CONFIG: process.env.KILO_CONFIG,
-  KILO_CONFIG_CONTENT: process.env.KILO_CONFIG_CONTENT,
-  KILO_CONFIG_DIR: process.env.KILO_CONFIG_DIR,
   KILO_DISABLE_PROJECT_CONFIG: process.env.KILO_DISABLE_PROJECT_CONFIG,
   XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
+  XDG_DATA_HOME: process.env.XDG_DATA_HOME,
 }
 
 const labels = {
@@ -27,12 +26,12 @@ const labels = {
   sourceEnvContent: "Env content",
   sourceEnvDir: "Env dir",
   sourceEnvFile: "Env file",
-  sourceHomeKilo: "Home Kilo",
-  sourceHomeKilocode: "Home Kilocode",
-  sourceHomeOpencode: "Home Opencode",
-  sourceProjectKilo: "Project Kilo",
-  sourceProjectKilocode: "Project Kilocode",
-  sourceProjectOpencode: "Project Opencode",
+  sourceHomeKilo: "Home Dustcode",
+  sourceHomeKilocode: "Home legacy",
+  sourceHomeOpencode: "Home OpenCode",
+  sourceProjectKilo: "Project Dustcode",
+  sourceProjectKilocode: "Project legacy",
+  sourceProjectOpencode: "Project OpenCode",
   sourceProjectRoot: "Project root",
   sourceXdg: "XDG",
   statusCreate: "Create",
@@ -102,39 +101,41 @@ afterEach(async () => {
 })
 
 describe("config file discovery", () => {
-  it("discovers global, env, legacy, and virtual config sources", async () => {
+  it("discovers only fork config and ignores inherited KILO_CONFIG", async () => {
     reset()
     const root = await temp()
     const home = path.join(root, "home")
     const xdg = path.join(root, "xdg")
-    const extra = path.join(root, "extra")
-    const envfile = path.join(root, "env.jsonc")
+    const inherited = path.join(root, "original.jsonc")
     const spy = spyOn(os, "homedir").mockReturnValue(home)
     process.env.HOME = home
     process.env.XDG_CONFIG_HOME = xdg
-    process.env.KILO_CONFIG = envfile
-    process.env.KILO_CONFIG_DIR = extra
-    process.env.KILO_CONFIG_CONTENT = "{}"
-    await file(path.join(xdg, "kilo", "kilo.json"))
+    process.env.XDG_DATA_HOME = path.join(root, "data")
+    process.env.KILO_CONFIG = inherited
+    await file(inherited, '{"original":true}')
+    await file(path.join(root, "data", "dustcode", "config", "kilo.json"))
     await file(path.join(home, ".kilocode", "opencode.json"))
     await file(path.join(home, ".opencode", "kilo.jsonc"))
-    await file(envfile)
 
     const list = globalFiles()
     const sources = list.map((item) => item.source)
 
     expect(sources).toContain("sourceXdg")
-    expect(sources).toContain("sourceHomeKilocode")
-    expect(sources).toContain("sourceHomeOpencode")
-    expect(sources).toContain("sourceEnvFile")
-    expect(sources).toContain("sourceEnvDir")
-    expect(sources).toContain("sourceEnvContent")
-    expect(list.find((item) => item.source === "sourceEnvDir")?.recommended).toBe(true)
-    expect(list.find((item) => item.source === "sourceEnvContent")?.virtual).toBe(true)
+    expect(sources).not.toContain("sourceHomeKilocode")
+    expect(sources).not.toContain("sourceHomeOpencode")
+    expect(sources).not.toContain("sourceEnvFile")
+    expect(sources).not.toContain("sourceEnvDir")
+    expect(sources).not.toContain("sourceEnvContent")
+    expect(list.find((item) => item.source === "sourceEnvFile")).toBeUndefined()
+    expect(list.map((item) => item.file)).toEqual([
+      path.join(root, "data", "dustcode", "config", "kilo.json"),
+      path.join(root, "data", "dustcode", "config", "kilo.jsonc"),
+    ])
+    expect(await Bun.file(inherited).text()).toBe('{"original":true}')
     spy.mockRestore()
   })
 
-  it("marks project files unloaded when project config is disabled", async () => {
+  it("ignores original project config and its inherited disable flag", async () => {
     reset()
     const root = await temp()
     process.env.KILO_DISABLE_PROJECT_CONFIG = "1"
@@ -144,9 +145,9 @@ describe("config file discovery", () => {
     const list = localFiles(root)
 
     expect(list.every((item) => !item.loaded)).toBe(true)
-    expect(list.some((item) => item.source === "sourceProjectRoot" && item.exists)).toBe(true)
-    expect(list.some((item) => item.source === "sourceProjectOpencode" && item.legacy)).toBe(true)
-    expect(list.find((item) => item.recommended)?.file).toBe(path.join(root, ".kilo", "kilo.jsonc"))
+    expect(list.some((item) => item.source === "sourceProjectRoot")).toBe(false)
+    expect(list.some((item) => item.source === "sourceProjectOpencode")).toBe(false)
+    expect(list.find((item) => item.recommended)?.file).toBe(path.join(root, ".dustcode", "kilo.jsonc"))
   })
 })
 
@@ -163,7 +164,7 @@ describe("openConfig", () => {
   it("opens the only editable config without showing the picker", async () => {
     reset()
     const root = await temp()
-    const cfg = path.join(root, ".kilo", "kilo.jsonc")
+    const cfg = path.join(root, ".dustcode", "kilo.jsonc")
     await file(cfg)
 
     await openConfig("local", labels, root)
@@ -181,8 +182,8 @@ describe("openConfig", () => {
   it("uses the picker for multiple editable configs and creates the selected recommended file", async () => {
     reset()
     const root = await temp()
-    const cfg = path.join(root, ".kilo", "kilo.jsonc")
-    await file(path.join(root, ".opencode", "opencode.json"))
+    const cfg = path.join(root, ".dustcode", "kilo.jsonc")
+    await file(path.join(root, ".dustcode", "kilo.json"))
     win.showQuickPick = mock(async (items: Array<{ item: { recommended?: boolean } }>) =>
       items.find((item) => item.item.recommended),
     )
@@ -200,7 +201,7 @@ describe("openConfig", () => {
   it("shows a localized error when opening the selected config fails", async () => {
     reset()
     const root = await temp()
-    const cfg = path.join(root, ".kilo", "kilo.jsonc")
+    const cfg = path.join(root, ".dustcode", "kilo.jsonc")
     const spy = spyOn(console, "error").mockImplementation(() => {})
     await file(cfg)
     workspace.openTextDocument = mock(async () => {

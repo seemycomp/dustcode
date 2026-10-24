@@ -41,16 +41,16 @@ export function formatKeybinding(raw: string, mac: boolean): string {
 }
 
 /** Agent Manager command prefix for keybinding extraction. */
-const AM_PREFIX = "kilo-code.new.agentManager."
+const AM_PREFIX = "dustcode.agentManager."
 
 /** Global commands whose keybindings are forwarded to the webview. */
 const GLOBAL_KEYBINDINGS: Record<string, string> = {
-  "kilo-code.new.agentManagerOpen": "agentManagerOpen",
-  "kilo-code.new.cycleAgentMode": "cycleAgentMode",
-  "kilo-code.new.cyclePreviousAgentMode": "cyclePreviousAgentMode",
-  "kilo-code.new.focusChatInput": "focusChatInput",
-  "kilo-code.new.addToContext": "addToContext",
-  "kilo-code.new.settingsSearch": "settingsSearch",
+  "dustcode.agentManagerOpen": "agentManagerOpen",
+  "dustcode.cycleAgentMode": "cycleAgentMode",
+  "dustcode.cyclePreviousAgentMode": "cyclePreviousAgentMode",
+  "dustcode.focusChatInput": "focusChatInput",
+  "dustcode.addToContext": "addToContext",
+  "dustcode.settingsSearch": "settingsSearch",
 }
 
 /** [binding name, command suffix, key after the cmd/ctrl modifier] */
@@ -66,7 +66,7 @@ const FALLBACKS: Array<[string, string, string]> = [
 ]
 
 function addBinding(bindings: Record<string, string>, name: string, value: string, when?: string): void {
-  if (name === "newTerminalTab" && when?.includes("!kilo-code.new.agentManagerSideTerminalFocused")) {
+  if (name === "newTerminalTab" && when?.includes("!dustcode.agentManagerSideTerminalFocused")) {
     bindings.newTerminalCenter = value
     return
   }

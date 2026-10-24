@@ -16,7 +16,7 @@ Paths below are relative to this package. Start with the relevant implementation
 
 ## Product Context
 
-Kilo Code is an open source AI coding agent platform. It ships as a CLI and editor clients that all build on the same backend. This package (`packages/kilo-vscode/`) is the **VS Code extension**.
+Dustcode is a VS Code-only fork of Kilo Code. This package (`packages/kilo-vscode/`) is the **VS Code extension**. The fork ships the extension and its embedded CLI backend; other upstream products remain in the source tree but are not released here.
 
 ### Products and How They Relate
 
@@ -42,13 +42,13 @@ The VS Code extension spawns or connects to a `kilo serve` process and communica
 |---|---|---|---|
 | Kilo CLI (TUI) | `packages/opencode/` | Interactive terminal UI (SolidJS + OpenTUI) | In-process — TUI and server run together |
 | Kilo CLI (`kilo run`) | `packages/opencode/` | Non-interactive headless mode for scripting | In-process — no network socket |
-| **Kilo VS Code Extension** | **`packages/kilo-vscode/`** | VS Code extension with sidebar chat + Agent Manager | Bundles CLI binary, spawns `kilo serve --port 0` as child process |
+| **Dustcode VS Code Extension** | **`packages/kilo-vscode/`** | VS Code extension with sidebar chat + Agent Manager | Bundles CLI binary, spawns `kilo serve --port 0` as child process |
 
 ### Kilo-Domain Packages
 
 | Package | Name | Role |
 |---|---|---|
-| `packages/kilo-vscode/` | `kilo-code` | **This package.** VS Code extension. |
+| `packages/kilo-vscode/` | `dustcode` | **This package.** VS Code extension. |
 | `packages/kilo-gateway/` | `@kilocode/kilo-gateway` | Auth (device flow), AI provider routing (OpenRouter), Kilo API integration (profile, balance, teams) |
 | `packages/kilo-ui/` | `@kilocode/kilo-ui` | SolidJS component library (40+ components, built on `@kobalte/core`). Shared by this extension's webview and docs screenshot stories |
 | `packages/kilo-telemetry/` | `@kilocode/kilo-telemetry` | PostHog analytics + OpenTelemetry tracing for the CLI |
@@ -171,9 +171,9 @@ The Agent Manager is a feature within this extension (not a separate product). I
 | Location | Activity bar sidebar panel | Editor tab (full panel) |
 | Sessions | Single session at a time | Multiple parallel sessions with tabbed UI |
 | Git isolation | Uses workspace root | Each session can get its own worktree branch |
-| State | No dedicated state file | `.kilo/agent-manager.json` |
+| State | No dedicated state file | `.dustcode/agent-manager.json` |
 | Terminals | None | Dedicated VS Code terminal per session |
-| Setup scripts | None | Configurable `.kilo/setup-script` runs per worktree |
+| Setup scripts | None | Configurable `.dustcode/setup-script` runs per worktree |
 | Multi-version | Not supported | Up to 4 parallel worktrees with the same prompt |
 
 ### Architecture
@@ -220,12 +220,12 @@ Generated screenshot baselines live under `packages/kilo-docs/public/img/screens
 - Extension logs: "Extension Host" output channel (not Debug Console)
 - Webview logs: Command Palette → "Developer: Open Webview Developer Tools"
 - In Chrome/VS Code performance traces, associate CPU `ProfileChunk` events to their `Profile.id` target before attributing work to a thread. `v8:ProfEvntProc` is a profile delivery thread, not evidence that application work ran off the webview main thread.
-- All debug output must be prepended with `[Kilo New]` for easy filtering
+- All debug output must be prepended with `[Dustcode]` for easy filtering
 
 ## Naming Conventions
 
-- All VSCode commands must use `kilo-code.new.` prefix (not `kilo-code.`)
-- All view IDs must use `kilo-code.new.` prefix, **except** the sidebar view which uses `kilo-code.SidebarProvider` to preserve user sidebar position when upgrading from the legacy extension
+- All VS Code commands and settings must use the `dustcode.` prefix.
+- All view IDs must use the `dustcode.` prefix; the sidebar view is `dustcode.SidebarProvider`. Do not adopt Kilo Code's view IDs or migrate its stored state.
 
 ## Kilocode Change Markers
 

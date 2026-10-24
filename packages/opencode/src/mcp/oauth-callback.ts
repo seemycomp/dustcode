@@ -4,6 +4,7 @@ import { escapeHtml } from "@/util/html"
 import * as Log from "@opencode-ai/core/util/log" // kilocode_change
 import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH, parseRedirectUri } from "./oauth-provider"
 import * as KiloOAuthCallback from "../kilocode/mcp-oauth-callback" // kilocode_change
+import { Branding } from "@opencode-ai/core/kilocode/branding" // kilocode_change
 
 const log = Log.create({ service: "mcp.oauth-callback" }) // kilocode_change
 
@@ -15,7 +16,7 @@ const HTML_SUCCESS = `<!DOCTYPE html>
 <html>
 <head>
   <!-- kilocode_change start -->
-  <title>Kilo - Authorization Successful</title>
+  <title>${Branding.name() /* kilocode_change */} - Authorization Successful</title>
   <!-- kilocode_change end -->
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
@@ -28,7 +29,7 @@ const HTML_SUCCESS = `<!DOCTYPE html>
   <div class="container">
     <h1>Authorization Successful</h1>
     <!-- kilocode_change start -->
-    <p>You can close this window and return to Kilo.</p>
+    <p>You can close this window and return to ${Branding.name() /* kilocode_change */}.</p>
     <!-- kilocode_change end -->
   </div>
   <script>setTimeout(() => window.close(), 2000);</script>
@@ -39,7 +40,7 @@ const HTML_ERROR = (error: string) => `<!DOCTYPE html>
 <html>
 <head>
   <!-- kilocode_change start -->
-  <title>Kilo - Authorization Failed</title>
+  <title>${Branding.name() /* kilocode_change */} - Authorization Failed</title>
   <!-- kilocode_change end -->
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
@@ -248,7 +249,8 @@ export async function isPortInUse(port: number = OAUTH_CALLBACK_PORT): Promise<b
   })
 }
 
-export async function stop(reason?: Error): Promise<void> { // kilocode_change - reason for waiting flows
+export async function stop(reason?: Error): Promise<void> {
+  // kilocode_change - reason for waiting flows
   if (server) {
     await new Promise<void>((resolve) => server!.close(() => resolve()))
     server = undefined

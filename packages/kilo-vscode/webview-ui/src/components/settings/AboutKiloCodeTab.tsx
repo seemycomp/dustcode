@@ -56,7 +56,7 @@ const AboutKiloCodeTab: Component<AboutKiloCodeTabProps> = (props) => {
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = "kilo-settings.json"
+    a.download = "dustcode-settings.json"
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -208,16 +208,8 @@ const AboutKiloCodeTab: Component<AboutKiloCodeTabProps> = (props) => {
           }}
         >
           {language.t("settings.aboutKiloCode.feedback.prefix")}{" "}
-          <span style={linkStyle} onClick={() => open("https://github.com/Kilo-Org/kilocode")}>
+          <span style={linkStyle} onClick={() => open("https://github.com/seemycomp/dustcode/issues")}>
             GitHub
-          </span>
-          ,{" "}
-          <span style={linkStyle} onClick={() => open("https://reddit.com/r/kilocode")}>
-            Reddit
-          </span>
-          , {language.t("settings.aboutKiloCode.feedback.or")}{" "}
-          <span style={linkStyle} onClick={() => open("https://kilo.ai/discord")}>
-            Discord
           </span>
           .
         </p>

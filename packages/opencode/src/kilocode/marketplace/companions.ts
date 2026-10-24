@@ -4,6 +4,7 @@ import path from "path"
 import { Effect, Schema } from "effect"
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser"
 import { Global } from "@opencode-ai/core/global"
+import { Profile } from "@opencode-ai/core/kilocode/profile"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { isRecord } from "@/util/record"
@@ -36,7 +37,7 @@ function unique(ids: readonly string[]) {
 
 function root(input: Input, skills = false) {
   if (input.scope === "project") return input.directory
-  return skills ? Global.Path.home : Global.Path.config
+  return skills && !Profile.enabled ? Global.Path.home : Global.Path.config
 }
 
 function scratch(input: Input, token: string) {

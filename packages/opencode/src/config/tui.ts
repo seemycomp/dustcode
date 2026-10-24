@@ -23,6 +23,8 @@ import { ConfigVariable } from "@/config/variable"
 import { Npm } from "@opencode-ai/core/npm"
 import { KilocodeDefaultPlugins } from "@/kilocode/config/default-plugins" // kilocode_change
 import { Excess } from "@/kilocode/config/excess" // kilocode_change
+import { KilocodeConfig } from "@/kilocode/config/config" // kilocode_change
+import { Profile } from "@opencode-ai/core/kilocode/profile" // kilocode_change
 import { FormatError, FormatUnknownError } from "@/cli/error"
 import { TuiConfig } from "@opencode-ai/tui/config"
 
@@ -205,7 +207,9 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
   }
 
   // 2. Explicit KILO_TUI_CONFIG override, if set.
-  if (Flag.KILO_TUI_CONFIG) {
+  // kilocode_change start
+  if (!Profile.enabled && Flag.KILO_TUI_CONFIG) {
+    // kilocode_change end
     const configFile = Flag.KILO_TUI_CONFIG
     yield* mergeFile(acc, configFile, true) // kilocode_change - explicit env-provided path is trusted
     yield* Effect.logDebug("loaded custom tui config", { path: configFile })
@@ -220,9 +224,7 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
   // 4. `.kilo` and legacy `.kilocode` directories (and KILO_CONFIG_DIR)
   // discovered while walking up the tree. Also returned below so callers can
   // install plugin dependencies from each location.
-  const dirs = unique(directories).filter(
-    (dir) => dir.endsWith(".kilo") || dir.endsWith(".kilocode") || dir === Flag.KILO_CONFIG_DIR,
-  )
+  const dirs = unique(directories).filter((dir) => KilocodeConfig.isConfigDir(dir, Flag.KILO_CONFIG_DIR))
   // kilocode_change end
 
   for (const dir of dirs) {

@@ -128,11 +128,11 @@ test("Kilo exposes only supported embedding model presets", async ({ page }) => 
   await disableAnimations(page)
   await page.waitForSelector("#storybook-root *", { state: "attached" })
 
-  await expect(page.getByText("Kilo model preset", { exact: true })).toBeVisible()
+  await expect(page.getByText("Kilo Gateway model preset", { exact: true })).toBeVisible()
   await expect(page.getByText("Embedding model", { exact: true })).toHaveCount(0)
   await expect(page.getByText("Vector dimension", { exact: true })).toBeVisible()
 
-  const preset = selectIn(page, "Kilo model preset")
+  const preset = selectIn(page, "Kilo Gateway model preset")
   await expect(preset).toContainText("Provider Model")
 
   const dimension = field(page, "Vector dimension").first()

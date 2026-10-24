@@ -21,7 +21,7 @@ export async function handleForkSession(ctx: ForkContext, sessionId: string, mes
       )
       .then((result) => result.data?.[sessionId]?.type ?? "idle")
       .catch((e) => {
-        console.error("[Kilo New] refreshForkStatus failed:", e)
+        console.error("[Dustcode] refreshForkStatus failed:", e)
         return "busy" as SessionStatus["type"]
       }))
   if (isRunningStatus(status)) {
@@ -42,7 +42,7 @@ export async function handleForkSession(ctx: ForkContext, sessionId: string, mes
         ctx.forked(session, sessionId)
       },
       registerSession: () => {},
-      log: (...args) => console.log("[Kilo New] KiloProvider:", ...args),
+      log: (...args) => console.log("[Dustcode] KiloProvider:", ...args),
     },
     sessionId,
     undefined,

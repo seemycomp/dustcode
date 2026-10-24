@@ -6,7 +6,7 @@ import { handleWorkStyleApplyMessage } from "./work-style-apply-handler"
 export const WORK_STYLE_SETTING_KEYS = ["showTaskTimeline", "showAutoApprovalReason"] as const
 
 function getConfig() {
-  return vscode.workspace.getConfiguration("kilo-code.new")
+  return vscode.workspace.getConfiguration("dustcode")
 }
 
 function isWorkStyleConfigured(): boolean {
@@ -27,7 +27,7 @@ export function isWorkStyleSetting(key: string): boolean {
 export function watchWorkStyleConfig(post: (message: unknown) => void, next?: vscode.Disposable) {
   const keys = ["agentWorkStyle", ...WORK_STYLE_SETTING_KEYS]
   const watcher = vscode.workspace.onDidChangeConfiguration((event) => {
-    if (keys.some((key) => event.affectsConfiguration(`kilo-code.new.${key}`))) post(getWorkStylePayload())
+    if (keys.some((key) => event.affectsConfiguration(`dustcode.${key}`))) post(getWorkStylePayload())
   })
   return next ? vscode.Disposable.from(watcher, next) : watcher
 }
@@ -68,7 +68,7 @@ export async function handleWorkStyleMessage(input: {
     const initialized = await initializeWorkStyle(input.connection, input.directory)
       .then(() => true)
       .catch((err: unknown) => {
-        console.error("[Kilo New] Failed to initialize work style:", err)
+        console.error("[Dustcode] Failed to initialize work style:", err)
         return false
       })
     const payload = getWorkStylePayload()
@@ -78,7 +78,7 @@ export async function handleWorkStyleMessage(input: {
   if (await handleWorkStyleApplyMessage(input)) return true
   if (input.message.type !== "setWorkStyle") return false
   if (!input.message.style) {
-    console.error("[Kilo New] Missing style in setWorkStyle message")
+    console.error("[Dustcode] Missing style in setWorkStyle message")
     return true
   }
   await setWorkStyle(input.message.style)

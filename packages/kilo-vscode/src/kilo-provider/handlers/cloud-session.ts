@@ -57,7 +57,7 @@ export async function handleRequestCloudSessions(
       nextCursor: result.data?.nextCursor ?? null,
     })
   } catch (error) {
-    console.error("[Kilo New] KiloProvider: Failed to fetch cloud sessions:", error)
+    console.error("[Dustcode] KiloProvider: Failed to fetch cloud sessions:", error)
     ctx.postMessage({
       type: "error",
       message: error instanceof Error ? error.message : "Failed to fetch cloud sessions",
@@ -104,7 +104,7 @@ export async function handleRequestCloudSessionData(ctx: CloudSessionContext, se
       messages,
     })
   } catch (err) {
-    console.error("[Kilo New] Failed to load cloud session data:", err)
+    console.error("[Dustcode] Failed to load cloud session data:", err)
     ctx.postMessage({
       type: "cloudSessionImportFailed",
       cloudSessionId: sessionId,
@@ -158,7 +158,7 @@ export async function handleImportAndSend(
     )
     session = result.data as Session | undefined
   } catch (error) {
-    console.error("[Kilo New] KiloProvider: ❌ Cloud session import failed:", error)
+    console.error("[Dustcode] KiloProvider: ❌ Cloud session import failed:", error)
     ctx.postMessage({
       type: "cloudSessionImportFailed",
       cloudSessionId,
@@ -257,7 +257,7 @@ export async function handleImportAndSend(
       ctx.postMessage({ type: "sessionCommandCompleted", messageID })
     }
   } catch (err) {
-    console.error("[Kilo New] Failed to send message after cloud import:", err)
+    console.error("[Dustcode] Failed to send message after cloud import:", err)
     ctx.postMessage({
       type: "sendMessageFailed",
       error: err instanceof Error ? err.message : "Failed to send message after import",

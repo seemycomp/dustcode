@@ -16,7 +16,7 @@ function xml(command: { env?: Record<string, string> } | undefined) {
 
 describe("OS attention notifications", () => {
   const notice = {
-    message: "Kilo task completed.",
+    message: "Dustcode task completed.",
     workspace: "kilo-vscode",
     session: "Add notifications",
   }
@@ -48,7 +48,7 @@ describe("OS attention notifications", () => {
     // as string delimiters. If the payload were interpolated into the script,
     // this title would close the literal and run the trailing command.
     const attack = "\u2019; Start-Process calc.exe; '"
-    const command = notificationCommand({ message: "Kilo task completed.", session: attack }, "win32", APPID)
+    const command = notificationCommand({ message: "Dustcode task completed.", session: attack }, "win32", APPID)
     const text = script(command)
 
     expect(text).not.toContain("Start-Process")
@@ -65,7 +65,7 @@ describe("OS attention notifications", () => {
 
   it("builds an escaped macOS osascript command", () => {
     const command = notificationCommand(
-      { message: 'Kilo said "done"', workspace: "repo", session: "path\\name" },
+      { message: 'Dustcode said "done"', workspace: "repo", session: "path\\name" },
       "darwin",
     )
 
@@ -73,7 +73,7 @@ describe("OS attention notifications", () => {
       cmd: "osascript",
       args: [
         "-e",
-        'display notification "Kilo said \\"done\\" Workspace: repo Session: path\\\\name" with title "Kilo Code"',
+        'display notification "Dustcode said \\"done\\" Workspace: repo Session: path\\\\name" with title "Dustcode"',
       ],
     })
   })
@@ -82,10 +82,10 @@ describe("OS attention notifications", () => {
     expect(notificationCommand(notice, "linux")).toEqual({
       cmd: "notify-send",
       args: [
-        "--app-name=Kilo Code",
+        "--app-name=Dustcode",
         "--urgency=normal",
-        "Kilo Code",
-        "Kilo task completed.\nWorkspace: kilo-vscode\nSession: Add notifications",
+        "Dustcode",
+        "Dustcode task completed.\nWorkspace: kilo-vscode\nSession: Add notifications",
       ],
     })
   })
@@ -94,11 +94,13 @@ describe("OS attention notifications", () => {
     // libnotify parses the body as markup: a raw `<` or `&` from a workspace or
     // session name can make the daemon reject the notification outright.
     const command = notificationCommand(
-      { message: "Kilo task completed.", workspace: "foo & bar", session: "<b>fix</b>" },
+      { message: "Dustcode task completed.", workspace: "foo & bar", session: "<b>fix</b>" },
       "linux",
     )
 
-    expect(command?.args.at(-1)).toBe("Kilo task completed.\nWorkspace: foo &amp; bar\nSession: &lt;b&gt;fix&lt;/b&gt;")
+    expect(command?.args.at(-1)).toBe(
+      "Dustcode task completed.\nWorkspace: foo &amp; bar\nSession: &lt;b&gt;fix&lt;/b&gt;",
+    )
     // Quotes and apostrophes are not markup, so they stay readable.
     expect(notificationCommand({ message: `it's "done"` }, "linux")?.args.at(-1)).toBe(`it's "done"`)
   })

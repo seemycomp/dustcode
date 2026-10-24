@@ -6,6 +6,7 @@ import type { Agent } from "@/agent/agent"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { Global } from "@opencode-ai/core/global"
+import { Profile } from "@opencode-ai/core/kilocode/profile" // kilocode_change
 import { Permission } from "@/permission"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Config } from "@/config/config"
@@ -213,17 +214,23 @@ const discoverSkills = Effect.fnUntraced(function* (
   const projectRoot = worktree === "/" ? directory : worktree // kilocode_change - project substitution boundary
 
   // kilocode_change start - settle the one-time global Claude handoff before scanning external skills
-  if (Flag.KILO_EXPERIMENTAL_CLAUDE_MIGRATION || ClaudeMigration.hasAttempt()) yield* config.getGlobal()
+  if (!Profile.enabled && (Flag.KILO_EXPERIMENTAL_CLAUDE_MIGRATION || ClaudeMigration.hasAttempt()))
+    yield* config.getGlobal()
   // kilocode_change end
 
   // kilocode_change start - one primary checkout lookup serves both the external and the config dir scans
   const projectDirs = disableClaudeCodeSkills ? [AGENTS_EXTERNAL_DIR] : [CLAUDE_EXTERNAL_DIR, AGENTS_EXTERNAL_DIR]
-  const mirrored = yield* primaryPaths(directory, worktree, [...projectDirs, ".kilocode", ".kilo"])
+  const mirrored = yield* primaryPaths(directory, worktree, [
+    ...(Profile.enabled ? [] : projectDirs),
+    ...Profile.dirs(),
+  ])
   const fallbacks = mirrored.filter((file) => projectDirs.includes(path.basename(file)))
   // kilocode_change end
 
   const externalDirs: string[] = []
-  if (!disableExternalSkills) {
+  // kilocode_change start
+  if (!disableExternalSkills && !Profile.enabled) {
+    // kilocode_change end
     if (!disableClaudeCodeSkills && !ClaudeMigration.globalHandoff()) externalDirs.push(CLAUDE_EXTERNAL_DIR)
     externalDirs.push(AGENTS_EXTERNAL_DIR)
 

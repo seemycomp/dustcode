@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 /**
- * SBOM generation for Kilo VS Code artifacts.
+ * SBOM generation for Dustcode VS Code artifacts.
  *
  * A VSIX is not one product: it is the extension host bundle, the webview
  * bundles, an externally copied Playwright runtime, a platform FFmpeg helper,
@@ -94,10 +94,10 @@ export async function vsix(input: { file: string; target: string; release: Relea
   const bom = compose({
     subject,
     product: {
-      name: "kilo-code",
+      name: "dustcode",
       version: input.release.version,
       type: "application",
-      description: `Kilo Code VS Code extension for ${input.target}`,
+      description: `Dustcode VS Code extension for ${input.target}`,
     },
     target: { platform: input.target, ...constraint(input.target) },
     build: {
@@ -142,7 +142,7 @@ export async function evidence(input: { dir: string; release: Release; expected?
 
   const entries: Manifest.Entry[] = []
   for (const file of files) {
-    const target = file.replace(/^kilo-vscode-/, "").replace(/\.vsix$/, "")
+    const target = file.replace(/^(?:dustcode|kilo-vscode)-/, "").replace(/\.vsix$/, "")
     try {
       const result = await vsix({ file: path.join(input.dir, file), target, release: input.release, lock })
       entries.push(result.entry)

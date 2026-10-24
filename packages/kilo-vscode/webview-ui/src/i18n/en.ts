@@ -12,13 +12,13 @@ export const anacondaDesktopDict = {
   "provider.anaconda.status.unavailable": "Unavailable",
   "provider.anaconda.state.unsupported": "Anaconda Desktop is not supported on {{platform}}.",
   "provider.anaconda.state.notInstalled":
-    "Install Anaconda Desktop on this machine, then return here. Kilo does not run the installer for you.",
+    "Install Anaconda Desktop on this machine, then return here. Dustcode does not run the installer for you.",
   "provider.anaconda.state.notRunning": "Open Anaconda Desktop, finish setup and sign in, then choose Check again.",
   "provider.anaconda.state.invalidConfig":
     "Anaconda Desktop setup is incomplete. Open Desktop, finish setup, and restart it if needed.",
-  "provider.anaconda.state.signedOut": "Open Anaconda Desktop and sign in before connecting Kilo.",
+  "provider.anaconda.state.signedOut": "Open Anaconda Desktop and sign in before connecting Dustcode.",
   "provider.anaconda.state.unauthorized":
-    "Kilo could not access Anaconda Desktop. Open Desktop, sign in again, and restart it if needed.",
+    "Dustcode could not access Anaconda Desktop. Open Desktop, sign in again, and restart it if needed.",
   "provider.anaconda.state.unavailable":
     "Anaconda Desktop is not responding yet. Open it and wait for the application to finish starting.",
   "provider.anaconda.state.noModel":
@@ -30,7 +30,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.state.unhealthy":
     "The active inference server is not healthy yet. Check it in Anaconda Desktop and restart the server if needed.",
   "provider.anaconda.state.ready":
-    "Kilo found a healthy local text-generation server and can import its current connection settings.",
+    "Dustcode found a healthy local text-generation server and can import its current connection settings.",
   "provider.anaconda.server": "Active inference server",
   "provider.anaconda.context": "Context window",
   "provider.anaconda.contextValue": "{{count}} tokens",
@@ -47,7 +47,7 @@ export const anacondaDesktopDict = {
   "provider.anaconda.action.continue": "Continue anyway",
   "provider.anaconda.action.manage": "Manage / Refresh",
   "provider.anaconda.toast.refreshed.title": "Anaconda Desktop refreshed",
-  "provider.anaconda.toast.refreshed.description": "The active local server and models are up to date in Kilo.",
+  "provider.anaconda.toast.refreshed.description": "The active local server and models are up to date in Dustcode.",
   "settings.providers.note.anacondaDesktop": "Run a model served locally by Anaconda Desktop.",
   "settings.providers.tag.local": "Local",
 } as const
@@ -93,7 +93,7 @@ export const dict = {
     "Conversation reverted. Workspace restoration status is unavailable for this earlier revert.",
   "revert.banner.workspace.enableSnapshots": "Enable snapshots",
   "revert.disabled.agentBusy": "Wait for agent to finish",
-  "revert.error.body": "The repository may be in use. Try again, or check the Kilo logs for details.",
+  "revert.error.body": "The repository may be in use. Try again, or check the Dustcode logs for details.",
   "command.session.compact": "Compact session",
   "command.session.export": "Export session transcript",
 
@@ -118,7 +118,7 @@ export const dict = {
   "provider.connect.status.waiting": "Waiting for authorization...",
   "provider.connect.status.failed": "Authorization failed: {{error}}",
   "provider.connect.apiKey.description":
-    "Enter your {{provider}} API key to connect your account and use {{provider}} models in Kilo.",
+    "Enter your {{provider}} API key to connect your account and use {{provider}} models in Dustcode.",
   "provider.connect.apiKey.description.local":
     "Connect to your local {{provider}} server. Leave the API key empty if the server does not require one (default for localhost).",
   "provider.connect.atomicChat.description":
@@ -141,14 +141,14 @@ export const dict = {
   "provider.connect.oauth.code.visit.prefix": "Visit ",
   "provider.connect.oauth.code.visit.link": "this link",
   "provider.connect.oauth.code.visit.suffix":
-    " to collect your authorization code to connect your account and use {{provider}} models in Kilo.",
+    " to collect your authorization code to connect your account and use {{provider}} models in Dustcode.",
   "provider.connect.oauth.code.label": "{{method}} authorization code",
   "provider.connect.oauth.code.placeholder": "Authorization code",
   "provider.connect.oauth.code.required": "Authorization code is required",
   "provider.connect.oauth.auto.visit.prefix": "Visit ",
   "provider.connect.oauth.auto.visit.link": "this link",
   "provider.connect.oauth.auto.visit.suffix":
-    " and enter the code below to connect your account and use {{provider}} models in Kilo.",
+    " and enter the code below to connect your account and use {{provider}} models in Dustcode.",
   "provider.connect.oauth.auto.confirmationCode": "Confirmation code",
   "provider.connect.toast.connected.title": "{{provider}} connected",
   "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
@@ -228,9 +228,9 @@ export const dict = {
   "prompt.action.sandbox.enable": "Enable sandbox",
   "prompt.action.sandbox.disable": "Disable sandbox",
   "prompt.action.sandbox.enabled":
-    "Sandbox is enabled. Agent shell commands are confined to the project and Kilo directories.",
+    "Sandbox is enabled. Agent shell commands are confined to the project and Dustcode directories.",
   "prompt.action.sandbox.disabled":
-    "Sandbox is disabled. Click to confine agent shell command writes to the project and Kilo directories.",
+    "Sandbox is disabled. Click to confine agent shell command writes to the project and Dustcode directories.",
   "prompt.action.sandbox.status.enabled": "Sandbox enabled",
   "prompt.action.sandbox.status.disabled": "Sandbox disabled",
   "prompt.action.sandbox.filesystem": "Filesystem",
@@ -239,7 +239,7 @@ export const dict = {
   "prompt.action.sandbox.network.blocked": "Blocked",
   "prompt.action.sandbox.network.allowed": "Allowed",
   "prompt.action.sandbox.unrestricted": "Unrestricted",
-  "prompt.action.sandbox.description.enabled": "Writes are limited to the project and Kilo directories.",
+  "prompt.action.sandbox.description.enabled": "Writes are limited to the project and Dustcode directories.",
   "prompt.action.sandbox.description.escalation":
     "Permission rules and auto-approve apply inside the sandbox. Commands that must leave it always ask.",
   "prompt.action.sandbox.description.disabled": "Click to restrict filesystem writes and network access.",
@@ -255,7 +255,7 @@ export const dict = {
   "speechToText.tooltip.transcribing": "Transcribing... Click to cancel.",
   "speechToText.tooltip.error": "Speech input failed. Click to clear.",
   "speechToText.error.title": "Speech input failed",
-  "speechToText.error.loginRequired": "Sign in to Kilo to use speech input.",
+  "speechToText.error.loginRequired": "Sign in to Kilo Gateway to use speech input.",
   "speechToText.error.emptyTranscript": "No speech was detected.",
 
   "prompt.toast.promptSendFailed.title": "Failed to send prompt",
@@ -300,7 +300,7 @@ export const dict = {
     "This runs the whole command with filesystem and network restrictions removed, for this command only. Git must write to .git, which is read-only in the sandbox and outside the worktree in a linked worktree. Bash allow rules and auto-approve never approve this prompt automatically.",
   "ui.permission.manageAutoApprove": "Manage Auto-Approve Rules",
   "ui.permission.reject": "Reject",
-  "ui.permission.feedbackPlaceholder": "Tell Kilo what to do differently",
+  "ui.permission.feedbackPlaceholder": "Tell Dustcode what to do differently",
   "ui.permission.feedbackHint": "Enter to reject, Esc to cancel",
   "ui.permission.doomLoop.prompt": "Potential loop detected for the {{tool}} tool. Continue running?",
   "ui.permission.doomLoop.rule": "Continue {{tool}} calls",
@@ -487,10 +487,10 @@ export const dict = {
   "settings.config.status.loadedLegacy": "loaded legacy config",
   "settings.config.status.notLoaded": "not loaded",
   "settings.config.status.create": "not found - create this file",
-  "settings.config.title": "Open {{scope}} Kilo config file",
+  "settings.config.title": "Open {{scope}} Dustcode config file",
   "settings.config.placeholder": "Config files are merged in order; files marked loaded currently affect settings.",
-  "settings.config.noWorkspace": "Open a workspace folder to edit the local Kilo config file.",
-  "settings.config.openFailed": "Failed to open {{scope}} Kilo config file: {{message}}",
+  "settings.config.noWorkspace": "Open a workspace folder to edit the local Dustcode config file.",
+  "settings.config.openFailed": "Failed to open {{scope}} Dustcode config file: {{message}}",
   "settings.config.source.xdg": "XDG global config",
   "settings.config.source.homeKilo": "Home .kilo config",
   "settings.config.source.homeKilocode": "Home .kilocode config",
@@ -498,7 +498,7 @@ export const dict = {
   "settings.config.source.envFile": "KILO_CONFIG environment file",
   "settings.config.source.envDir": "KILO_CONFIG_DIR",
   "settings.config.source.envContent": "Inline environment config",
-  "settings.config.source.projectKilo": "Project .kilo config",
+  "settings.config.source.projectKilo": "Project .dustcode config",
   "settings.config.source.projectRoot": "Project root config",
   "settings.config.source.projectKilocode": "Legacy .kilocode config",
   "settings.config.source.projectOpencode": "Legacy .opencode config",
@@ -549,9 +549,7 @@ export const dict = {
   "feedback.button": "Feedback & Support",
   "feedback.dialog.message": "We'd love to hear your feedback or help with any issues you're experiencing.",
   "feedback.dialog.github": "Report an issue on GitHub",
-  "feedback.dialog.discord": "Join our Discord community",
-  "feedback.dialog.support": "Customer Support",
-  "workStyle.onboarding.welcome": "Welcome to Kilo",
+  "workStyle.onboarding.welcome": "Welcome to Dustcode",
   "workStyle.onboarding.title": "Choose how you want to work",
   "workStyle.onboarding.settingsNote": "You can change these options anytime in",
   "workStyle.onboarding.settings": "Settings.",
@@ -561,7 +559,7 @@ export const dict = {
   "workStyle.choice.visibility": "Visibility",
   "workStyle.choice.human-in-the-loop.eyebrow": "Human in the Loop",
   "workStyle.choice.human-in-the-loop.title": "Review first",
-  "workStyle.choice.human-in-the-loop.description": "Kilo pauses and shows you its plan as it works.",
+  "workStyle.choice.human-in-the-loop.description": "Dustcode pauses and shows you its plan as it works.",
   "workStyle.choice.human-in-the-loop.permissions": "Asks before editing files or running commands.",
   "workStyle.choice.human-in-the-loop.bash": "Asks for permission when running all terminal commands.",
   "workStyle.choice.human-in-the-loop.visibility": "Expands reasoning, commands, and edits for review.",
@@ -582,7 +580,7 @@ export const dict = {
   "deviceAuth.toast.codeCopied": "Code copied to clipboard",
   "deviceAuth.toast.errorCopied": "Error copied to clipboard",
   "deviceAuth.status.initiating": "Starting login...",
-  "deviceAuth.title": "Sign in to Kilo Code",
+  "deviceAuth.title": "Sign in to Kilo Gateway",
   "deviceAuth.step1": "Step 1: Open this URL",
   "deviceAuth.action.copyUrl": "Copy URL",
   "deviceAuth.action.openBrowser": "Open Browser",
@@ -605,7 +603,7 @@ export const dict = {
 
   "profile.title": "Profile",
   "profile.notLoggedIn": "Not logged in",
-  "profile.action.login": "Login with Kilo Code",
+  "profile.action.login": "Login with Kilo Gateway",
   "profile.balance.title": "Balance",
   "profile.balance.refresh": "Refresh balance",
   "profile.usage.title": "Plans & usage",
@@ -681,10 +679,10 @@ export const dict = {
   "settings.indexing.projectEnable.description": "Enable indexing for this workspace when global indexing is off.",
   "settings.indexing.provider.title": "Embedding provider",
   "settings.indexing.provider.description": "Choose the provider used to generate embeddings for semantic search.",
-  "settings.indexing.kiloModel.title": "Kilo model preset",
-  "settings.indexing.kiloModel.description": "Choose a supported Kilo-hosted embedding model.",
-  "settings.indexing.kiloSignIn.title": "Kilo sign-in required",
-  "settings.indexing.kiloSignIn.description": "Sign in to Kilo to use hosted embeddings.",
+  "settings.indexing.kiloModel.title": "Kilo Gateway model preset",
+  "settings.indexing.kiloModel.description": "Choose a supported Kilo Gateway-hosted embedding model.",
+  "settings.indexing.kiloSignIn.title": "Kilo Gateway sign-in required",
+  "settings.indexing.kiloSignIn.description": "Sign in to Kilo Gateway to use hosted embeddings.",
   "settings.indexing.model.title": "Embedding model",
   "settings.indexing.model.description": "Override the default embedding model for the selected provider.",
   "settings.indexing.dimension.title": "Vector dimension",
@@ -708,11 +706,11 @@ export const dict = {
   "settings.indexing.tuning.description": "Advanced search and batching parameter.",
   "settings.experimental.title": "Experimental",
   "settings.language.title": "Language",
-  "settings.aboutKiloCode.title": "About Kilo Code",
+  "settings.aboutKiloCode.title": "About Dustcode",
 
   "session.messages.welcome":
-    "Kilo Code is an AI coding assistant. Ask it to build features, fix bugs, or explain your codebase.",
-  "session.workspaceScope.description": "Kilo chat uses only “{{folder}}”, the first folder in this workspace.",
+    "Dustcode is an AI coding assistant. Ask it to build features, fix bugs, or explain your codebase.",
+  "session.workspaceScope.description": "Dustcode chat uses only “{{folder}}”, the first folder in this workspace.",
   "session.workspaceScope.alternatives":
     "To work with another folder, open it in its own window or add it as a project in Agent Manager.",
   "session.workspaceScope.dismiss": "Dismiss workspace scope hint",
@@ -755,7 +753,7 @@ export const dict = {
   "session.costAlert.question":
     "This session just went above your {{limit}} per-session alert threshold and cost {{cost}}. Keep going?",
   "session.costAlert.stop": "Stop",
-  "sidebar.topBar.label": "Kilo Code navigation",
+  "sidebar.topBar.label": "Dustcode navigation",
   "sidebar.topBar.newTask": "New Task",
   "sidebar.topBar.history": "History",
   "sidebar.topBar.agentManager": "Agent Manager",
@@ -791,7 +789,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Considering next steps...",
 
   "dialog.model.noProviders": "No providers",
-  "dialog.model.unavailable": "Kilo models unavailable",
+  "dialog.model.unavailable": "Kilo Gateway models unavailable",
 
   "prompt.placeholder.connecting": "Connecting to server...",
   "prompt.placeholder.default": "Type a message, @ to mention files... (Enter to send, Shift+Enter for new line)",
@@ -819,7 +817,6 @@ export const dict = {
   "settings.aboutKiloCode.version.label": "Version:",
   "settings.aboutKiloCode.community": "Community & Support",
   "settings.aboutKiloCode.feedback.prefix": "If you have any questions or feedback, feel free to open an issue on",
-  "settings.aboutKiloCode.feedback.or": "or",
   "settings.aboutKiloCode.support.prefix": "For billing or account questions, contact Customer Support at",
   "settings.aboutKiloCode.resetSettings.title": "Reset Settings",
   "settings.aboutKiloCode.resetSettings.description":
@@ -832,10 +829,10 @@ export const dict = {
   "settings.aboutKiloCode.exportSettings": "Export",
   "settings.aboutKiloCode.importSettings": "Import",
   "settings.aboutKiloCode.importSettings.invalidJson": "Invalid JSON file. Please select a valid settings file.",
-  "settings.aboutKiloCode.importSettings.invalidConfig": "File does not contain valid Kilo settings.",
+  "settings.aboutKiloCode.importSettings.invalidConfig": "File does not contain valid Dustcode settings.",
   "settings.aboutKiloCode.importSettings.tooLarge": "File is too large. Settings files must be under 1 MB.",
   "settings.aboutKiloCode.importSettings.newerVersion":
-    "This file was exported from a newer version of Kilo. Some settings may be ignored.",
+    "This file was exported from a newer version of Dustcode. Some settings may be ignored.",
   "settings.aboutKiloCode.importSettings.success": "Settings imported. Review the changes above, then click Save.",
 
   "settings.aboutKiloCode.telemetry.title": "Telemetry",
@@ -850,7 +847,7 @@ export const dict = {
   "settings.agentBehaviour.subtab.skills": "Skills",
 
   "settings.browser.description":
-    "Configure built-in browser automation powered by Playwright. Kilo can navigate, interact with, and screenshot web pages in your sessions.",
+    "Configure built-in browser automation powered by Playwright. Dustcode can navigate, interact with, and screenshot web pages in your sessions.",
   "settings.browser.enable.title": "Enable Browser Automation",
   "settings.browser.enable.description": "Register the Playwright MCP server with the CLI backend.",
   "settings.browser.systemChrome.title": "Use System Chrome",
@@ -860,7 +857,7 @@ export const dict = {
   "settings.browser.headless.description": "Run in headless mode (no visible browser window).",
 
   "settings.language.description":
-    'Choose the language for the Kilo Code UI. "Auto" uses your VS Code display language.',
+    'Choose the language for the Dustcode UI. "Auto" uses your VS Code display language.',
   "settings.language.auto": "Auto (VS Code language)",
   "settings.language.current": "Current:",
 
@@ -882,10 +879,10 @@ export const dict = {
     "Play sounds when sessions complete, encounter an error, or need your input",
   "settings.notifications.workbench.title": "Enable VS Code Notifications",
   "settings.notifications.workbench.description":
-    "Show VS Code notifications when Kilo completes a task or needs your input",
+    "Show VS Code notifications when Dustcode completes a task or needs your input",
   "settings.notifications.os.title": "Enable OS Notifications",
   "settings.notifications.os.description":
-    "Show native OS notification alerts when Kilo completes a task or needs your input while VS Code is not active.",
+    "Show native OS notification alerts when Dustcode completes a task or needs your input while VS Code is not active.",
   "settings.notifications.testSound": "Test",
   "settings.notifications.testOS": "Test",
   "settings.notifications.testOS.testing": "Sending test notification…",
@@ -909,7 +906,7 @@ export const dict = {
   "settings.experimental.batch.description": "Enable batching of multiple tool calls",
   "settings.experimental.imageGeneration.title": "Image Generation",
   "settings.experimental.imageGeneration.description": "Enable AI image generation",
-  "settings.agentBehaviour.sharedAgentBoard.title": "Kilo Swarm",
+  "settings.agentBehaviour.sharedAgentBoard.title": "Dustcode Swarm",
   "settings.agentBehaviour.sharedAgentBoard.description":
     "Share a board between a main session and its task subagents, including nested subagents. Use it for parallel solution attempts or complementary work, not every task.",
   "settings.experimental.imageGenerationModel.title": "Image Model",
@@ -917,9 +914,9 @@ export const dict = {
   "settings.experimental.imageGenerationModel.placeholder": "Default (Auto Router)",
 
   "settings.models.speechToText.disabledDescription":
-    "Kilo Gateway is selected. Enable and sign in to the Kilo provider to choose a supported model, or enter a custom transcription base URL above.",
+    "Kilo Gateway is selected. Enable and sign in to the Kilo Gateway provider to choose a supported model, or enter a custom transcription base URL above.",
   "settings.models.speechToText.remoteDescription":
-    "Voice input is unavailable in remote windows. Open Kilo in a local window to use the microphone.",
+    "Voice input is unavailable in remote windows. Open Dustcode in a local window to use the microphone.",
   "settings.models.speechToTextModel.title": "Speech to Text Model",
   "settings.models.speechToTextModel.description":
     "Kilo Gateway is the active speech-to-text source. Choose its transcription model for voice input.",
@@ -932,7 +929,7 @@ export const dict = {
   "settings.models.speechToTextBaseUrl.placeholder": "https://api.openai.com/v1",
   "settings.models.speechToTextApiKey.title": "Speech to Text API Key",
   "settings.models.speechToTextApiKey.description":
-    "Bearer token sent to the custom transcription base URL. Stored in your Kilo config file.",
+    "Bearer token sent to the custom transcription base URL. Stored in your Dustcode config file.",
   "settings.models.speechToTextApiKey.placeholder": "sk-...",
   "settings.experimental.nativeNotebookTools.title": "Native Notebook Tools",
   "settings.experimental.nativeNotebookTools.description":
@@ -947,7 +944,7 @@ export const dict = {
     "Route MCP tool calls through a confined JavaScript runtime with on-demand tool discovery instead of exposing every MCP tool directly. Saves context when many MCP tools are connected.",
   "settings.sandboxing.enabled.title": "Sandbox",
   "settings.sandboxing.enabled.description":
-    "Run agent shell commands inside an OS-level sandbox that restricts writes to the project and Kilo state directories",
+    "Run agent shell commands inside an OS-level sandbox that restricts writes to the project and Dustcode state directories",
   "settings.sandboxing.title": "Sandboxing",
   "settings.sandboxing.network.title": "Restrict Network Access",
   "settings.sandboxing.network.description":
@@ -965,10 +962,10 @@ export const dict = {
   "settings.experimental.browserAutomation.systemChrome.description":
     "Use installed Google Chrome for the Integrated Browser. Disable only when a compatible Playwright Chromium browser is already installed.",
   "browserTab.noSession": "Open the browser from a session to preview a local application or public HTTPS page.",
-  "browserTab.disabled": "The Integrated Browser is disabled. Enable it in Kilo Settings > Experimental.",
+  "browserTab.disabled": "The Integrated Browser is disabled. Enable it in Dustcode Settings > Experimental.",
   "settings.experimental.browserLinks.title": "Open links in",
   "settings.experimental.browserLinks.description":
-    "Choose where web links open from Kilo chats. Requires the Integrated Browser.",
+    "Choose where web links open from Dustcode chats. Requires the Integrated Browser.",
   "settings.experimental.browserLinks.external": "System browser",
   "settings.experimental.browserLinks.integrated": "Integrated Browser",
   "settings.experimental.conversationPromptHistory.title": "Per-Conversation Prompt History",
@@ -976,7 +973,7 @@ export const dict = {
     "Keep the prompt input history (ArrowUp/ArrowDown recall) separate for each conversation instead of sharing one history across all conversations.",
   "settings.experimental.claudeMigration.title": "Claude Code Migration",
   "settings.experimental.claudeMigration.description":
-    "On the next backend start, import supported global CLAUDE.md instructions, simple skills, and disabled MCP definitions. This runs once with no automatic retry; global Claude instructions and skills are then handed off to Kilo. Claude files stay unchanged; keep them if you still use Claude Code.",
+    "On the next backend start, import supported global CLAUDE.md instructions, simple skills, and disabled MCP definitions. This runs once with no automatic retry; global Claude instructions and skills are then handed off to Dustcode. Claude files stay unchanged; keep them if you still use Claude Code.",
   "settings.experimental.mcpTimeout.title": "MCP Timeout (ms)",
   "settings.experimental.mcpTimeout.description": "Timeout for MCP server requests in milliseconds",
   "settings.experimental.remote.title": "Remote Control",
@@ -1038,7 +1035,7 @@ export const dict = {
   "settings.agentBehaviour.claudeCompat.heading": "Claude Code Compatibility",
   "settings.agentBehaviour.claudeCompat.title": "Load Claude Code Files",
   "settings.agentBehaviour.claudeCompat.description":
-    "Load CLAUDE.md instructions and skills from your Claude Code configuration directory into sessions. Enable this if you want Kilo to use your Claude Code instructions and skills. Requires restart.",
+    "Load CLAUDE.md instructions and skills from your Claude Code configuration directory into sessions. Enable this if you want Dustcode to use your Claude Code instructions and skills. Requires restart.",
   "settings.agentBehaviour.removeMcp.title": "Remove MCP server",
   "settings.agentBehaviour.removeMcp.confirm": 'Remove MCP server "{{name}}"? This will remove it from your config.',
   "settings.agentBehaviour.removeMcp.bundleConfirm":
@@ -1060,7 +1057,7 @@ export const dict = {
   "settings.agentBehaviour.editMcp.env.help": "Variables passed to the MCP server process.",
   "settings.agentBehaviour.editMcp.oauth": "OAuth",
   "settings.agentBehaviour.editMcp.oauth.help":
-    "Leave on Automatic unless the server requires a pre-registered client. A client secret is stored in your Kilo config file.",
+    "Leave on Automatic unless the server requires a pre-registered client. A client secret is stored in your Dustcode config file.",
   "settings.agentBehaviour.editMcp.oauth.mode": "Mode",
   "settings.agentBehaviour.editMcp.oauth.mode.automatic": "Automatic",
   "settings.agentBehaviour.editMcp.oauth.mode.disabled": "Disabled",
@@ -1181,7 +1178,7 @@ export const dict = {
 
   "settings.autoCleanup.enable.title": "Enable automatic session cleanup",
   "settings.autoCleanup.enable.description":
-    "Automatically delete old session history after a fixed number of days across all projects and every Kilo client on this machine, not just this window. Running sessions and sessions with a recent fork are never deleted. Deletion is permanent.",
+    "Automatically delete old session history after a fixed number of days across all projects and every Dustcode client on this machine, not just this window. Running sessions and sessions with a recent fork are never deleted. Deletion is permanent.",
   "settings.autoCleanup.defaultRetention.title": "Keep sessions for (days)",
   "settings.autoCleanup.defaultRetention.description":
     "How long session history is kept before automatic cleanup deletes it.",
@@ -1199,7 +1196,7 @@ export const dict = {
     "Deleting sessions: {{processed}}/{{total}} processed ({{deleted}} deleted, {{failed}} failed)",
   "settings.autoCleanup.runNow": "Run Cleanup Now",
   "settings.autoCleanup.runNow.confirm":
-    "Permanently delete expired sessions across all projects and every Kilo client on this machine?",
+    "Permanently delete expired sessions across all projects and every Dustcode client on this machine?",
   "settings.autoCleanup.stop": "Stop cleanup",
   "settings.autoCleanup.progress.cancelling": "Stopping session cleanup...",
   "settings.autoCleanup.lastRun.cancelled": "interrupted",
@@ -1232,7 +1229,8 @@ export const dict = {
   "settings.context.memory.storage.enable": "Enable memory to create project memory files.",
   "settings.context.memory.inspect": "Inspect",
   "chat.memory.project.disabled": "Project memory disabled",
-  "chat.memory.project.empty": "This project doesn't have any memory yet. It will start showing after you use Kilo.",
+  "chat.memory.project.empty":
+    "This project doesn't have any memory yet. It will start showing after you use Dustcode.",
   "chat.memory.command.failed": "Memory command failed",
   "chat.memory.updated": "Memory updated",
   "chat.memory.rebuild": "Memory index rebuilt",
@@ -1266,7 +1264,7 @@ export const dict = {
   "settings.display.username.title": "Username",
   "settings.display.username.description": "Custom username displayed in conversations",
   "settings.display.fontSize.title": "Font Size",
-  "settings.display.fontSize.description": "Adjust the Kilo webview UI font size independently from VS Code.",
+  "settings.display.fontSize.description": "Adjust the Dustcode webview UI font size independently from VS Code.",
   "settings.display.reasoningDisplay.title": "Reasoning Blocks",
   "settings.display.reasoningDisplay.description":
     "Choose how reasoning blocks start. Expanded shows the full text, Preview caps it to a short scrolling preview, and Headline shows only the title and streaming indicator until you open it.",
@@ -1426,7 +1424,7 @@ export const dict = {
     "Files modified in your working tree but not yet staged, plus untracked (new) files.",
   "diffViewer.source.session.label": "Session",
   "diffViewer.source.session.tooltip":
-    "Files changed by Kilo during the current session, based on per-turn snapshots. Resets when you start a new session.",
+    "Files changed by Dustcode during the current session, based on per-turn snapshots. Resets when you start a new session.",
   "diffViewer.group.session": "Session",
   "diffViewer.group.git": "Git",
   "diffViewer.notice.snapshotsDisabled":
@@ -1438,7 +1436,7 @@ export const dict = {
   "diffViewer.comment.openPR": "Open pull request",
   "diffViewer.comment.localChanges": "Local changes",
   "diffViewer.comment.prChanges": "PR changes",
-  "diffViewer.comment.sendToKilo": "Send to Kilo",
+  "diffViewer.comment.sendToKilo": "Send to Dustcode",
   "diffViewer.comment.sendToGithub": "Send to GitHub #{{number}}",
   "diffViewer.comment.chooseDestination": "Choose destination",
 

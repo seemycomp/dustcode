@@ -1,6 +1,6 @@
 import * as vscode from "vscode"
 
-const CONFIG = "kilo-code.new"
+const CONFIG = "dustcode"
 const KEY = "diff.renderMarkdown"
 
 export function getDiffMarkdownRender(): boolean {

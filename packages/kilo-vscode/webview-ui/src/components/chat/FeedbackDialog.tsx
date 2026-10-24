@@ -6,19 +6,14 @@ import { useDialog } from "@kilocode/kilo-ui/context/dialog"
 import { useVSCode } from "../../context/vscode"
 import { useLanguage } from "../../context/language"
 
-const GITHUB_ISSUES_URL = "https://github.com/Kilo-Org/kilocode/issues/new/choose"
-const DISCORD_URL = "https://kilo.ai/discord"
-const SUPPORT_URL = "https://kilo.ai/support"
+const GITHUB_ISSUES_URL = "https://github.com/seemycomp/dustcode/issues/new/choose"
 
 const KiloLogo = (): JSX.Element => {
-  const iconsBaseUri = (window as { ICONS_BASE_URI?: string }).ICONS_BASE_URI || ""
-  const isLight =
-    document.body.classList.contains("vscode-light") || document.body.classList.contains("vscode-high-contrast-light")
-  const iconFile = isLight ? "kilo-light.svg" : "kilo-dark.svg"
+  const icons = (window as { ICONS_BASE_URI?: string }).ICONS_BASE_URI || ""
 
   return (
     <div class="feedback-dialog-logo">
-      <img src={`${iconsBaseUri}/${iconFile}`} alt="Kilo Code" />
+      <img src={`${icons}/dustcode.png`} alt="Dustcode" />
     </div>
   )
 }
@@ -42,14 +37,6 @@ export const FeedbackDialog: Component = () => {
           <Button variant="primary" size="large" data-full-width="true" onClick={() => open(GITHUB_ISSUES_URL)}>
             <Icon name="github" size="small" />
             {language.t("feedback.dialog.github")}
-          </Button>
-          <Button variant="secondary" size="large" data-full-width="true" onClick={() => open(DISCORD_URL)}>
-            <Icon name="discord" size="small" />
-            {language.t("feedback.dialog.discord")}
-          </Button>
-          <Button variant="secondary" size="large" data-full-width="true" onClick={() => open(SUPPORT_URL)}>
-            <Icon name="help" size="small" />
-            {language.t("feedback.dialog.support")}
           </Button>
         </div>
         <Button variant="ghost" size="small" onClick={() => dialog.close()}>

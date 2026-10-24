@@ -2,6 +2,7 @@ import path from "path"
 import fs from "fs/promises"
 import z from "zod"
 import { Global } from "@opencode-ai/core/global"
+import { Profile } from "@opencode-ai/core/kilocode/profile"
 import { Filesystem } from "@/util/filesystem"
 
 export namespace AgentBuilder {
@@ -74,7 +75,7 @@ export namespace AgentBuilder {
   function file(ctx: Ctx, scope: Scope, id: string) {
     const root =
       scope === "global" ? Global.Path.config : ctx.worktree && ctx.worktree !== "/" ? ctx.worktree : ctx.directory
-    return path.join(root, scope === "global" ? "agent" : ".kilo/agent", `${id}.md`)
+    return path.join(root, scope === "global" ? "agent" : `${Profile.dir()}/agent`, `${id}.md`)
   }
 
   function markdown(input: Input) {

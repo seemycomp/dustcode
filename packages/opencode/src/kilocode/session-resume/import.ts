@@ -207,7 +207,7 @@ export namespace SessionResumeImport {
     // interleave the transcript with unrelated messages.
     const existing = yield* sessions.messages({ sessionID }).pipe(Effect.orDie)
     if (existing.length > 0) {
-      return yield* fail("Start a new Kilo session, then run the import again.")
+      return yield* fail("Start a new session, then run the import again.")
     }
 
     const target = yield* resolve(input)

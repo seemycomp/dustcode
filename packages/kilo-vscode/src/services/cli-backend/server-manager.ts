@@ -7,6 +7,7 @@ import * as vscode from "vscode"
 import { resolveLocalBwrapEnv, resolveTreeSitterEnv } from "./cli-resources"
 import { t } from "./i18n"
 import { ensureServerCwd, scanServerPort } from "./server-utils"
+import { environment } from "../../isolation"
 
 export interface ServerInstance {
   port: number
@@ -31,7 +32,7 @@ export function resolveIndexingEnv(folders: readonly WorkspaceFolderLike[] | und
 
 export function resolveManagedServerEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return {
-    ...env,
+    ...environment(env),
     KILO_DISABLE_CHANNEL_DB: "true",
     // VS Code does not consume the backend's file.watcher.updated events.
     KILO_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
@@ -56,22 +57,22 @@ export class ServerManager {
    * Get or start the server instance
    */
   async getServer(): Promise<ServerInstance> {
-    console.log("[Kilo New] ServerManager: 🔍 getServer called")
+    console.log("[Dustcode] ServerManager: 🔍 getServer called")
     if (this.instance) {
-      console.log("[Kilo New] ServerManager: ♻️ Returning existing instance:", { port: this.instance.port })
+      console.log("[Dustcode] ServerManager: ♻️ Returning existing instance:", { port: this.instance.port })
       return this.instance
     }
 
     if (this.startupPromise) {
-      console.log("[Kilo New] ServerManager: ⏳ Startup already in progress, waiting...")
+      console.log("[Dustcode] ServerManager: ⏳ Startup already in progress, waiting...")
       return this.startupPromise
     }
 
-    console.log("[Kilo New] ServerManager: 🚀 Starting new server instance...")
+    console.log("[Dustcode] ServerManager: 🚀 Starting new server instance...")
     this.startupPromise = this.startServer()
     try {
       this.instance = await this.startupPromise
-      console.log("[Kilo New] ServerManager: ✅ Server started successfully:", { port: this.instance.port })
+      console.log("[Dustcode] ServerManager: ✅ Server started successfully:", { port: this.instance.port })
       return this.instance
     } finally {
       this.startupPromise = null
@@ -81,8 +82,8 @@ export class ServerManager {
   private async startServer(): Promise<ServerInstance> {
     const password = crypto.randomBytes(32).toString("hex")
     const cliPath = this.getCliPath()
-    console.log("[Kilo New] ServerManager: 📍 CLI path:", cliPath)
-    console.log("[Kilo New] ServerManager: 🔐 Generated password (length):", password.length)
+    console.log("[Dustcode] ServerManager: 📍 CLI path:", cliPath)
+    console.log("[Dustcode] ServerManager: 🔐 Generated password (length):", password.length)
 
     // Verify the CLI binary exists
     if (!fs.existsSync(cliPath)) {
@@ -92,16 +93,16 @@ export class ServerManager {
     }
 
     const stat = fs.statSync(cliPath)
-    console.log("[Kilo New] ServerManager: 📄 CLI isFile:", stat.isFile())
-    console.log("[Kilo New] ServerManager: 📄 CLI mode (octal):", (stat.mode & 0o777).toString(8))
+    console.log("[Dustcode] ServerManager: 📄 CLI isFile:", stat.isFile())
+    console.log("[Dustcode] ServerManager: 📄 CLI mode (octal):", (stat.mode & 0o777).toString(8))
 
     const extraEnv = await this.env?.()
     return new Promise((resolve, reject) => {
-      console.log("[Kilo New] ServerManager: 🎬 Spawning CLI process:", cliPath, ["serve", "--port", "0"])
-      const cfg = vscode.workspace.getConfiguration("kilo-code.new")
+      console.log("[Dustcode] ServerManager: 🎬 Spawning CLI process:", cliPath, ["serve", "--port", "0"])
+      const cfg = vscode.workspace.getConfiguration("dustcode")
       const claudeCompat = cfg.get<boolean>("claudeCodeCompat", false)
       const claudeMigration = resolveClaudeMigrationEnv(
-        { ...process.env, ...(extraEnv ?? {}) },
+        { ...environment(), ...(extraEnv ?? {}) },
         cfg.get<boolean>("experimental.claudeMigration", false),
       )
       // Pin cwd so the CLI doesn't inherit the extension host's cwd ("/" under F5 debug)
@@ -113,7 +114,7 @@ export class ServerManager {
       const localCli =
         this.context.extensionMode === vscode.ExtensionMode.Development ||
         fs.existsSync(path.join(this.context.extensionPath, "bin", ".cli-version"))
-      const bwrapEnv = process.env.KILO_BWRAP_PATH ? {} : resolveLocalBwrapEnv(this.context.extensionPath, localCli)
+      const bwrapEnv = resolveLocalBwrapEnv(this.context.extensionPath, localCli)
       // TLS / corporate-proxy support:
       //   - Default NODE_USE_SYSTEM_CA=1 so the bundled Bun CLI trusts the OS
       //     trust store (Windows cert store, macOS keychain, Linux /etc/ssl).
@@ -154,8 +155,8 @@ export class ServerManager {
           KILO_ENABLE_QUESTION_TOOL: "true",
           KILOCODE_FEATURE: "vscode-extension",
           ...indexingEnv,
-          KILO_TELEMETRY_LEVEL: vscode.env.isTelemetryEnabled ? "all" : "off",
-          KILO_APP_NAME: "kilo-code",
+          KILO_TELEMETRY_LEVEL: "off",
+          KILO_APP_NAME: "dustcode",
           KILO_EDITOR_NAME: vscode.env.appName,
           KILO_PLATFORM: "vscode",
           KILO_MACHINE_ID: vscode.env.machineId,
@@ -172,7 +173,7 @@ export class ServerManager {
         stdio: ["ignore", "pipe", "pipe"],
         detached: true,
       })
-      console.log("[Kilo New] ServerManager: 📦 Process spawned with PID:", serverProcess.pid)
+      console.log("[Dustcode] ServerManager: 📦 Process spawned with PID:", serverProcess.pid)
 
       let resolved = false
       let output = ""
@@ -180,26 +181,26 @@ export class ServerManager {
 
       serverProcess.stdout?.on("data", (data: Buffer) => {
         const chunk = data.toString()
-        console.log("[Kilo New] ServerManager: 📥 CLI Server stdout:", chunk)
+        console.log("[Dustcode] ServerManager: 📥 CLI Server stdout:", chunk)
 
         const state = scanServerPort(output, chunk, STARTUP_OUTPUT_LIMIT)
         output = state.output
         const port = state.port
         if (port !== null && !resolved) {
           resolved = true
-          console.log("[Kilo New] ServerManager: 🎯 Port detected:", port)
+          console.log("[Dustcode] ServerManager: 🎯 Port detected:", port)
           resolve({ port, password, process: serverProcess })
         }
       })
 
       serverProcess.stderr?.on("data", (data: Buffer) => {
         const errorOutput = data.toString()
-        console.error("[Kilo New] ServerManager: ⚠️ CLI Server stderr:", errorOutput)
+        console.error("[Dustcode] ServerManager: ⚠️ CLI Server stderr:", errorOutput)
         stderrLines.push(errorOutput)
       })
 
       serverProcess.on("error", (err: NodeJS.ErrnoException) => {
-        console.error("[Kilo New] ServerManager: ❌ Process error:", err)
+        console.error("[Dustcode] ServerManager: ❌ Process error:", err)
         if (!resolved) {
           const spawnErr = err as NodeJS.ErrnoException & { spawnargs?: string[] }
           const code = err.code || err.name || "UNKNOWN"
@@ -218,7 +219,7 @@ export class ServerManager {
       })
 
       serverProcess.on("exit", (code, signal) => {
-        console.warn("[Kilo New] ServerManager: 🛑 Process exited:", { code, signal })
+        console.warn("[Dustcode] ServerManager: 🛑 Process exited:", { code, signal })
         if (this.instance?.process === serverProcess) {
           this.instance = null
           this.onExit?.(code, signal)
@@ -234,7 +235,7 @@ export class ServerManager {
 
       setTimeout(() => {
         if (!resolved) {
-          console.error(`[Kilo New] ServerManager: ⏰ Server startup timeout (${STARTUP_TIMEOUT_SECONDS}s)`)
+          console.error(`[Dustcode] ServerManager: ⏰ Server startup timeout (${STARTUP_TIMEOUT_SECONDS}s)`)
           ServerManager.killProcess(serverProcess)
           const { userMessage, userDetails } = toErrorMessage(
             t("server.startupTimeout", { seconds: STARTUP_TIMEOUT_SECONDS }),
@@ -251,7 +252,7 @@ export class ServerManager {
     // Always use the bundled binary from the extension directory
     const binName = process.platform === "win32" ? "kilo.exe" : "kilo"
     const cliPath = path.join(this.context.extensionPath, "bin", binName)
-    console.log("[Kilo New] ServerManager: 📦 Using CLI path:", cliPath)
+    console.log("[Dustcode] ServerManager: 📦 Using CLI path:", cliPath)
     return cliPath
   }
 
@@ -283,14 +284,14 @@ export class ServerManager {
     const proc = this.instance.process
     this.instance = null
 
-    console.log("[Kilo New] ServerManager: 🔴 Disposing — sending SIGTERM to process group, PID:", proc.pid)
+    console.log("[Dustcode] ServerManager: 🔴 Disposing — sending SIGTERM to process group, PID:", proc.pid)
     ServerManager.killProcess(proc, "SIGTERM")
 
     // SIGKILL fallback after 5s. Ensures the process tree dies even if SIGTERM is ignored
     // or Instance.disposeAll() hangs past the serve.ts shutdown timeout.
     const timer = setTimeout(() => {
       if (proc.exitCode === null) {
-        console.warn("[Kilo New] ServerManager: ⚠️ Process did not exit after SIGTERM, sending SIGKILL")
+        console.warn("[Dustcode] ServerManager: ⚠️ Process did not exit after SIGTERM, sending SIGKILL")
         ServerManager.killProcess(proc, "SIGKILL")
       }
     }, 5000)

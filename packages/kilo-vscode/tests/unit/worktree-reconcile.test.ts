@@ -35,7 +35,7 @@ async function repo(): Promise<string> {
 
 /** Add a real worktree under `.kilo/worktrees/<name>` on its own branch. */
 async function worktree(root: string, name: string): Promise<string> {
-  const target = path.join(root, ".kilo", "worktrees", name)
+  const target = path.join(root, ".dustcode", "worktrees", name)
   await fs.mkdir(path.dirname(target), { recursive: true })
   git(["git", "-C", root, "worktree", "add", "-b", name, target])
   return target

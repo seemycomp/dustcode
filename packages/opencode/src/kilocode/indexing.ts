@@ -17,6 +17,7 @@ import { Auth } from "@/auth"
 import { makeRuntime } from "@/effect/run-service"
 import { registerDisposer } from "@/effect/instance-registry"
 import { Global } from "@opencode-ai/core/global"
+import { Branding } from "@opencode-ai/core/kilocode/branding"
 import * as Log from "@opencode-ai/core/util/log"
 import { NamedError } from "@opencode-ai/core/util/error"
 import type { WorkspaceV2 } from "@opencode-ai/core/workspace"
@@ -36,7 +37,9 @@ const noWorkspace = () =>
   disabledIndexingStatus("Codebase indexing is disabled because no workspace folder is open in VS Code.")
 const unsafeRoot = () => disabledIndexingStatus(message)
 const noConsent = () =>
-  disabledIndexingStatus("Codebase indexing is disabled until you enable it for this project in Kilo Settings.")
+  disabledIndexingStatus(
+    `Codebase indexing is disabled until you enable it for this project in ${Branding.name()} Settings.`,
+  )
 
 export const IndexingModelError = NamedError.create("IndexingModelError", {
   model: Schema.String,

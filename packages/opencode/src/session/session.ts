@@ -33,6 +33,7 @@ import { SessionMessage } from "@opencode-ai/core/session/message" // kilocode_c
 import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
 import { Global } from "@opencode-ai/core/global"
+import { Profile } from "@opencode-ai/core/kilocode/profile" // kilocode_change
 // kilocode_change start - Kilo session behavior extensions
 import { BackgroundProcess } from "@/kilocode/background-process"
 import * as SandboxInheritance from "@/kilocode/sandbox/inheritance"
@@ -155,9 +156,7 @@ export function toRow(info: Info) {
     tokens_cache_read: (info.tokens ?? EmptyTokens).cache.read,
     tokens_cache_write: (info.tokens ?? EmptyTokens).cache.write,
     // kilocode_change - re-brand the v1 messageID to the shared Revert.State brand for the column
-    revert: info.revert
-      ? { ...info.revert, messageID: SessionMessage.ID.make(info.revert.messageID) }
-      : null,
+    revert: info.revert ? { ...info.revert, messageID: SessionMessage.ID.make(info.revert.messageID) } : null,
     permission: info.permission,
     time_created: info.time.created,
     time_updated: info.time.updated,
@@ -412,7 +411,7 @@ export const Event = {
 
 export function plan(input: { slug: string; time: { created: number } }, instance: InstanceContext) {
   const base = instance.project.vcs
-    ? path.join(instance.worktree, ".kilo", "plans") // kilocode_change
+    ? path.join(instance.worktree, Profile.dir(), "plans") // kilocode_change
     : path.join(Global.Path.data, "plans")
   return path.join(base, [input.time.created, input.slug].join("-") + ".md")
 }

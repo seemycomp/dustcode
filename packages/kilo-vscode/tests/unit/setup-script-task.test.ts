@@ -307,8 +307,8 @@ describe("runWorktreeSetupScript", () => {
   function root(script: boolean): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kilo-setup-flow-"))
     if (!script) return dir
-    fs.mkdirSync(path.join(dir, ".kilo"), { recursive: true })
-    fs.writeFileSync(path.join(dir, ".kilo", "setup-script"), "#!/bin/sh\nexit 0\n")
+    fs.mkdirSync(path.join(dir, ".dustcode"), { recursive: true })
+    fs.writeFileSync(path.join(dir, ".dustcode", "setup-script"), "#!/bin/sh\nexit 0\n")
     return dir
   }
 
@@ -406,7 +406,7 @@ describe("setupTaskIdentity", () => {
 
     expect(a.definition).not.toEqual(b.definition)
     expect(a.name).not.toBe(b.name)
-    expect(a.definition).toEqual({ type: "kilo-worktree-setup", script: "sh", worktree: "/repo/.kilo/worktrees/a" })
+    expect(a.definition).toEqual({ type: "dustcode-worktree-setup", script: "sh", worktree: "/repo/.kilo/worktrees/a" })
     expect(a.name).toBe("Worktree Setup (a)")
   })
 })

@@ -1,6 +1,7 @@
 import type { Command } from "@/command"
 import type { ReviewCommand } from "@kilocode/kilo-telemetry"
 import REVIEW from "./review.txt"
+import { Branding } from "@opencode-ai/core/kilocode/branding"
 
 export function isReviewCommand(command: string | undefined): command is ReviewCommand {
   return command === "review"
@@ -20,7 +21,7 @@ export function reviewCommand(): Command.Info {
   return {
     name: "review",
     description: "review changes [uncommitted|staged|unpushed|branch|commit|pr]",
-    template: REVIEW,
+    template: Branding.prompt(REVIEW),
     hints: ["$ARGUMENTS"],
   }
 }

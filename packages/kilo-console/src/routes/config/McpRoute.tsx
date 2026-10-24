@@ -41,7 +41,7 @@ export function McpRoute() {
               <CountTag>{state.rows().length}</CountTag>
             </span>
           }
-          description="Install, configure, and manage Model Context Protocol servers available to Kilo agents."
+          description="Install, configure, and manage Model Context Protocol servers available to Dustcode agents."
           actions={
             <>
               <Button icon="plus" variant="primary" disabled={Boolean(state.ctx.saving())} onClick={state.openMarket}>

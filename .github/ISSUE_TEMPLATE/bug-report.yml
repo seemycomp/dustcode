@@ -1,5 +1,5 @@
 name: Bug report
-description: Report an issue that should be fixed
+description: Report a problem with the Dustcode VS Code extension # kilocode_change
 labels: ["bug"]
 body:
   # kilocode_change start
@@ -7,16 +7,13 @@ body:
     id: component
     attributes:
       label: Component
-      description: Which part of Kilo is this about? It helps us route your report.
+      description: Which part of Dustcode is this about? This fork maintains only the VS Code extension and its bundled backend.
       options:
         - VS Code extension
-        - CLI / TUI
+        - Bundled backend
         - Agent Manager
-        - JetBrains plugin
-        - Desktop or web app
         - Documentation
-        - Kilo Gateway or account
-        - SDK
+        - Provider connection (including external Kilo Gateway)
         - Other / not sure
     validations:
       required: true
@@ -40,10 +37,12 @@ body:
       required: false
 
   - type: input
-    id: kilo-version
+    id: dustcode-version # kilocode_change
     attributes:
-      label: Kilo version
-      description: What version of Kilo are you using?
+      # kilocode_change start
+      label: Dustcode version
+      description: What version of Dustcode (dustcode.dustcode) is installed in VS Code?
+      # kilocode_change end
     validations:
       required: false
 
@@ -62,9 +61,11 @@ body:
   - type: textarea
     id: screenshot-or-link
     attributes:
-      label: Screenshot and/or share link
-      description: Run `/share` to get a share link, or attach a screenshot
-      placeholder: Paste link or drag and drop screenshot here
+      # kilocode_change start
+      label: Screenshots or logs
+      description: Attach screenshots or relevant logs. Remove credentials, tokens, and private information before submitting.
+      placeholder: Paste sanitized logs or drag and drop screenshots here
+      # kilocode_change end
     validations:
       required: false
 
@@ -78,10 +79,12 @@ body:
       required: false
 
   - type: input
-    id: terminal
+    id: vscode-version # kilocode_change
     attributes:
-      label: Terminal
-      description: what terminal are you using?
-      placeholder: e.g., iTerm2, Ghostty, Alacritty, Windows Terminal
+      # kilocode_change start
+      label: VS Code version
+      description: What version of VS Code are you using?
+      placeholder: Copy the version from Help > About
+      # kilocode_change end
     validations:
       required: false

@@ -103,7 +103,7 @@ import { createBrowserLifecycle } from "./browser-lifecycle"
 import { handleSessionLifecycle } from "./session-lifecycle"
 import { isRestrictedRoot } from "./home-workspace"
 export class AgentManagerProvider implements Disposable {
-  public static readonly viewType = "kilo-code.new.AgentManagerPanel"
+  public static readonly viewType = "dustcode.AgentManagerPanel"
   private panel: PanelContext | undefined
   private outputChannel: OutputHandle
   private readonly registry: ProjectRegistry
@@ -167,7 +167,7 @@ export class AgentManagerProvider implements Disposable {
       openPanel: () => this.openPanel(true),
       log: (...args) => this.log(...args),
     })
-    this.outputChannel = host.createOutput("Kilo Agent Manager")
+    this.outputChannel = host.createOutput("Dustcode Agent Manager")
     this.terminalManager = new SessionTerminalManager(
       (msg) => this.outputChannel.appendLine(`[SessionTerminal] ${msg}`),
       createTerminalHost(),

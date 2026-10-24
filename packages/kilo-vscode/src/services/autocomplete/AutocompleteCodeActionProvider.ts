@@ -20,8 +20,8 @@ export class AutocompleteCodeActionProvider implements vscode.CodeActionProvider
     )
     action.command = {
       command: this.pending()
-        ? "kilo-code.new.autocomplete.nextEdit.acceptOrJump"
-        : "kilo-code.new.autocomplete.generateSuggestions",
+        ? "dustcode.autocomplete.nextEdit.acceptOrJump"
+        : "dustcode.autocomplete.generateSuggestions",
       title: "",
       arguments: [document.uri, range],
     }

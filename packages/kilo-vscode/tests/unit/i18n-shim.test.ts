@@ -2,6 +2,34 @@ import { describe, it, expect } from "bun:test"
 import { resolveLocale, selectedLocale, t, translate } from "../../src/services/i18n"
 
 describe("extension host i18n", () => {
+  it("uses the Dustcode status icon in every supported locale", () => {
+    for (const locale of [
+      "ar",
+      "br",
+      "bs",
+      "da",
+      "de",
+      "en",
+      "es",
+      "fa",
+      "fr",
+      "it",
+      "ja",
+      "ko",
+      "nl",
+      "no",
+      "pl",
+      "ru",
+      "th",
+      "tr",
+      "uk",
+      "zh",
+      "zht",
+    ]) {
+      expect(translate(locale, "kilocode:autocomplete.statusBar.enabled")).toStartWith("$(dustcode-logo)")
+    }
+  })
+
   it("returns translated string for known key", () => {
     const result = t("kilocode:autocomplete.statusBar.enabled")
     expect(typeof result).toBe("string")
@@ -20,7 +48,7 @@ describe("extension host i18n", () => {
   it("interpolates a single variable", () => {
     const result = t("kilocode:autocomplete.statusBar.tooltip.noUsableProvider", {
       providers: "OpenAI, Anthropic",
-      command: "command:kilo-code.new.settingsButtonClicked",
+      command: "command:dustcode.settingsButtonClicked",
     })
     expect(result).toContain("OpenAI, Anthropic")
     expect(result).not.toContain("{{providers}}")
@@ -82,7 +110,7 @@ describe("extension host i18n", () => {
       env: { language: "en" },
       workspace: {
         getConfiguration: (section: string) => ({
-          get: () => (section === "kilo-code.new" ? "de" : undefined),
+          get: () => (section === "dustcode" ? "de" : undefined),
         }),
       },
     } as unknown as typeof import("vscode")

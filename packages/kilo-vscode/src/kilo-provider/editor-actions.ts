@@ -29,7 +29,7 @@ function openExternal(url: unknown): void {
 function openLink(url: unknown, openIntegrated?: (url: string) => boolean): void {
   if (typeof url !== "string") return
   void openBrowserLink(url, openIntegrated ? () => openIntegrated(url) : undefined).catch((err) => {
-    console.error("[Kilo New] KiloProvider: open link failed:", err)
+    console.error("[Dustcode] KiloProvider: open link failed:", err)
     void vscode.window.showErrorMessage(err instanceof Error ? err.message : String(err))
   })
 }
@@ -68,7 +68,7 @@ function previewImage(dir: vscode.Uri | undefined, dataUrl: string, filename: st
             Promise.resolve(vscode.workspace.fs.delete(vscode.Uri.joinPath(root, name), { recursive: true })).then(
               undefined,
               (err: unknown) => {
-                console.warn("[Kilo New] KiloProvider: Failed to delete stale preview:", err)
+                console.warn("[Dustcode] KiloProvider: Failed to delete stale preview:", err)
               },
             ),
           ),
@@ -85,7 +85,7 @@ function previewImage(dir: vscode.Uri | undefined, dataUrl: string, filename: st
     .createDirectory(root)
     .then(() => vscode.workspace.fs.writeFile(uri, img.data))
     .then(() => clean())
-    .then(open, (err) => console.error("[Kilo New] KiloProvider: Failed to preview image:", err))
+    .then(open, (err) => console.error("[Dustcode] KiloProvider: Failed to preview image:", err))
 }
 
 export function handleEditorAction(
@@ -138,7 +138,7 @@ export function handleEditorAction(
       // worktree during an Agent Manager session switch).
       validateFiles(opts.dir(message.sessionID), paths).then(
         (existing) => post({ type: "validateFilesResult", id, existing }),
-        (err) => console.error("[Kilo New] KiloProvider: validateFiles failed:", err),
+        (err) => console.error("[Dustcode] KiloProvider: validateFiles failed:", err),
       )
     }
     return true
@@ -165,7 +165,7 @@ export function handleEditorAction(
 function openContent(content: string, language?: string): void {
   vscode.workspace.openTextDocument({ content, language: language || "log" }).then(
     (doc) => vscode.window.showTextDocument(doc, { preview: true }),
-    (err) => console.error("[Kilo New] KiloProvider: Failed to open content:", err),
+    (err) => console.error("[Dustcode] KiloProvider: Failed to open content:", err),
   )
 }
 
@@ -180,9 +180,9 @@ function show(uri: vscode.Uri, line?: number, column?: number): void {
       }
       vscode.window
         .showTextDocument(doc, options)
-        .then(undefined, (err) => console.error("[Kilo New] KiloProvider: Failed to show document:", uri.fsPath, err))
+        .then(undefined, (err) => console.error("[Dustcode] KiloProvider: Failed to show document:", uri.fsPath, err))
     },
-    (err) => console.error("[Kilo New] KiloProvider: Failed to open file:", uri.fsPath, err),
+    (err) => console.error("[Dustcode] KiloProvider: Failed to open file:", uri.fsPath, err),
   )
 }
 
@@ -209,13 +209,13 @@ function findFallback(dir: string, filePath: string, line?: number, column?: num
           (pick) => {
             if (pick) show(pick.uri, line, column)
           },
-          (err) => console.error("[Kilo New] KiloProvider: showQuickPick failed:", err),
+          (err) => console.error("[Dustcode] KiloProvider: showQuickPick failed:", err),
         )
         return
       }
       vscode.window.showWarningMessage(`File not found: ${filePath}`)
     },
-    (err: unknown) => console.error("[Kilo New] KiloProvider: findFiles failed:", err),
+    (err: unknown) => console.error("[Dustcode] KiloProvider: findFiles failed:", err),
   )
 }
 

@@ -38,7 +38,7 @@ document.body.append(root)
 const dispose = render(
   () => (
     <VSCodeProvider>
-      <CaffeinationButton t={() => "Keep computer awake while Kilo agents work"} />
+      <CaffeinationButton t={() => "Keep computer awake while Dustcode agents work"} />
     </VSCodeProvider>
   ),
   root,
@@ -48,7 +48,7 @@ try {
   assert(messages.some((message) => message.type === "agentManager.requestCaffeination"))
   const button = root.querySelector("button")
   assert(button)
-  assert.equal(button.getAttribute("aria-label"), "Keep computer awake while Kilo agents work")
+  assert.equal(button.getAttribute("aria-label"), "Keep computer awake while Dustcode agents work")
   assert.equal(button.getAttribute("aria-pressed"), "false")
   assert.equal(button.disabled, false)
   assert.equal(button.getAttribute("data-icon"), "coffee")

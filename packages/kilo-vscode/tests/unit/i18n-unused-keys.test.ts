@@ -97,7 +97,8 @@ function scan(root: string): Promise<Usage> {
     const prefixes = new Set<string>()
     for await (const file of glob.scan({ cwd: root, absolute: true })) {
       // skip the locale dictionaries themselves — they contain every key
-      if (SKIP.some((part) => file.includes(part)) || file.includes(".test.") || file.includes(".spec.")) continue
+      const normalized = file.replaceAll("\\", "/")
+      if (SKIP.some((part) => normalized.includes(part)) || file.includes(".test.") || file.includes(".spec.")) continue
       const text = await Bun.file(file).text()
       for (const match of text.matchAll(EXACT_RE)) {
         const key = match[1]

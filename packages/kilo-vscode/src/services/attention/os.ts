@@ -50,7 +50,7 @@ export async function readAppID(root: string | undefined): Promise<string | unde
   // `appRoot` is not guaranteed to be populated on every host.
   if (!root) return undefined
   const raw = await fs.readFile(path.join(root, "product.json"), "utf8").catch((err) => {
-    console.debug("[Kilo New] could not read product.json for the notification identity", { root, err })
+    console.debug("[Dustcode] could not read product.json for the notification identity", { root, err })
     return undefined
   })
   if (!raw) return undefined
@@ -58,7 +58,7 @@ export async function readAppID(root: string | undefined): Promise<string | unde
     try {
       return JSON.parse(raw)
     } catch (err) {
-      console.debug("[Kilo New] product.json is not valid JSON", { root, err })
+      console.debug("[Dustcode] product.json is not valid JSON", { root, err })
       return undefined
     }
   })()
@@ -112,11 +112,11 @@ export function notificationCommand(
     }
   }
   if (platform === "darwin") {
-    return { cmd: "osascript", args: ["-e", `display notification "${apple(text(notice))}" with title "Kilo Code"`] }
+    return { cmd: "osascript", args: ["-e", `display notification "${apple(text(notice))}" with title "Dustcode"`] }
   }
   if (platform === "linux") {
     // Only the body is markup; the summary is taken literally.
-    return { cmd: "notify-send", args: ["--app-name=Kilo Code", "--urgency=normal", "Kilo Code", pango(text(notice))] }
+    return { cmd: "notify-send", args: ["--app-name=Dustcode", "--urgency=normal", "Dustcode", pango(text(notice))] }
   }
 }
 
@@ -159,7 +159,7 @@ export function showOSNotification(notice: AttentionNotice): void {
       await run(command).then(
         () => undefined,
         (error) => {
-          console.debug("[Kilo New] OS notification failed", { cmd: command.cmd, error })
+          console.debug("[Dustcode] OS notification failed", { cmd: command.cmd, error })
         },
       )
     })

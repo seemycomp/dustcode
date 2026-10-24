@@ -7,8 +7,8 @@
  */
 
 import * as fs from "fs"
-import * as os from "os"
 import * as path from "path"
+import { home } from "../../isolation"
 
 const DAY = 24 * 60 * 60 * 1000
 /** How long to wait before retrying an avatar that failed to download. */
@@ -50,8 +50,7 @@ export function origin(root: string): string | undefined {
 }
 
 function dir() {
-  const base = process.env.XDG_CACHE_HOME || path.join(os.homedir(), ".cache")
-  return path.join(base, "kilo", "project-avatars")
+  return path.join(home(), "cache", "project-avatars")
 }
 
 function file(name: string) {

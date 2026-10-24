@@ -10,6 +10,7 @@ import { makeGlobalNode } from "./effect/app-node"
 import { Hash } from "./util/hash"
 import { ProjectDirectories } from "./project/directories"
 import { ProjectSchema } from "./project/schema"
+import { Profile } from "./kilocode/profile" // kilocode_change
 
 export const ID = ProjectSchema.ID
 export type ID = ProjectSchema.ID
@@ -63,7 +64,8 @@ const layer = Layer.effect(
     })
 
     const cached = Effect.fnUntraced(function* (dir: string) {
-      return yield* fs.readFileString(path.join(dir, "kilo")).pipe( // kilocode_change
+      return yield* fs.readFileString(path.join(dir, Profile.enabled ? "dustcode" : "kilo")).pipe(
+        // kilocode_change
         Effect.map((value) => value.trim()),
         Effect.map((value) => (value ? ID.make(value) : undefined)),
         Effect.catch(() => Effect.succeed(undefined)),
@@ -122,7 +124,9 @@ const layer = Layer.effect(
     })
 
     const commit = Effect.fn("Project.commit")(function* (input: { store: AbsolutePath; id: ID }) {
-      yield* fs.writeFileString(path.join(input.store, "kilo"), input.id).pipe(Effect.ignore) // kilocode_change
+      yield* fs
+        .writeFileString(path.join(input.store, Profile.enabled ? "dustcode" : "kilo"), input.id)
+        .pipe(Effect.ignore) // kilocode_change
     })
 
     return Service.of({ directories, resolve, commit })

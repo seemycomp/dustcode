@@ -112,7 +112,7 @@ export interface DiffViewerProviderOptions {
  * DiffSource.
  */
 export class DiffViewerProvider implements vscode.Disposable {
-  public static readonly viewType = "kilo-code.new.DiffViewerPanel"
+  public static readonly viewType = "dustcode.DiffViewerPanel"
 
   private panel: vscode.WebviewPanel | undefined
   private ctx: PanelContext | undefined
@@ -147,7 +147,7 @@ export class DiffViewerProvider implements vscode.Disposable {
   ) {
     this.sessionIdProvider = opts.sessionIdProvider ?? (() => undefined)
     this.sessionDirectoryProvider = opts.sessionDirectoryProvider ?? (() => undefined)
-    this.output = vscode.window.createOutputChannel("Kilo Diff Panel")
+    this.output = vscode.window.createOutputChannel("Dustcode Diff Panel")
     this.prPolling = createDiffPRPolling({
       createPoller: opts.createPRPoller,
       onStatus: () => this.sendComments(),
@@ -207,7 +207,7 @@ export class DiffViewerProvider implements vscode.Disposable {
   }
 
   /**
-   * Entry point for the `kilo-code.new.showChanges` command. Composes the
+   * Entry point for the `dustcode.showChanges` command. Composes the
    * PanelContext from the arg + injected session/workspace lookups so
    * callers don't have to know about it.
    *
@@ -251,10 +251,7 @@ export class DiffViewerProvider implements vscode.Disposable {
         localResourceRoots: [this.extensionUri],
       },
     )
-    panel.iconPath = {
-      light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-light.svg"),
-      dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-dark.svg"),
-    }
+    panel.iconPath = vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "dustcode.png")
     panel.webview.html = this.getHtml(panel.webview)
     this.panel = panel
 
@@ -423,7 +420,7 @@ export class DiffViewerProvider implements vscode.Disposable {
     void this.panel.webview.postMessage({
       type: "ready",
       vscodeLanguage: vscode.env.language,
-      languageOverride: vscode.workspace.getConfiguration("kilo-code.new").get<string>("language"),
+      languageOverride: vscode.workspace.getConfiguration("dustcode").get<string>("language"),
       fontSize: getWebviewFontSize(),
       workspaceDirectory: this.ctx?.dir ?? getWorkspaceRoot(),
     })

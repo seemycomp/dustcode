@@ -6,7 +6,7 @@
 
 import * as fs from "fs"
 
-export const METADATA_FILE = "kilo-agent-manager-metadata.json"
+export const METADATA_FILE = "dustcode-agent-manager-metadata.json"
 
 /** Metadata in a slot's git directory. A claim clears it to `{}`. */
 export interface PoolMeta {

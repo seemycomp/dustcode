@@ -9,6 +9,7 @@ import {
 
 import * as ConfigPaths from "@/config/paths"
 import { Global } from "@opencode-ai/core/global"
+import { Profile } from "@opencode-ai/core/kilocode/profile" // kilocode_change
 import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { isRecord } from "@/util/record"
@@ -338,7 +339,7 @@ function patchDir(input: PatchInput) {
   if (input.global) return input.config ?? Global.Path.config
   const git = input.vcs === "git" && input.worktree !== "/"
   const root = git ? input.worktree : input.directory
-  return path.join(root, ".kilo") // kilocode_change
+  return path.join(root, Profile.dir()) // kilocode_change
 }
 
 function patchName(kind: Kind): "opencode" | "tui" {

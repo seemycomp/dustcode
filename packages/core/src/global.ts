@@ -6,6 +6,7 @@ import { Context, Effect, Layer } from "effect"
 import { Flock } from "./util/flock"
 import { markNoIndex } from "./kilocode/spotlight" // kilocode_change
 import { ensureRealDir, resolveState } from "./kilocode/global" // kilocode_change
+import { Profile } from "./kilocode/profile" // kilocode_change
 import { Flag } from "./flag/flag"
 import { makeGlobalNode } from "./effect/app-node"
 
@@ -19,17 +20,20 @@ const app = "kilo" // kilocode_change
 // which breaks every `kilo` invocation at startup (including the SDK
 // regen that runs during `bun run extension`).
 const clean = (p: string | undefined) => p?.replace(/[\r\n]+/g, "")
-const data = path.join(clean(xdgData)!, app)
-const cache = path.join(clean(xdgCache)!, app)
-const config = path.join(clean(xdgConfig)!, app)
-const preferred = path.join(clean(xdgState)!, app)
-const state = await resolveState(preferred, process.env.XDG_STATE_HOME ? undefined : path.join(data, "state"))
+const data = Profile.root ? path.join(Profile.root, "data") : path.join(clean(xdgData)!, app)
+const cache = Profile.root ? path.join(Profile.root, "cache") : path.join(clean(xdgCache)!, app)
+const config = Profile.global() ?? path.join(clean(xdgConfig)!, app)
+const preferred = Profile.root ? path.join(Profile.root, "state") : path.join(clean(xdgState)!, app)
+const state = await resolveState(
+  preferred,
+  Profile.enabled || process.env.XDG_STATE_HOME ? undefined : path.join(data, "state"),
+)
 // kilocode_change end
-const tmp = path.join(os.tmpdir(), app)
+const tmp = Profile.root ? path.join(Profile.root, "tmp") : path.join(os.tmpdir(), app) // kilocode_change
 
 const paths = {
   get home() {
-    return (process.env.KILO_TEST_HOME ?? os.homedir()).trim() // kilocode_change — defensive trim, see above
+    return (Profile.enabled ? os.homedir() : (process.env.KILO_TEST_HOME ?? os.homedir())).trim() // kilocode_change
   },
   data,
   bin: path.join(cache, "bin"),
@@ -77,7 +81,7 @@ export function make(input: Partial<Interface> = {}): Interface {
     home: Path.home,
     data: Path.data,
     cache: Path.cache,
-    config: Flag.KILO_CONFIG_DIR ?? Path.config,
+    config: Profile.enabled ? Path.config : (Flag.KILO_CONFIG_DIR ?? Path.config), // kilocode_change
     state: Path.state,
     tmp: Path.tmp,
     bin: Path.bin,

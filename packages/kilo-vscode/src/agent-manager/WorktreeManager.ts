@@ -126,7 +126,7 @@ import { KILO_DIR, LEGACY_DIR, migrateAgentManagerData, resolveGitDir } from "./
 
 const SESSION_ID_FILE = "session-id"
 const METADATA_FILE = "metadata.json"
-const GIT_METADATA_FILE = "kilo-agent-manager-metadata.json"
+const GIT_METADATA_FILE = "dustcode-agent-manager-metadata.json"
 
 export class WorktreeManager {
   private readonly root: string
@@ -1045,20 +1045,13 @@ export class WorktreeManager {
   async ensureGitExclude(): Promise<void> {
     const target = await this.excludeTarget()
     const items = [
-      [".kilo/worktrees/", "Kilo Code agent worktrees"],
-      [".kilo/agent-manager.json", "Kilo Agent Manager state"],
-      [".kilo/setup-script", "Kilo Code worktree setup script"],
-      [".kilo/setup-script.sh", "Kilo Code worktree setup script"],
-      [".kilo/setup-script.ps1", "Kilo Code worktree setup script"],
-      [".kilo/setup-script.cmd", "Kilo Code worktree setup script"],
-      [".kilo/setup-script.bat", "Kilo Code worktree setup script"],
-      [".kilocode/worktrees/", "Kilo Code legacy agent worktrees"],
-      [".kilocode/agent-manager.json", "Kilo Agent Manager legacy state"],
-      [".kilocode/setup-script", "Kilo Code legacy worktree setup script"],
-      [".kilocode/setup-script.sh", "Kilo Code legacy worktree setup script"],
-      [".kilocode/setup-script.ps1", "Kilo Code legacy worktree setup script"],
-      [".kilocode/setup-script.cmd", "Kilo Code legacy worktree setup script"],
-      [".kilocode/setup-script.bat", "Kilo Code legacy worktree setup script"],
+      [".dustcode/worktrees/", "Dustcode agent worktrees"],
+      [".dustcode/agent-manager.json", "Dustcode Agent Manager state"],
+      [".dustcode/setup-script", "Dustcode worktree setup script"],
+      [".dustcode/setup-script.sh", "Dustcode worktree setup script"],
+      [".dustcode/setup-script.ps1", "Dustcode worktree setup script"],
+      [".dustcode/setup-script.cmd", "Dustcode worktree setup script"],
+      [".dustcode/setup-script.bat", "Dustcode worktree setup script"],
     ] as const
 
     for (const [entry, comment] of items) {

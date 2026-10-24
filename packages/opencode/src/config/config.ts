@@ -6,6 +6,7 @@ import { pathToFileURL } from "url"
 import os from "os"
 import { mergeDeep } from "remeda"
 import { Global } from "@opencode-ai/core/global"
+import { Profile } from "@opencode-ai/core/kilocode/profile" // kilocode_change
 import fsNode from "fs/promises"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { notices } from "@opencode-ai/core/kilocode/fff" // kilocode_change
@@ -205,7 +206,7 @@ export const use = serviceUse(Service)
 
 function globalConfigFile() {
   // kilocode_change start
-  const candidates = ["kilo.jsonc", "kilo.json", "opencode.jsonc", "opencode.json", "config.json"].map((file) =>
+  const candidates = [...KilocodeConfig.ALL_CONFIG_FILES, ...(Profile.enabled ? [] : ["config.json"])].map((file) =>
     // kilocode_change end
     path.join(Global.Path.config, file),
   )
@@ -429,7 +430,7 @@ const layer = Layer.effect(
     ) {
       // kilocode_change start
       yield* Effect.promise(() => KilocodeConfig.migrateBashPermission())
-      if (Flag.KILO_EXPERIMENTAL_CLAUDE_MIGRATION && !ClaudeMigration.unsupportedContext()) {
+      if (!Profile.enabled && Flag.KILO_EXPERIMENTAL_CLAUDE_MIGRATION && !ClaudeMigration.unsupportedContext()) {
         yield* flock
           .withLock(
             Effect.promise(() => ClaudeMigration.run({ enabled: true })),
@@ -446,6 +447,24 @@ const layer = Layer.effect(
       globalStamp = yield* KilocodeGlobalConfigStamp.read(fs, Global.Path.config)
       // kilocode_change end
       let result: Info = {}
+      // kilocode_change start - fork profiles only consume their isolated config files
+      if (Profile.enabled) {
+        const file = globalConfigFile()
+        if (!existsSync(file)) {
+          yield* fs
+            .writeWithDirs(file, JSON.stringify({ $schema: "https://app.kilo.ai/config.json" }, null, 2))
+            .pipe(Effect.catch(() => Effect.void))
+        }
+        for (const name of Profile.files()) {
+          result = mergeConfig(
+            result,
+            yield* loadFile(path.join(Global.Path.config, name), env, true, undefined, configWarnings),
+          )
+        }
+        globalStamp = yield* KilocodeGlobalConfigStamp.read(fs, Global.Path.config)
+        return result
+      }
+      // kilocode_change end
       // Seed the default global config with the schema for editor completion, but avoid writing when the user
       // explicitly routes config through env-provided paths or content.
       if (!Flag.KILO_CONFIG && !Flag.KILO_CONFIG_DIR && !Flag.KILO_CONFIG_CONTENT) {
@@ -763,7 +782,9 @@ const layer = Layer.effect(
 
         yield* merge(Global.Path.config, global, "global")
 
-        if (Flag.KILO_CONFIG) {
+        // kilocode_change start
+        if (!Profile.enabled && Flag.KILO_CONFIG) {
+          // kilocode_change end
           // kilocode_change start - capture KILO_CONFIG failures as warnings
           yield* merge(
             Flag.KILO_CONFIG,
@@ -809,7 +830,7 @@ const layer = Layer.effect(
         const directories = yield* ConfigPaths.directories(ctx.directory, ctx.worktree)
         const primary = Flag.KILO_DISABLE_PROJECT_CONFIG
           ? []
-          : yield* primaryPaths(ctx.directory, ctx.worktree, [".kilocode", ".kilo"])
+          : yield* primaryPaths(ctx.directory, ctx.worktree, Profile.dirs())
         // Load primary fallbacks before active-worktree config, then track them as local.
         directories.splice(1, 0, ...primary)
         const primarySet = new Set(primary)
@@ -973,7 +994,7 @@ const layer = Layer.effect(
 
         const managedDir = ConfigManaged.managedConfigDir()
         // kilocode_change start - include kilo.json/kilo.jsonc in managed dir loading
-        if (existsSync(managedDir)) {
+        if (managedDir && existsSync(managedDir)) {
           for (const file of KilocodeConfig.ALL_CONFIG_FILES) {
             const source = path.join(managedDir, file)
             // kilocode_change - MDM/enterprise-managed config is a trusted source

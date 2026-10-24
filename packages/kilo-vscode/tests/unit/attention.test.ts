@@ -173,11 +173,11 @@ describe("AttentionService", () => {
     test.service.dispose()
   })
 
-  it("shows a VS Code notification when input is needed and Kilo is hidden", () => {
+  it("shows a VS Code notification when input is needed and Dustcode is hidden", () => {
     const test = setup({ notifications: true, capture: false })
     test.event(event({ type: "question.asked", properties: { id: "q1", sessionID: "s1" } }))
 
-    expect(test.messages).toEqual([{ message: "Kilo needs your input.", style: "info" }])
+    expect(test.messages).toEqual([{ message: "Dustcode needs your input.", style: "info" }])
     test.service.dispose()
     test.restore()
   })
@@ -192,7 +192,7 @@ describe("AttentionService", () => {
     await Bun.sleep(0)
 
     expect(test.messages).toEqual([
-      { message: "Kilo needs your input. Workspace: kilo-vscode | Session: Add notifications", style: "info" },
+      { message: "Dustcode needs your input. Workspace: kilo-vscode | Session: Add notifications", style: "info" },
     ])
     test.service.dispose()
     test.restore()
@@ -205,8 +205,8 @@ describe("AttentionService", () => {
     test.event(event({ type: "permission.asked", properties: { id: "p1", sessionID: "s1" } }))
 
     expect(test.messages).toEqual([
-      { message: "Kilo task completed.", style: "info" },
-      { message: "Kilo needs permission.", style: "warning" },
+      { message: "Dustcode task completed.", style: "info" },
+      { message: "Dustcode needs permission.", style: "warning" },
     ])
     test.service.dispose()
     test.restore()
@@ -228,10 +228,10 @@ describe("AttentionService", () => {
     // The OS toast is a transient, informational ping; the VS Code notification
     // persists as an actionable "Show" entry for when the user returns.
     expect(alerts).toEqual([
-      { message: "Kilo needs your input.", workspace: "kilo-vscode", session: "Add notifications" },
+      { message: "Dustcode needs your input.", workspace: "kilo-vscode", session: "Add notifications" },
     ])
     expect(test.messages).toEqual([
-      { message: "Kilo needs your input. Workspace: kilo-vscode | Session: Add notifications", style: "info" },
+      { message: "Dustcode needs your input. Workspace: kilo-vscode | Session: Add notifications", style: "info" },
     ])
     test.service.dispose()
     test.restore()
@@ -241,7 +241,7 @@ describe("AttentionService", () => {
     const test = setup({ notifications: true, osNotifications: true, focused: false, capture: false })
     test.event(event({ type: "question.asked", properties: { id: "q1", sessionID: "s1" } }))
 
-    expect(test.messages).toEqual([{ message: "Kilo needs your input.", style: "info" }])
+    expect(test.messages).toEqual([{ message: "Dustcode needs your input.", style: "info" }])
     test.service.dispose()
     test.restore()
   })
@@ -284,13 +284,13 @@ describe("AttentionService", () => {
 
     expect(alerts).toEqual([])
     expect(test.messages).toEqual([
-      { message: "Kilo needs your input. Workspace: kilo-vscode | Session: Add notifications", style: "info" },
+      { message: "Dustcode needs your input. Workspace: kilo-vscode | Session: Add notifications", style: "info" },
     ])
     test.service.dispose()
     test.restore()
   })
 
-  it("focuses Kilo when the notification action is selected", async () => {
+  it("focuses Dustcode when the notification action is selected", async () => {
     const ids: string[] = []
     const test = setup({
       notifications: true,
@@ -306,7 +306,7 @@ describe("AttentionService", () => {
     test.restore()
   })
 
-  it("suppresses VS Code notifications while Kilo is visible", () => {
+  it("suppresses VS Code notifications while Dustcode is visible", () => {
     const test = setup({ notifications: true, visible: true, capture: false })
     test.event(event({ type: "permission.asked", properties: { id: "p1", sessionID: "s1" } }))
 
@@ -315,12 +315,12 @@ describe("AttentionService", () => {
     test.restore()
   })
 
-  it("notifies when a different Kilo session is visible", () => {
+  it("notifies when a different Dustcode session is visible", () => {
     const test = setup({ notifications: true, visible: (sessionID) => sessionID === "s2", capture: false })
     test.event(event({ type: "question.asked", properties: { id: "q1", sessionID: "s1" } }))
     test.event(event({ type: "question.asked", properties: { id: "q2", sessionID: "s2" } }))
 
-    expect(test.messages).toEqual([{ message: "Kilo needs your input.", style: "info" }])
+    expect(test.messages).toEqual([{ message: "Dustcode needs your input.", style: "info" }])
     test.service.dispose()
     test.restore()
   })
@@ -373,7 +373,7 @@ describe("AttentionService", () => {
     expect(test.messages).toEqual([])
     test.event(event({ type: "session.turn.close", properties: { sessionID: "s1", reason: "interrupted" } }))
 
-    expect(test.messages).toEqual([{ message: "Kilo task stopped due to an error.", style: "error" }])
+    expect(test.messages).toEqual([{ message: "Dustcode task stopped due to an error.", style: "error" }])
     test.service.dispose()
     test.restore()
   })
@@ -388,7 +388,7 @@ describe("AttentionService", () => {
     test.event(event({ type: "session.status", properties: { sessionID: "s1", status: { type: "retry" } } }))
     test.event(event({ type: "session.turn.close", properties: { sessionID: "s1", reason: "completed" } }))
 
-    expect(test.messages).toEqual([{ message: "Kilo task completed.", style: "info" }])
+    expect(test.messages).toEqual([{ message: "Dustcode task completed.", style: "info" }])
     test.service.dispose()
     test.restore()
   })
@@ -450,14 +450,14 @@ describe("attention defaults", () => {
     }
     const properties = manifest.contributes.configuration.properties
 
-    expect(properties["kilo-code.new.attention.enabled"]?.default).toBe(false)
-    expect(properties["kilo-code.new.attention.notifications"]?.default).toBe(false)
-    expect(properties["kilo-code.new.attention.OSNotifications"]?.default).toBe(false)
-    expect(properties["kilo-code.new.attention.sound"]?.default).toBe("default")
-    expect(properties["kilo-code.new.attention.sound"]?.enum).toEqual(["default", "system", ...CustomSoundIDs])
-    expect(properties["kilo-code.new.sounds.agentEnabled"]).toBeUndefined()
-    expect(properties["kilo-code.new.sounds.permissionsEnabled"]).toBeUndefined()
-    expect(properties["kilo-code.new.sounds.errorsEnabled"]).toBeUndefined()
+    expect(properties["dustcode.attention.enabled"]?.default).toBe(false)
+    expect(properties["dustcode.attention.notifications"]?.default).toBe(false)
+    expect(properties["dustcode.attention.OSNotifications"]?.default).toBe(false)
+    expect(properties["dustcode.attention.sound"]?.default).toBe("default")
+    expect(properties["dustcode.attention.sound"]?.enum).toEqual(["default", "system", ...CustomSoundIDs])
+    expect(properties["dustcode.sounds.agentEnabled"]).toBeUndefined()
+    expect(properties["dustcode.sounds.permissionsEnabled"]).toBeUndefined()
+    expect(properties["dustcode.sounds.errorsEnabled"]).toBeUndefined()
   })
 
   it("resolves global sound choices safely", () => {
