@@ -771,6 +771,35 @@ function CustomProviderDialogMount(props: { existing?: Parameters<typeof CustomP
   return null
 }
 
+export const CustomProviderEfforts: Story = {
+  render: () => {
+    const saved = localStorage.getItem("storybook-custom-efforts")
+    const config = saved
+      ? JSON.parse(saved)
+      : {
+          npm: "@ai-sdk/openai-compatible",
+          options: { baseURL: "https://example.test/v1" },
+          models: {
+            "gpt-6.1-sol": {
+              name: "GPT 6.1 Sol",
+              reasoning: true,
+              variants: {
+                low: { reasoningEffort: "low" },
+                medium: { reasoningEffort: "medium" },
+                high: { reasoningEffort: "high", custom: 42 },
+              },
+            },
+            other: { name: "Other", reasoning: true, variants: { custom: { thinking: { type: "adaptive" } } } },
+          },
+        }
+    return (
+      <StoryProviders>
+        <CustomProviderDialogMount existing={{ providerID: "custom", name: "Custom", config }} />
+      </StoryProviders>
+    )
+  },
+}
+
 export const CustomProviderCreateDialog: Story = {
   name: "Custom Provider — create dialog",
   render: () => (

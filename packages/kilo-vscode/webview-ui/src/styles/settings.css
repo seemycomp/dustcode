@@ -5,6 +5,25 @@
   align-items: start;
 }
 
+.custom-provider-efforts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: var(--kilo-font-size-13);
+}
+
+.custom-provider-efforts p {
+  margin: 0;
+  color: var(--text-weak-base);
+  font-size: var(--kilo-font-size-12);
+}
+
+.custom-provider-efforts-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 @container (min-width: 1050px) {
   .settings-display {
     grid-template-columns: minmax(320px, 1fr) minmax(360px, 1fr);

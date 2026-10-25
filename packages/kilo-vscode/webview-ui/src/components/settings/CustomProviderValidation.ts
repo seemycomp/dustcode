@@ -1,5 +1,6 @@
 import type { CustomProviderPackage } from "../../../../src/shared/provider-model"
 import type { Modalities, ModelEntry, VariantEntry } from "./CustomProviderModelCard"
+import { efforts } from "./custom-provider-efforts"
 
 type Translator = (key: string, params?: Record<string, string>) => string
 
@@ -139,8 +140,9 @@ function modalities(m: ModelEntry): Modalities | undefined {
   }
 }
 
-function serializeModel(m: ModelEntry): [string, Record<string, unknown>] {
-  const ventries = m.reasoning ? m.variants.filter((v) => v.name.trim()).map(serializeVariant) : []
+function serializeModel(m: ModelEntry, npm: CustomProviderPackage): [string, Record<string, unknown>] {
+  const variants = m.preset && m.reasoning ? efforts(m, npm) : m.variants
+  const ventries = variants.filter((v) => v.name.trim()).map(serializeVariant)
   const entry: Record<string, unknown> = { name: m.name.trim() }
   const modes = modalities(m)
   if (m.reasoning) entry.reasoning = true
@@ -223,7 +225,7 @@ export function validateCustomProvider(input: ValidateArgs): ValidateResult {
         name,
         ...resolveEnv(rawEnv, savedEnv),
         options,
-        models: Object.fromEntries(input.form.models.map(serializeModel)),
+        models: Object.fromEntries(input.form.models.map((m) => serializeModel(m, input.form.npm))),
       },
     },
   }

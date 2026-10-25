@@ -31,6 +31,41 @@ function args(form: FormState) {
 }
 
 describe("validateCustomProvider – variant name validation", () => {
+  it("saves the four presets only for a model whose reasoning was edited", () => {
+    const form = base()
+    const untouched = { ...form.models[0]!, id: "other", reasoning: true }
+    form.models[0]!.reasoning = true
+    form.models[0]!.preset = true
+    form.models.push(untouched)
+    expect(validateCustomProvider(args(form)).result?.config.models).toEqual({
+      "model-1": {
+        name: "Model One",
+        reasoning: true,
+        variants: {
+          low: { reasoningEffort: "low" },
+          medium: { reasoningEffort: "medium" },
+          high: { reasoningEffort: "high" },
+          xhigh: { reasoningEffort: "xhigh" },
+        },
+      },
+      other: { name: "Model One", reasoning: true },
+    })
+    form.npm = "@ai-sdk/anthropic"
+    expect(validateCustomProvider(args(form)).result?.config.models["model-1"]).toEqual({
+      name: "Model One",
+      reasoning: true,
+    })
+  })
+
+  it("keeps configured variants when reasoning is turned off", () => {
+    const form = base()
+    const raw = { reasoningEffort: "xhigh", include: ["custom"], disabled: true }
+    form.models[0]!.variants = [{ name: "xhigh", raw } as never]
+    expect(validateCustomProvider(args(form)).result?.config.models["model-1"]).toEqual({
+      name: "Model One",
+      variants: { xhigh: raw },
+    })
+  })
   it("persists the selected provider package", () => {
     const form = base()
     form.npm = "@ai-sdk/openai"

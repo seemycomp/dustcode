@@ -14,11 +14,13 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const providers = yield* Provider.use.list()
-      const model = providers[ProviderV2.ID.make("custom")]?.models["qwen-custom"]
+      const model = providers[ProviderV2.ID.make("custom")]?.models["gpt-6.1-sol"]
 
-      expect(Object.keys(model?.variants ?? {})).toEqual(["custom"])
+      expect(Object.keys(model?.variants ?? {})).toEqual(["custom", "xhigh"])
       expect(model?.variants?.high).toBeUndefined()
       expect(model?.variants?.custom).toEqual({ reasoningEffort: "custom" })
+      expect(model?.variants?.xhigh).toEqual({ reasoningEffort: "xhigh" })
+      expect(providers[ProviderV2.ID.make("custom")]?.models["empty"]?.variants).toEqual({})
     }),
   {
     config: {
@@ -28,13 +30,25 @@ it.instance(
           npm: "@ai-sdk/openai-compatible",
           options: { apiKey: "test" },
           models: {
-            "qwen-custom": {
-              name: "Qwen Custom",
+            empty: {
+              name: "Empty selection",
+              reasoning: true,
+              limit: { context: 128_000, output: 16_000 },
+              variants: {
+                low: { disabled: true },
+                medium: { disabled: true },
+                high: { disabled: true },
+                xhigh: { disabled: true },
+              },
+            },
+            "gpt-6.1-sol": {
+              name: "GPT 6.1 Sol",
               reasoning: true,
               limit: { context: 128_000, output: 16_000 },
               variants: {
                 high: { disabled: true },
                 custom: { reasoningEffort: "custom" },
+                xhigh: { reasoningEffort: "xhigh" },
               },
             },
           },

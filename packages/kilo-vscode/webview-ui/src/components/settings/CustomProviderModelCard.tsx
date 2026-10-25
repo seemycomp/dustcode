@@ -1,6 +1,10 @@
 import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { TextField } from "@kilocode/kilo-ui/text-field"
-import { Show } from "solid-js"
+import { Checkbox } from "@kilocode/kilo-ui/checkbox"
+import { Button } from "@kilocode/kilo-ui/button"
+import { For, Show } from "solid-js"
+import type { CustomProviderPackage } from "../../../../src/shared/provider-model"
+import { efforts, PRESETS } from "./custom-provider-efforts"
 import { useLanguage } from "../../context/language"
 
 export type Translator = ReturnType<typeof useLanguage>["t"]
@@ -37,6 +41,8 @@ export type ModelEntry = {
   supportsImages: boolean
   modalities: Modalities
   variants: VariantEntry[]
+  explicit?: boolean
+  preset?: boolean
 }
 
 type ModelCardProps = {
@@ -44,6 +50,9 @@ type ModelCardProps = {
   errors: { id?: string; name?: string; variants?: Array<{ name?: string }> }
   t: Translator
   canRemove: boolean
+  npm: CustomProviderPackage
+  onEffort: (name: (typeof PRESETS)[number], checked: boolean) => void
+  onApply: () => void
   onChangeId: (val: string) => void
   onChangeName: (val: string) => void
   onChangeReasoning: (val: boolean) => void
@@ -137,6 +146,29 @@ export function ModelCard(props: ModelCardProps) {
         </label>
       </div>
 
+      <Show when={props.m.reasoning && props.npm !== "@ai-sdk/anthropic"}>
+        <div class="custom-provider-efforts">
+          <span>{props.t("prompt.thinking.tooltip")}</span>
+          <p>{props.t("provider.custom.models.efforts.description")}</p>
+          <Show when={!props.m.explicit && !props.m.variants.length && !props.m.preset}>
+            <Button type="button" size="small" variant="secondary" onClick={props.onApply}>
+              {props.t("provider.custom.models.efforts.apply")}
+            </Button>
+          </Show>
+          <div class="custom-provider-efforts-options">
+            <For each={PRESETS}>
+              {(name) => (
+                <Checkbox
+                  checked={efforts(props.m, props.npm).some((v) => v.name === name && v.raw?.disabled !== true)}
+                  onChange={(checked) => props.onEffort(name, checked)}
+                >
+                  {props.t(name === "xhigh" ? "prompt.thinking.extraHigh" : `prompt.thinking.${name}`)}
+                </Checkbox>
+              )}
+            </For>
+          </div>
+        </div>
+      </Show>
       <Show when={issue()}>
         {(error) => (
           <span

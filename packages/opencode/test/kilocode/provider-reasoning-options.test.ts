@@ -3,6 +3,8 @@ import { ProviderTransform } from "../../src/provider/transform"
 import { Provider } from "../../src/provider/provider"
 import { customProviderVariants } from "../../src/kilocode/provider/provider"
 import type * as ModelsDev from "@opencode-ai/core/models-dev"
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
+import { generateText } from "ai"
 
 function mockModel(overrides: Partial<any> = {}): any {
   return {
@@ -141,6 +143,39 @@ describe("ProviderTransform.reasoningVariants - models.dev reasoning_options", (
 })
 
 describe("custom provider fallback reasoning efforts", () => {
+  test("configured Sol xhigh reaches the real compatible adapter request", async () => {
+    const npm = "@ai-sdk/openai-compatible"
+    const model = mockModel({
+      id: "gpt-6.1-sol",
+      api: { id: "gpt-6.1-sol", url: "https://example.test/v1", npm },
+      variants: { xhigh: { reasoningEffort: "xhigh" } },
+    })
+    const variants = customProviderVariants(model, npm, ProviderTransform.variants)
+    expect(variants.xhigh).toEqual({ reasoningEffort: "xhigh" })
+    const bodies: Record<string, unknown>[] = []
+    const provider = createOpenAICompatible({
+      name: model.providerID,
+      baseURL: model.api.url,
+      fetch: async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)))
+        return Response.json({
+          id: "test",
+          object: "chat.completion",
+          created: 0,
+          model: model.id,
+          choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        })
+      },
+    })
+    await generateText({
+      model: provider(model.id),
+      prompt: "test",
+      providerOptions: ProviderTransform.providerOptions(model, variants.xhigh),
+    })
+    expect(bodies.at(0)?.reasoning_effort).toBe("xhigh")
+  })
+
   const efforts = ["none", "low", "medium", "high", "xhigh", "max"]
 
   for (const npm of ["@ai-sdk/openai-compatible", "@ai-sdk/openai", "@ai-sdk/anthropic"]) {

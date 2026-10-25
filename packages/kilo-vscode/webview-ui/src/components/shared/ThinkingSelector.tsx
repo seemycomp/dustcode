@@ -68,6 +68,7 @@ export const ThinkingSelectorBase: Component<ThinkingSelectorBaseProps> = (props
 
   function display(value: string | undefined) {
     if (!value) return clearLabel()
+    if (value === "xhigh") return language.t("prompt.thinking.extraHigh")
     return value.charAt(0).toUpperCase() + value.slice(1)
   }
 

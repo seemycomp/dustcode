@@ -11,6 +11,7 @@ import { SessionContext } from "../context/session"
 import type { EnrichedModel } from "../context/provider"
 import type { ModelSelection } from "../types/messages"
 import { Markdown } from "@kilocode/kilo-ui/markdown"
+import { ThinkingSelectorBase } from "../components/shared/ThinkingSelector"
 
 const meta: Meta = {
   title: "Shared",
@@ -18,6 +19,27 @@ const meta: Meta = {
 }
 export default meta
 type Story = StoryObj
+
+export const ReasoningEfforts: Story = {
+  render: () => {
+    const [value, select] = createSignal<string>()
+    return (
+      <StoryProviders>
+        <ThinkingSelectorBase
+          variants={["low", "medium", "high", "xhigh", "custom"]}
+          value={value()}
+          onSelect={select}
+          onClear={() => select(undefined)}
+          allowClear
+          clearLabel="Default"
+          label="Reasoning effort"
+          placement="bottom-start"
+        />
+        <output aria-label="Selected variant">{value() ?? "unset"}</output>
+      </StoryProviders>
+    )
+  },
+}
 
 export const MarkdownMermaid: Story = {
   name: "Markdown - Mermaid diagram",

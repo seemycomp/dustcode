@@ -197,6 +197,13 @@ export const dict = {
   "prompt.worktrees.title": "Worktrees",
   "prompt.worktrees.search": "Search worktrees",
   "prompt.thinking.tooltip": "Reasoning effort",
+  "prompt.thinking.extraHigh": "Extra High",
+  "provider.custom.models.efforts.apply": "Apply suggested efforts",
+  "prompt.thinking.low": "Low",
+  "prompt.thinking.medium": "Medium",
+  "prompt.thinking.high": "High",
+  "provider.custom.models.efforts.description":
+    "Choose the efforts this model supports. Apply suggested efforts for an unconfigured model, then submit to save. This does not change the selected effort.",
   "prompt.shortcutHint.addSelection": "to add the selection",
   "prompt.shortcutHint.waiting": "to answer a waiting session",
   "prompt.shortcutHint.type": "to type",

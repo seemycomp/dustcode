@@ -23,6 +23,7 @@ import {
   type CustomProviderPackage,
 } from "../../../../src/shared/provider-model"
 import { ModelCard } from "./CustomProviderModelCard"
+import { efforts, toggle } from "./custom-provider-efforts"
 import type {
   ChatTemplateArgsValue,
   EnableThinkingValue,
@@ -123,6 +124,7 @@ function initModels(cfg: ProviderConfig | undefined): ModelEntry[] {
       supportsImages: input.includes("image"),
       modalities,
       variants: Object.entries(raw.variants ?? {}).map(parseVariant),
+      explicit: raw.variants !== undefined,
     }
   })
 }
@@ -463,7 +465,16 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
   function toggleAllReasoning() {
     const all = form.models.length > 0 && form.models.every((m) => m.reasoning)
     const target = !all
-    form.models.forEach((_, i) => setForm("models", i, "reasoning", target))
+    form.models.forEach((_, i) => reasoning(i, target))
+  }
+
+  function reasoning(index: number, value: boolean) {
+    const model = form.models.at(index)
+    if (!model) return
+    if (value && !model.explicit && !model.variants.length) {
+      setForm("models", index, "preset", true)
+    }
+    setForm("models", index, "reasoning", value)
   }
 
   function toggleAllImages() {
@@ -736,9 +747,15 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
                   errors={errors.models[i()] ?? {}}
                   t={language.t}
                   canRemove={form.models.length > 1}
+                  npm={form.npm}
+                  onApply={() => setForm("models", i(), "preset", true)}
+                  onEffort={(name, checked) => {
+                    setForm("models", i(), "variants", toggle(efforts(m, form.npm), name, checked))
+                    setForm("models", i(), "explicit", true)
+                  }}
                   onChangeId={(v) => setForm("models", i(), "id", v)}
                   onChangeName={(v) => setForm("models", i(), "name", v)}
-                  onChangeReasoning={(v) => setForm("models", i(), "reasoning", v)}
+                  onChangeReasoning={(v) => reasoning(i(), v)}
                   onChangeSupportsImages={(v) => setForm("models", i(), "supportsImages", v)}
                   onRemove={() => removeModel(i())}
                 />
