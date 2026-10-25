@@ -25,11 +25,13 @@ import { focusDiff, pageDiff } from "../diff-viewer/review-scroll"
 import { SendAllButton } from "../diff-viewer/SendAllButton"
 import { createReviewSurface } from "../diff-viewer/review-surface"
 import type { PRDiffSnapshot, PRTarget } from "../../src/shared/pr-comment-actions"
+import { createRevertConfirmation } from "../diff-viewer/confirm-revert"
 
 // --- Data model ---
 
 interface DiffPanelProps extends ReviewViewProps {
   loading: boolean
+  revision?: string
   sessionId?: string
   /** Well-known source notice kind (e.g. "snapshots-disabled"), shown as a banner. */
   notice?: string
@@ -52,6 +54,7 @@ interface DiffPanelProps extends ReviewViewProps {
 }
 
 export const DiffPanel: Component<DiffPanelProps> = (props) => {
+  const revert = createRevertConfirmation(props)
   let rootRef: HTMLDivElement | undefined
   const {
     t,
@@ -225,7 +228,7 @@ export const DiffPanel: Component<DiffPanelProps> = (props) => {
                       onGutterUtilityClick={(result) => handleGutterClick(diff.file, result)}
                       onOpenFile={props.onOpenFile}
                       onOpenDocument={props.onOpenDocument}
-                      onRevertFile={props.canRevert !== false ? props.onRevertFile : undefined}
+                      onRevertFile={props.canRevert !== false && props.onRevertFile ? revert : undefined}
                       reverting={() => props.revertingFiles?.has(diff.file) ?? false}
                       onMarkdownRenderChange={props.onMarkdownRenderChange}
                       canComment={() => true}

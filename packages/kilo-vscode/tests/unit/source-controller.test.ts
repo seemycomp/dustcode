@@ -315,6 +315,108 @@ describe("SourceController.stop", () => {
 })
 
 describe("SourceController.revertFile", () => {
+  it("never authorizes a source whose comparison fetch failed", async () => {
+    const files: string[] = []
+    const { controller, posted } = make({
+      workspace: {
+        descriptor: WORKSPACE_DESC,
+        async fetch() {
+          throw new Error("comparison unavailable")
+        },
+        async revert(file) {
+          files.push(file)
+          return { ok: true, message: "Reverted" }
+        },
+      },
+    })
+    controller.setContext({ workspaceRoot: "/repo" })
+    await controller.activate("workspace", { poll: false })
+    const revision = byType(posted, "setAvailableSources").at(-1)!.revision as string
+    await controller.revertFile("a.ts", { revision, requestId: "failed-comparison" })
+    expect(files).toEqual([])
+    expect(byType(posted, "diffViewer.ready")).toEqual([])
+    expect(byType(posted, "diffViewer.revertFileResult").at(-1)!.status).toBe("error")
+    controller.stop()
+  })
+  it("refuses a new source revision before its first successful fetch", async () => {
+    const wait = Promise.withResolvers<DiffSourceFetch>()
+    const files: string[] = []
+    const { controller, posted } = make({
+      workspace: {
+        descriptor: WORKSPACE_DESC,
+        fetch: () => wait.promise,
+        async revert(file) {
+          files.push(file)
+          return { ok: true, message: "Reverted" }
+        },
+      },
+    })
+    controller.setContext({ workspaceRoot: "/repo" })
+    const activation = controller.activate("workspace", { poll: false })
+    const revision = byType(posted, "setAvailableSources").at(-1)!.revision as string
+    await controller.revertFile("a.ts", { revision, requestId: "early" })
+    expect(files).toEqual([])
+    wait.resolve({ diffs: [] })
+    await activation
+    await controller.revertFile("a.ts", { revision, requestId: "ready" })
+    expect(files).toEqual(["a.ts"])
+    controller.stop()
+  })
+  it("rejects old revisions after reactivation without invoking the source", async () => {
+    const files: string[] = []
+    const { controller, posted } = make({
+      workspace: {
+        descriptor: WORKSPACE_DESC,
+        async fetch() {
+          return { diffs: [] }
+        },
+        async revert(file) {
+          files.push(file)
+          return { ok: true, message: "Reverted" }
+        },
+      },
+    })
+    controller.setContext({ workspaceRoot: "/repo" })
+    await controller.activate("workspace", { poll: false })
+    const revision = byType(posted, "setAvailableSources").at(-1)!.revision as string
+    await controller.reactivate()
+    try {
+      await controller.revertFile("a.ts", { revision, requestId: "old" })
+      expect(files).toEqual([])
+      const result = byType(posted, "diffViewer.revertFileResult").at(-1)!
+      expect(result.status).toBe("error")
+      expect(result.requestId).toBe("old")
+      const current = byType(posted, "setAvailableSources").at(-1)!.revision as string
+      await controller.revertFile("a.ts", { revision: current, requestId: "new" })
+      expect(files).toEqual(["a.ts"])
+      expect(byType(posted, "diffViewer.revertFileResult").at(-1)!.requestId).toBe("new")
+    } finally {
+      controller.stop()
+    }
+  })
+
+  it("keeps in-flight completion correlated to its original revision", async () => {
+    const wait = Promise.withResolvers<{ ok: boolean; message: string }>()
+    const { controller, posted } = make({
+      workspace: {
+        descriptor: WORKSPACE_DESC,
+        async fetch() {
+          return { diffs: [] }
+        },
+        revert: () => wait.promise,
+      },
+    })
+    controller.setContext({ workspaceRoot: "/repo" })
+    await controller.activate("workspace", { poll: false })
+    const revision = byType(posted, "setAvailableSources").at(-1)!.revision as string
+    const operation = controller.revertFile("a.ts", { revision, requestId: "original" })
+    controller.stop()
+    wait.resolve({ ok: true, message: "Reverted" })
+    await operation
+    const result = byType(posted, "diffViewer.revertFileResult").at(-1)!
+    expect(result.revision).toBe(revision)
+    expect(result.requestId).toBe("original")
+  })
   it("posts error when the active source does not support revert", async () => {
     const session: DiffSource = {
       descriptor: SESSION_DESC,

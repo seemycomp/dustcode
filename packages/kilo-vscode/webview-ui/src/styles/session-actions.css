@@ -230,78 +230,10 @@
   white-space: nowrap;
 }
 
-.session-move-action [data-component="icon"],
-.session-move-changes [data-component="icon"] {
+.session-move-action [data-component="icon"] {
   opacity: 0.7;
 }
 
-.session-move-changes {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  flex: 0 0 auto;
-  overflow: hidden;
-  position: relative;
-  border-radius: var(--session-action-radius);
-  color: var(--vscode-descriptionForeground);
-  padding: 4px 6px !important;
-  background: transparent;
-  box-shadow: none;
-  transition:
-    background-color 150ms ease,
-    color 150ms ease;
-}
-
-.session-move-changes:hover:not(:disabled),
-.session-move-changes:focus-visible:not(:disabled),
-.session-move-changes:active:not(:disabled) {
-  color: var(--vscode-foreground);
-  background: var(--surface-interactive-hover, var(--vscode-list-hoverBackground));
-  box-shadow: none;
-}
-
-.session-move-changes {
-  font-family: var(--font-family-sans);
-  font-size: var(--kilo-font-size-12);
-  font-variant-numeric: tabular-nums;
-}
-
-.session-move-changes--empty {
-  opacity: 0.7;
-}
-
-.session-move-dot {
-  position: absolute;
-  top: 4px;
-  right: 5px;
-  width: 5px;
-  height: 5px;
-  border-radius: 999px;
-  background: #34d399;
-  opacity: 0;
-}
-
-.session-diff-add {
-  color: #34d399;
-}
-
-.session-diff-del {
-  color: #f87171;
-}
-
-.session-changes-tooltip {
-  display: inline-flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  column-gap: 4px;
-  row-gap: 2px;
-}
-
-.session-changes-tooltip-separator {
-  color: var(--vscode-descriptionForeground);
-}
-
-/* Collapse diff stats to icon-only before the row wraps. */
 @container (max-width: 420px) {
   .session-actions-row {
     gap: 4px;
@@ -316,25 +248,6 @@
 
   .session-move-action {
     padding-right: 5px !important;
-  }
-
-  .session-move-changes {
-    gap: 0;
-    width: 26px;
-    min-width: 26px;
-    padding-left: 5px !important;
-    padding-right: 5px !important;
-  }
-
-  .session-diff-add,
-  .session-diff-del {
-    width: 0;
-    opacity: 0;
-    overflow: hidden;
-  }
-
-  .session-move-dot {
-    opacity: 1;
   }
 }
 

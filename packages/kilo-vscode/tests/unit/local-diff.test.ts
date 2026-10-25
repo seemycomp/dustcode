@@ -1299,6 +1299,107 @@ describe("createLocalDiff concurrent details", () => {
   })
 })
 
+describe("GitOps.revertFile safety", () => {
+  it("rejects pathspec magic, roots, directories, metadata and unknown paths without changing files or index", async () => {
+    await withRepo(async (dir, base) => {
+      await setup(dir, base)
+      await fs.writeFile(path.join(dir, "seed.txt"), "seed changed\n")
+      await fs.writeFile(path.join(dir, "folder", "space file.txt"), "space changed\n")
+      runSync(dir, ["add", "."])
+      const index = runSync(dir, ["diff", "--cached", "--binary"])
+      const ops = git()
+      try {
+        for (const file of [
+          ".",
+          "./",
+          "",
+          "folder",
+          "folder/",
+          "*",
+          "*.txt",
+          ":(glob)**",
+          ":(top)*",
+          ":(exclude)missing.txt",
+          ".git",
+          ".git/config",
+          "folder/.git/config",
+          "missing.txt",
+          "../seed.txt",
+          dir,
+        ]) {
+          const result = await ops.revertFile(dir, base, file, "modified")
+          expect(await fs.readFile(path.join(dir, "seed.txt"), "utf8")).toBe("seed changed\n")
+          expect(await fs.readFile(path.join(dir, "folder", "space file.txt"), "utf8")).toBe("space changed\n")
+          expect(runSync(dir, ["diff", "--cached", "--binary"])).toBe(index)
+          expect(result.ok).toBe(false)
+        }
+        for (const file of ["missing.txt", ".git/config", "folder"]) {
+          expect((await ops.revertFile(dir, base, file, "added")).ok).toBe(false)
+        }
+        expect(runSync(dir, ["diff", "--cached", "--binary"])).toBe(index)
+      } finally {
+        ops.dispose()
+      }
+    })
+  })
+
+  it("rejects a deleted directory instead of restoring all its base files", async () => {
+    await withRepo(async (dir, base) => {
+      await setup(dir, base)
+      await fs.rm(path.join(dir, "folder"), { recursive: true })
+      const ops = git()
+      try {
+        const result = await ops.revertFile(dir, base, "folder", "deleted")
+        await expect(fs.stat(path.join(dir, "folder"))).rejects.toThrow()
+        expect(result.ok).toBe(false)
+      } finally {
+        ops.dispose()
+      }
+    })
+  })
+
+  it("restores a literal metacharacter filename without touching a matching sibling or its index entry", async () => {
+    await withRepo(async (dir, base) => {
+      await fs.writeFile(path.join(dir, "file[1].txt"), "literal base\n")
+      await fs.writeFile(path.join(dir, "file1.txt"), "sibling base\n")
+      runSync(dir, ["add", "."])
+      runSync(dir, ["commit", "-m", "literal filenames"])
+      runSync(dir, ["branch", "-f", base])
+      await fs.writeFile(path.join(dir, "file[1].txt"), "literal changed\n")
+      await fs.writeFile(path.join(dir, "file1.txt"), "sibling changed\n")
+      runSync(dir, ["add", "."])
+      const index = runSync(dir, ["show", ":file1.txt"])
+      const ops = git()
+      try {
+        expect((await ops.revertFile(dir, base, "file[1].txt", "modified")).ok).toBe(true)
+        expect((await fs.readFile(path.join(dir, "file[1].txt"), "utf8")).replace(/\r\n/g, "\n")).toBe("literal base\n")
+        expect(await fs.readFile(path.join(dir, "file1.txt"), "utf8")).toBe("sibling changed\n")
+        expect(runSync(dir, ["show", ":file1.txt"])).toBe(index)
+        expect(runSync(dir, ["diff", "--cached", "--name-only"])).toBe("file1.txt")
+      } finally {
+        ops.dispose()
+      }
+    })
+  })
+
+  it("removes only a literal added file from disk and index", async () => {
+    await withRepo(async (dir, base) => {
+      await fs.writeFile(path.join(dir, "file[1].txt"), "literal added\n")
+      await fs.writeFile(path.join(dir, "file1.txt"), "sibling added\n")
+      runSync(dir, ["add", "."])
+      const ops = git()
+      try {
+        expect((await ops.revertFile(dir, base, "file[1].txt", "added")).ok).toBe(true)
+        await expect(fs.stat(path.join(dir, "file[1].txt"))).rejects.toThrow()
+        expect(await fs.readFile(path.join(dir, "file1.txt"), "utf8")).toBe("sibling added\n")
+        expect(runSync(dir, ["diff", "--cached", "--name-only"])).toBe("file1.txt")
+      } finally {
+        ops.dispose()
+      }
+    })
+  })
+})
+
 describe("resolveLocalDiffTarget + revertFile", () => {
   it("uses the remote's current trunk when local origin/HEAD is stale", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "local-diff-stale-head-"))

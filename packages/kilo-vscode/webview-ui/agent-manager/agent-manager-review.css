@@ -9,3 +9,60 @@
 .am-review-toolbar-stats {
   flex: 0 100 auto;
 }
+
+.am-review-layout {
+  container-type: inline-size;
+  container-name: review;
+}
+
+.am-review-toolbar {
+  flex-wrap: wrap;
+}
+
+.am-review-guidance {
+  padding: 6px 12px;
+  font-size: var(--font-size-small);
+  color: var(--text-weak);
+  border-bottom: 1px solid var(--border-weak-base);
+}
+
+.am-review-toolbar-reviewed,
+.am-file-tree-reviewed-badge {
+  color: var(--syntax-diff-add);
+}
+
+.am-review-hunks {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 2px 8px;
+  color: var(--text-weak);
+  font-size: var(--font-size-small);
+  background: var(--surface-base);
+}
+
+@container review (max-width: 640px) {
+  .am-review-body {
+    flex-direction: column;
+  }
+
+  .am-review-tree-resize {
+    width: 100% !important;
+    height: 140px;
+    border-bottom: 1px solid var(--border-weak-base);
+  }
+
+  .am-review-tree-resize > [data-component="resize-handle"] {
+    display: none;
+  }
+
+  .am-review-toolbar-left {
+    flex-basis: 100%;
+  }
+
+  .am-review-toolbar-right {
+    flex-wrap: wrap;
+    margin-left: 0;
+  }
+}

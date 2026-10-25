@@ -1,5 +1,5 @@
 import type Parser from "web-tree-sitter"
-type SyntaxNode = Parser.SyntaxNode
+type SyntaxNode = Parser.Tree["rootNode"]
 type Tree = Parser.Tree
 
 import { getParserForFile } from "../../util/treeSitter"

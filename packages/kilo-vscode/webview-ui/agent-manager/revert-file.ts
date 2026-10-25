@@ -19,8 +19,10 @@ export function createRevertFile(
   showToast: (t: Toast) => void,
   t: (key: string) => string,
   projectId?: Accessor<string | undefined>,
+  revision?: (id: string) => string,
 ) {
   const [files, setFiles] = createSignal<Record<string, Set<string>>>({})
+  const pending = new Map<string, string>()
   const key = (project: string | undefined, scope: string) => `${project ?? "single"}\0${scope}`
 
   const reverting = createMemo(() => {
@@ -33,7 +35,11 @@ export function createRevertFile(
 
   function revertFor(id: string | undefined, context: string | undefined, source: string, file: string) {
     if (!id || !context) return
+    const token = revision?.(id)
+    if (!token) return
     const data = key(projectId?.(), id)
+    const requestId = crypto.randomUUID()
+    pending.set(`${data}\0${file}`, requestId)
     setFiles((prev) => {
       const set = new Set(prev[data] ?? [])
       set.add(file)
@@ -45,6 +51,8 @@ export function createRevertFile(
       sessionId: context,
       file,
       scope: source,
+      revision: token,
+      requestId,
     })
   }
 
@@ -54,6 +62,8 @@ export function createRevertFile(
 
   function onResult(ev: AgentManagerRevertWorktreeFileResultMessage) {
     const data = key(ev.projectId, ev.sessionId)
+    if (ev.revertId && pending.get(`${data}\0${ev.file}`) !== ev.revertId) return
+    pending.delete(`${data}\0${ev.file}`)
     setFiles((prev) => {
       const set = new Set(prev[data] ?? [])
       set.delete(ev.file)

@@ -234,6 +234,23 @@ describe("KiloProvider route integration", () => {
     line: 4,
   }
 
+  it("opens chat Review scoped to the session instead of workspace changes", async () => {
+    const { connection } = mockConnection()
+    const provider = new KiloProvider({} as never, connection, undefined, { rootDirectory: () => "/repo" })
+    provider.setSessionDirectory("chat-one", "/repo/chat-one")
+    const opened: NonNullable<Parameters<DiffViewerProvider["openFromCommand"]>[0]>[] = []
+    provider.setDiffViewerProvider({ openFromCommand: (args) => opened.push(args) } as DiffViewerProvider)
+    const internal = provider as unknown as ProviderInternals
+    await internal.openChanges("chat-one")
+    expect(opened.at(0)).toMatchObject({
+      sessionId: "chat-one",
+      directory: "/repo/chat-one",
+      initialSourceId: "session:chat-one",
+      hidePicker: true,
+    })
+    provider.dispose()
+  })
+
   it("opens PR comments beside a chat tab and sends them back to the originating session", async () => {
     const { connection } = mockConnection()
     const provider = new KiloProvider({} as never, connection, undefined, {

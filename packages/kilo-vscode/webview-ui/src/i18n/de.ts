@@ -61,6 +61,41 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "review.changes": "Geänderte Bereiche",
+  "review.sessionFiles": "{{count}} geänderte Dateien",
+  "review.undoAll": "Alles rückgängig machen",
+  "review.keep": "Behalten",
+  "review.keepAll": "Alle behalten",
+  "review.undo": "Rückgängig machen",
+  "review.addFileToChat": "Datei zum Chat hinzufügen",
+  "review.showEntireFile": "Gesamte Datei anzeigen",
+  "review.showDiffOnly": "Nur Unterschiede anzeigen",
+  "review.hiddenLines": "{{count}} ausgeblendete Zeilen",
+  "review.expandAll": "Alle aufklappen",
+  "review.expandTwenty": "20 weitere Zeilen anzeigen",
+  "review.reject": "Ablehnen",
+  "review.pending": "Ausstehend",
+  "review.rejected": "Abgelehnt",
+  "review.sessionWarning":
+    "Mache nur die ausstehenden Änderungen aus diesem Chat rückgängig. Behaltene Änderungen werden zur Grundlage der nächsten Überprüfung und nicht rückgängig gemacht. Spätere Änderungen, die in Konflikt stehen, werden nicht überschrieben. Der Chatverlauf und der Git-Staging-Bereich bleiben erhalten.",
+  "review.sessionTimeout":
+    "Zeitüberschreitung bei der Sitzungsüberprüfung. Versuche es erneut, um die Änderungen zu aktualisieren.",
+  "review.sessionScope":
+    "Es werden nur Änderungen angezeigt, die von Dateibearbeitungswerkzeugen in diesem Chat aufgezeichnet wurden. Änderungen durch die Shell und externe Werkzeuge werden nicht zugeordnet.",
+  "review.previousChange": "Vorherige Änderung",
+  "review.nextChange": "Nächste Änderung",
+  "review.changeCount": "{{current}} / {{total}} Änderungen",
+  "review.accept": "Akzeptieren",
+  "review.accepted": "Akzeptiert",
+  "review.acceptAll": "Alle akzeptieren",
+  "review.previousFile": "Vorherige Datei",
+  "review.nextFile": "Nächste Datei",
+  "review.progress": "{{accepted}} / {{total}} akzeptiert",
+  "review.guidance":
+    "Akzeptieren behält die bereits auf dem Datenträger vorhandenen Änderungen bei; sie werden weder zum Staging-Bereich hinzugefügt noch committet. Zurücksetzen setzt die gesamte Datei auf die Vergleichsbasis zurück.",
+  "review.revertTitle": "Dateiänderungen verwerfen?",
+  "review.revertWarning":
+    "{{file}} auf die Vergleichsbasis zurücksetzen? Dadurch werden alle Änderungen in dieser Datei verworfen, einschließlich manueller und bereits committeter Änderungen im Branch. Hinzugefügte Dateien werden gelöscht. Dies kann hier nicht rückgängig gemacht werden.",
   "session.goal.complete": "Abgeschlossen (vom Modell gemeldet)",
   "session.goal.blocked": "Blockiert",
   "session.goal.restart": "Ziel neu starten",
@@ -385,8 +420,6 @@ export const dict = {
     "Diese Unterhaltung und 1 geänderte Datei in einen dedizierten Worktree für isolierte Folgearbeiten verschieben.",
   "sidebar.session.moveToWorktree.tooltip.other":
     "Diese Unterhaltung und {{files}} geänderte Dateien in einen dedizierten Worktree für isolierte Folgearbeiten verschieben.",
-  "sidebar.session.showChanges.tooltip.empty":
-    "Öffne die Änderungsansicht, um den aktuellen Working Tree zu überprüfen.",
   "sidebar.session.progress.capturing": "Änderungen werden erfasst...",
   "sidebar.session.progress.creating": "Worktree wird erstellt...",
   "sidebar.session.progress.setup": "Setup wird ausgeführt...",

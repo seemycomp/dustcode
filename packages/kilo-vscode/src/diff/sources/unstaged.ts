@@ -93,7 +93,6 @@ export function createUnstagedDiffSource(opts: UnstagedDiffSourceOptions = {}): 
           tracked: true,
           binary: counts.get(item.file)?.binary ?? false,
         }
-        if (!imageMime(item.file)) return entry
         const before = item.status === "added" ? "missing" : (refs.get(item.file)?.before ?? "missing")
         const after = item.status === "deleted" ? "missing" : await diskStamp(dir, item.file)
         return stamp(entry, before, after)
@@ -204,9 +203,7 @@ export function createUnstagedDiffSource(opts: UnstagedDiffSourceOptions = {}): 
         generatedLike: entry.generatedLike,
         summarized,
         // Match the summary stamp so cache invalidation is consistent across
-        // summarize → fetchFile transitions. `entry.stamp` is set for
-        // untracked entries (size:mtime); tracked entries fall back to the
-        // numstat-derived stamp.
+        // summarize → fetchFile transitions, including equal-count text edits.
         stamp: entry.stamp ?? `${entry.status}:${additions}:${entry.deletions}`,
       }
     },
@@ -268,7 +265,6 @@ async function fileEntry(
       const entry = createFileEntry(item, stats)
       const marked = (await applyGeneratedAttributes(git, dir, [entry])).at(0)
       if (!marked) return undefined
-      if (!imageMime(item.file)) return marked
       const [before, after] = await Promise.all([
         item.status === "added" ? "missing" : blobOid(git, dir, INDEX_REF, item.file),
         item.status === "deleted" ? "missing" : diskStamp(dir, item.file),

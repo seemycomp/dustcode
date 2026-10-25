@@ -54,6 +54,40 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "review.changes": "Ændrede områder",
+  "review.sessionFiles": "{{count}} ændrede filer",
+  "review.undoAll": "Fortryd alle",
+  "review.keep": "Behold",
+  "review.keepAll": "Behold alle",
+  "review.undo": "Fortryd",
+  "review.addFileToChat": "Føj fil til chat",
+  "review.showEntireFile": "Vis hele filen",
+  "review.showDiffOnly": "Vis kun forskelle",
+  "review.hiddenLines": "{{count}} skjulte linjer",
+  "review.expandAll": "Udvid alle",
+  "review.expandTwenty": "Vis 20 linjer mere",
+  "review.reject": "Afvis",
+  "review.pending": "Afventer",
+  "review.rejected": "Afvist",
+  "review.sessionWarning":
+    "Fortryd kun de afventende ændringer fra denne chat. Beholdte ændringer bliver grundlaget for den næste gennemgang og fortrydes ikke. Senere ændringer, der er i konflikt, overskrives ikke. Chathistorik og Git-staging bevares.",
+  "review.sessionTimeout": "Sessionsgennemgangen fik timeout. Prøv igen for at opdatere ændringerne.",
+  "review.sessionScope":
+    "Kun ændringer registreret af filredigeringsværktøjer i denne chat vises. Ændringer fra shell og eksterne værktøjer tilskrives ikke chatten.",
+  "review.previousChange": "Forrige ændring",
+  "review.nextChange": "Næste ændring",
+  "review.changeCount": "{{current}} / {{total}} ændringer",
+  "review.accept": "Acceptér",
+  "review.accepted": "Accepteret",
+  "review.acceptAll": "Acceptér alle",
+  "review.previousFile": "Forrige fil",
+  "review.nextFile": "Næste fil",
+  "review.progress": "{{accepted}} / {{total}} accepteret",
+  "review.guidance":
+    "Acceptér beholder de ændringer, der allerede er på disken; de stages eller committes ikke. Fortryd gendanner hele filen til sammenligningsgrundlaget.",
+  "review.revertTitle": "Afvis filændringer?",
+  "review.revertWarning":
+    "Gendan {{file}} til sammenligningsgrundlaget? Dette kasserer alle ændringer i denne fil, herunder manuelle ændringer og committede ændringer på grenen. Tilføjede filer slettes. Dette kan ikke fortrydes her.",
   "session.goal.complete": "Fuldført (rapporteret af modellen)",
   "session.goal.blocked": "Blokeret",
   "session.goal.restart": "Genstart mål",
@@ -375,7 +409,6 @@ export const dict = {
     "Flyt denne samtale og 1 ændret fil til et dedikeret worktree for isoleret opfølgende arbejde.",
   "sidebar.session.moveToWorktree.tooltip.other":
     "Flyt denne samtale og {{files}} ændrede filer til et dedikeret worktree for isoleret opfølgende arbejde.",
-  "sidebar.session.showChanges.tooltip.empty": "Åbn ændringsvisningen for at inspicere det nuværende worktree.",
   "sidebar.session.progress.capturing": "Fanger ændringer...",
   "sidebar.session.progress.creating": "Opretter worktree...",
   "sidebar.session.progress.setup": "Kører opsætning...",

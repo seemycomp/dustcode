@@ -14,7 +14,7 @@ import { capture } from "../pierre/scroll"
 import { acquireVirtualizer, virtualMetrics } from "@opencode-ai/ui/pierre/virtualizer"
 import { getWorkerPool } from "@opencode-ai/ui/pierre/worker"
 import { attachLineSelectionListeners, readSelectedLineRange } from "../pierre/selection"
-import { applyDiffCommentedLines, diffRowIndex } from "../pierre/diff-dom"
+import { applyDiffCommentedLines, diffRowIndex, findDiffSide } from "../pierre/diff-dom"
 import { fixDiffSelection } from "../pierre/selection-range"
 
 type SelectionSide = "additions" | "deletions"
@@ -296,7 +296,24 @@ export function Diff<T>(props: DiffProps<T>) {
   }
 
   const scrollToLine = (line: number, side: "additions" | "deletions") => {
-    if (!(instance instanceof VirtualizedFileDiff)) return true
+    if (!instance) return false
+    if (!(instance instanceof VirtualizedFileDiff)) {
+      const root = scroller()
+      const nodes = container
+        .querySelector("diffs-container")
+        ?.shadowRoot?.querySelectorAll<HTMLElement>(`[data-line="${line}"], [data-alt-line="${line}"]`)
+      const target = Array.from(nodes ?? []).find((node) => {
+        // Unified context uses new-side numbering; its alternate number is old-side only.
+        if (node.closest("[data-unified]") && node.dataset.altLine != null) {
+          return Number(side === "deletions" ? node.dataset.altLine : node.dataset.line) === line
+        }
+        return findDiffSide(node) === side && Number(node.dataset.line) === line
+      })
+      if (!root || !target) return false
+      const box = target.getBoundingClientRect()
+      move(root, root.scrollTop + box.top - root.getBoundingClientRect().top - root.clientHeight / 2 + box.height / 2)
+      return true
+    }
     const position = instance.getLinePosition(line, side)
     const root = scroller()
     if (!position || !root) return false

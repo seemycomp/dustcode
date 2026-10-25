@@ -3,7 +3,7 @@ import path from "path"
 
 import type Parser from "web-tree-sitter"
 type Language = Parser.Language
-type SyntaxNode = Parser.SyntaxNode
+type SyntaxNode = Parser.Tree["rootNode"]
 type Query = Parser.Query
 type Tree = Parser.Tree
 import { getUriFileExtension } from "./uri"

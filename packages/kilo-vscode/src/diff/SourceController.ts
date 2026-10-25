@@ -5,23 +5,30 @@ import type { DiffFile } from "./types"
 import type { PanelContext } from "./types"
 
 type Messages = {
-  available?: (descriptors: DiffSourceDescriptor[], id: string) => unknown
+  available?: (descriptors: DiffSourceDescriptor[], id: string, revision: string) => unknown
   capabilities?: (capabilities: DiffSourceCapabilities) => unknown
   loading?: (source: DiffSource, loading: boolean) => unknown
   diffs: (source: DiffSource, diffs: DiffFile[]) => unknown
   notice?: (source: DiffSource, notice: DiffSourceNotice | undefined) => unknown
   diffFile: (source: DiffSource | undefined, file: string, diff: DiffFile | null) => unknown
-  revertFileResult: (source: DiffSource | undefined, file: string, result: { ok: boolean; message: string }) => unknown
+  revertFileResult: (
+    source: DiffSource | undefined,
+    file: string,
+    result: { ok: boolean; message: string; requestId?: string; revision?: string },
+  ) => unknown
   unsupportedRevert: (source: DiffSource | undefined, file: string) => unknown
+  error?: (source: DiffSource, message?: string) => unknown
+  ready?: (source: DiffSource, revision: string) => unknown
 }
 
 type ActivateOptions = { poll?: boolean; fetch?: boolean }
 
 const viewerMessages: Messages = {
-  available: (descriptors, id) => ({
+  available: (descriptors, id, revision) => ({
     type: "setAvailableSources",
     descriptors,
     currentId: id,
+    revision,
   }),
   capabilities: (capabilities) => ({
     type: "diffViewer.capabilities",
@@ -36,12 +43,17 @@ const viewerMessages: Messages = {
     file,
     status: result.ok ? "success" : "error",
     message: result.message,
+    requestId: result.requestId ?? "",
+    revision: result.revision,
   }),
+  error: (_source, message) => ({ type: "diffViewer.error", message }),
+  ready: (_source, revision) => ({ type: "diffViewer.ready", revision }),
   unsupportedRevert: (_source, file) => ({
     type: "diffViewer.revertFileResult",
     file,
     status: "error",
     message: "Revert is not supported for the current source",
+    requestId: "",
   }),
 }
 
@@ -67,6 +79,8 @@ export class SourceController {
   private interval: ReturnType<typeof setInterval> | undefined
   private lastHash: string | undefined
   private epoch = 0
+  private revision = crypto.randomUUID()
+  private loaded = false
   private visible = true
   private options: ActivateOptions = {}
   private readonly fetches = new Map<DiffSource, Promise<boolean>>()
@@ -79,6 +93,8 @@ export class SourceController {
   ) {}
 
   setContext(ctx: PanelContext): void {
+    this.loaded = false
+    this.revision = crypto.randomUUID()
     this.ctx = ctx
   }
 
@@ -102,7 +118,9 @@ export class SourceController {
 
   /** Dispose the active source and bump the epoch so in-flight fetches are dropped. */
   stop(): void {
+    this.loaded = false
     this.epoch++
+    this.revision = crypto.randomUUID()
     this.stopPolling()
     this.fetches.clear()
     this.active?.dispose?.()
@@ -126,7 +144,7 @@ export class SourceController {
     const source = this.build(id, ctx)
     this.active = source
 
-    this.send(this.messages.available?.(this.listAvailable(ctx), id))
+    this.send(this.messages.available?.(this.listAvailable(ctx), id, this.revision))
     this.send(this.messages.capabilities?.(source.descriptor.capabilities))
 
     await this.resume()
@@ -144,9 +162,29 @@ export class SourceController {
     await this.activate(id)
   }
 
-  async revertFile(file: string): Promise<void> {
+  async revertFile(file: string, request?: { revision: string; requestId: string }): Promise<void> {
     const source = this.active
-    if (!source?.revert) {
+    if (request && (request.revision !== this.revision || !this.loaded)) {
+      this.send(
+        this.messages.revertFileResult(source, file, {
+          ok: false,
+          message: "The review source changed. Refresh before reverting.",
+          ...request,
+        }),
+      )
+      return
+    }
+    if (!source?.revert || !source.descriptor.capabilities.revert) {
+      if (request) {
+        this.send(
+          this.messages.revertFileResult(source, file, {
+            ok: false,
+            message: "Revert is not supported for the current source",
+            ...request,
+          }),
+        )
+        return
+      }
       this.send(this.messages.unsupportedRevert(source, file))
       return
     }
@@ -156,7 +194,7 @@ export class SourceController {
       const message = err instanceof Error ? err.message : String(err)
       return { ok: false, message }
     })
-    this.send(this.messages.revertFileResult(source, file, result))
+    this.send(this.messages.revertFileResult(source, file, { ...result, ...request }))
     // Push fresh diffs immediately after a successful revert so the webview
     // doesn't have to wait for the next polling tick.
     if (result.ok && this.epoch === epoch && this.active === source) {
@@ -210,6 +248,7 @@ export class SourceController {
     try {
       const result = await source.fetch()
       if (this.epoch !== epoch) return false
+      this.send(this.messages.error?.(source))
 
       if (result.notice !== undefined) {
         this.send(this.messages.notice?.(source, result.notice))
@@ -220,15 +259,15 @@ export class SourceController {
         this.lastHash = hash
         this.send(this.messages.diffs(source, result.diffs))
       }
+      this.loaded = true
+      this.send(this.messages.ready?.(source, this.revision))
 
       return !result.stopPolling
     } catch (err) {
       if (this.epoch !== epoch) return false
-      // Errors are swallowed for the webview (it just needs the loading
-      // indicator cleared below), but we always log so initial-fetch
-      // failures leave a trace in the Extension Host output — previously
-      // they were silent and invisible in production.
+      // Surface fetch failures without terminating polling, so the next refresh can recover.
       console.log("[Dustcode] SourceController.fetch error", { initial, err })
+      this.send(this.messages.error?.(source, err instanceof Error ? err.message : String(err)))
       return true
     } finally {
       if (initial && this.epoch === epoch) {

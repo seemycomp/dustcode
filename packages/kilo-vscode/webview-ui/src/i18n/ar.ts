@@ -53,6 +53,40 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "review.changes": "المناطق المعدّلة",
+  "review.sessionFiles": "{{count}} ملفات معدّلة",
+  "review.undoAll": "التراجع عن الكل",
+  "review.keep": "إبقاء",
+  "review.keepAll": "إبقاء الكل",
+  "review.undo": "تراجع",
+  "review.addFileToChat": "إضافة الملف إلى المحادثة",
+  "review.showEntireFile": "عرض الملف بالكامل",
+  "review.showDiffOnly": "عرض الفروقات فقط",
+  "review.hiddenLines": "{{count}} أسطر مخفية",
+  "review.expandAll": "توسيع الكل",
+  "review.expandTwenty": "عرض 20 سطرًا إضافيًا",
+  "review.reject": "رفض",
+  "review.pending": "قيد الانتظار",
+  "review.rejected": "مرفوض",
+  "review.sessionWarning":
+    "تراجع فقط عن التغييرات المعلّقة من هذه المحادثة. تصبح التغييرات التي تم إبقاؤها أساس المراجعة التالية ولا يتم التراجع عنها. لن تُستبدل التعديلات اللاحقة المتعارضة. يُحتفظ بسجل المحادثة ومنطقة التجهيز في Git.",
+  "review.sessionTimeout": "انتهت مهلة مراجعة الجلسة. أعد المحاولة لتحديث التغييرات.",
+  "review.sessionScope":
+    "تُعرض فقط التغييرات التي سجّلتها أدوات تحرير الملفات في هذه المحادثة. لا تُنسب تغييرات الصدفة والأدوات الخارجية إلى هذه المحادثة.",
+  "review.previousChange": "التغيير السابق",
+  "review.nextChange": "التغيير التالي",
+  "review.changeCount": "{{current}} / {{total}} تغييرات",
+  "review.accept": "قبول",
+  "review.accepted": "مقبول",
+  "review.acceptAll": "قبول الكل",
+  "review.previousFile": "الملف السابق",
+  "review.nextFile": "الملف التالي",
+  "review.progress": "{{accepted}} / {{total}} مقبولة",
+  "review.guidance":
+    "القبول يُبقي التغييرات الموجودة على القرص؛ ولا يضيفها إلى منطقة التجهيز أو يسجّلها في التزام. التراجع يعيد الملف بأكمله إلى الحالة الأساسية للمقارنة.",
+  "review.revertTitle": "رفض تغييرات الملف؟",
+  "review.revertWarning":
+    "هل تريد استعادة {{file}} إلى الحالة الأساسية للمقارنة؟ سيؤدي هذا إلى تجاهل جميع التغييرات في هذا الملف، بما فيها التعديلات اليدوية وتعديلات الفرع المسجّلة في التزامات. ستُحذف الملفات المضافة. لا يمكن التراجع عن هذا الإجراء هنا.",
   "session.goal.complete": "مكتمل (حسب تقرير النموذج)",
   "session.goal.blocked": "محظور",
   "session.goal.restart": "إعادة بدء الهدف",
@@ -369,7 +403,6 @@ export const dict = {
     "انقل هذه المحادثة وملفًا واحدًا معدلًا إلى worktree مخصص لمتابعة العمل في بيئة معزولة.",
   "sidebar.session.moveToWorktree.tooltip.other":
     "انقل هذه المحادثة و{{files}} ملفات معدلة إلى worktree مخصص لمتابعة العمل في بيئة معزولة.",
-  "sidebar.session.showChanges.tooltip.empty": "افتح عرض التغييرات لفحص شجرة العمل الحالية.",
   "sidebar.session.progress.capturing": "جاري التقاط التغييرات...",
   "sidebar.session.progress.creating": "جاري إنشاء worktree...",
   "sidebar.session.progress.setup": "جاري تشغيل الإعداد...",

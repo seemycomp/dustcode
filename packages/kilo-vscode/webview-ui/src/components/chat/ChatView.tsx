@@ -21,6 +21,10 @@ import { PromptInput } from "./PromptInput"
 import type { ManagerContext } from "../../utils/shortcut-hint"
 import { PermissionDock } from "./PermissionDock"
 import { SessionDock } from "./SessionDock"
+import { SessionChanges } from "./SessionChanges"
+import { createSessionReview } from "./session-review"
+import { useDialog } from "@kilocode/kilo-ui/context/dialog"
+import { Dialog } from "@kilocode/kilo-ui/dialog"
 import { StartupErrorBanner } from "./StartupErrorBanner"
 import { SessionTabStrip } from "./SessionTabStrip"
 import { useSession } from "../../context/session"
@@ -83,6 +87,46 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const ownsPrompts = () => props.interactivePrompts !== false
 
   const id = () => session.currentSessionID()
+  const review = createSessionReview(
+    id,
+    () => session.status(),
+    () => ownsPrompts() && !props.readonly,
+    () => props.projectId,
+  )
+  const dialog = useDialog()
+  const reject = (action: "reject" | "undo-all", file?: string) => {
+    const sessionID = id()
+    const project = props.projectId
+    const revision = review.revision()
+    const valid = () =>
+      id() === sessionID &&
+      props.projectId === project &&
+      review.revision() === revision &&
+      session.status() === "idle" &&
+      !review.busy()
+    dialog.show(() => (
+      <Dialog title={language.t("review.undo")} fit>
+        <div class="dialog-confirm-body">
+          <span>{language.t("review.sessionWarning")}</span>
+          <div class="dialog-confirm-actions">
+            <Button variant="secondary" onClick={() => dialog.close()}>
+              {language.t("common.cancel")}
+            </Button>
+            <Button
+              disabled={!valid()}
+              onClick={() => {
+                if (!valid()) return
+                dialog.close()
+                review.decide(action, file)
+              }}
+            >
+              {language.t(action === "undo-all" ? "review.undoAll" : "review.undo")}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    ))
+  }
   const openLink = (event: MouseEvent) => {
     if (!data.openUrl || !(event.target instanceof Element)) return
     const anchor = event.target.closest("a[href]")
@@ -267,8 +311,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
 
   const openAgentManager = () => vscode.postMessage({ type: "openAgentManager" })
 
-  const openChanges = () => vscode.postMessage({ type: "openChanges" })
-
   const moveToWorktree = () => {
     if (transferring()) return
     const sid = id()
@@ -287,20 +329,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     if (!stats?.files) return language.t("sidebar.session.moveToWorktree.tooltip.empty")
     if (stats.files === 1) return language.t("sidebar.session.moveToWorktree.tooltip.one")
     return language.t("sidebar.session.moveToWorktree.tooltip.other", { files: stats.files })
-  }
-
-  const changesTooltip = () => {
-    const stats = session.worktreeStats()
-    if (!stats?.files) return language.t("sidebar.session.showChanges.tooltip.empty")
-    return (
-      <span class="session-changes-tooltip">
-        <span>{stats.files === 1 ? "1 file changed" : `${stats.files} files changed`}</span>
-        <span class="session-changes-tooltip-separator">·</span>
-        <span class="session-diff-add">+{stats.additions}</span>
-        <span class="session-diff-del">-{stats.deletions}</span>
-        <span>Open the changes view.</span>
-      </span>
-    )
   }
 
   const showAdvancedWorktree = () => vscode.postMessage({ type: "openAdvancedWorktree" })
@@ -418,26 +446,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                   </span>
                 </Button>
               </Tooltip>
-              <Tooltip value={changesTooltip()} placement="top" class="session-move-changes-trigger">
-                <Button
-                  variant="ghost"
-                  size="small"
-                  class="session-move-changes"
-                  classList={{
-                    "session-move-changes--empty": !session.worktreeStats()?.files,
-                    "session-move-changes--has-changes": !!session.worktreeStats()?.files,
-                  }}
-                  onClick={openChanges}
-                  aria-label={language.t("command.session.show.changes")}
-                >
-                  <Icon name="layers" size="small" />
-                  <Show when={session.worktreeStats()?.files}>
-                    <span class="session-diff-add">+{session.worktreeStats()!.additions}</span>
-                    <span class="session-diff-del">-{session.worktreeStats()!.deletions}</span>
-                    <span class="session-move-dot" aria-hidden="true" />
-                  </Show>
-                </Button>
-              </Tooltip>
             </>
           </Show>
           {todos}
@@ -512,6 +520,25 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                 projectId={props.projectId}
               />
               <Show when={ownsPrompts() && !props.readonly}>
+                <SessionChanges
+                  files={review.files().map((file) => ({
+                    file: file.file,
+                    additions: file.additions,
+                    deletions: file.deletions,
+                    status: file.reviewStatus,
+                    rejectable: file.rejectable,
+                  }))}
+                  loading={review.loading()}
+                  busy={review.busy()}
+                  error={review.error()}
+                  disabled={session.status() !== "idle"}
+                  onAccept={(file) => review.decide("accept", file)}
+                  onReject={(file) => reject("reject", file)}
+                  onKeepAll={() => review.decide("accept-all")}
+                  onUndoAll={() => reject("undo-all")}
+                  onReview={(file) => vscode.postMessage({ type: "openChanges", file })}
+                  onRetry={review.refresh}
+                />
                 <PromptInput
                   blocked={blocked}
                   edit={editing()}

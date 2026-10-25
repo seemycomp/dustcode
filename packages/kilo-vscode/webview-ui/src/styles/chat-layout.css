@@ -577,6 +577,10 @@
   margin-block: var(--prompt-gutter) var(--prompt-min-gutter);
 }
 
+.chat-view .chat-input > .session-changes + .prompt-input-container {
+  margin-top: 0;
+}
+
 .chat-view .chat-input > .startup-error-banner,
 .chat-view .chat-input > [data-component="permission-shortcuts"] {
   box-sizing: border-box;

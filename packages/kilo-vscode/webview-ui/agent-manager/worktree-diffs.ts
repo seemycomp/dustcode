@@ -42,6 +42,7 @@ export function createWorktreeDiffs(
   project: () => string | undefined = () => undefined,
 ) {
   const [diffDatas, setDiffDatas] = createSignal<Record<string, WorktreeFileDiff[]>>({})
+  const [revisions, setRevisions] = createSignal<Record<string, string>>({})
   const [diffLoadings, setDiffLoadings] = createSignal<Record<string, true>>({})
   const diffLoading = () => Object.keys(diffLoadings()).length > 0
   const [diffNotices, setDiffNotices] = createSignal<Record<string, string | undefined>>({})
@@ -55,6 +56,7 @@ export function createWorktreeDiffs(
     sizes.clear()
     bytes = 0
     setDiffDatas({})
+    setRevisions({})
     setDiffLoadings({})
     setDiffNotices({})
     setDiffFileLoading({})
@@ -74,6 +76,7 @@ export function createWorktreeDiffs(
       return next
     }
     setDiffDatas(remove)
+    setRevisions(remove)
     setDiffLoadings(remove)
     setDiffNotices(remove)
     setDiffFileLoading(remove)
@@ -215,9 +218,12 @@ export function createWorktreeDiffs(
   const onWorktreeDiffLoading = (ev: AgentManagerWorktreeDiffLoadingMessage) => {
     const data = diffDataKey(ev.projectId, ev.sessionId)
     if (ev.reset) {
+      drop(data)
+      setRevisions((prev) => ({ ...prev, [data]: "" }))
       const prefix = diffDataKey(ev.projectId, "")
       setDiffFileLoading((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => !id.startsWith(prefix))))
     }
+    if (!ev.reset && ev.revision) setRevisions((prev) => ({ ...prev, [data]: ev.revision! }))
     // One source is active per project. Replacing the map on start also clears
     // an interrupted source whose stale completion is intentionally discarded.
     if (ev.loading) {
@@ -237,6 +243,7 @@ export function createWorktreeDiffs(
   }
 
   return {
+    revision: (id: string) => revisions()[key(id)] ?? "",
     diffDatas,
     diffLoading,
     setDiffLoading: (loading: boolean) => setDiffLoadings(loading ? diffLoadings() : {}),

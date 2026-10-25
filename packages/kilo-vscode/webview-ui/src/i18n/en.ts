@@ -53,6 +53,40 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "review.changes": "Changed regions",
+  "review.sessionFiles": "{{count}} changed files",
+  "review.undoAll": "Undo All",
+  "review.keep": "Keep",
+  "review.keepAll": "Keep All",
+  "review.undo": "Undo",
+  "review.addFileToChat": "Add file to chat",
+  "review.showEntireFile": "Show entire file",
+  "review.showDiffOnly": "Show diff only",
+  "review.hiddenLines": "{{count}} hidden lines",
+  "review.expandAll": "Expand All",
+  "review.expandTwenty": "Show 20 more lines",
+  "review.reject": "Reject",
+  "review.pending": "Pending",
+  "review.rejected": "Rejected",
+  "review.sessionWarning":
+    "Undo only the pending changes from this chat. Kept changes become the next review baseline and are not undone. Conflicting later edits are not overwritten. Chat history and Git staging are kept.",
+  "review.sessionTimeout": "Session review timed out. Retry to refresh the changes.",
+  "review.sessionScope":
+    "Only changes recorded by file-editing tools in this chat are shown. Shell and external tool changes are not attributed.",
+  "review.previousChange": "Previous change",
+  "review.nextChange": "Next change",
+  "review.changeCount": "{{current}} / {{total}} changes",
+  "review.accept": "Accept",
+  "review.accepted": "Accepted",
+  "review.acceptAll": "Accept all",
+  "review.previousFile": "Previous file",
+  "review.nextFile": "Next file",
+  "review.progress": "{{accepted}} / {{total}} accepted",
+  "review.guidance":
+    "Accept keeps changes already on disk; it does not stage or commit. Revert restores the whole file to the comparison base.",
+  "review.revertTitle": "Reject file changes?",
+  "review.revertWarning":
+    "Restore {{file}} to the comparison base? This discards all changes in this file, including manual and committed branch edits. Added files are deleted. This cannot be undone here.",
   ...anacondaDesktopDict,
   ...cloudProviderDict,
   "task.swarm.title": "Board",
@@ -783,7 +817,6 @@ export const dict = {
     "Move this conversation and 1 changed file into a dedicated worktree for isolated follow-up work.",
   "sidebar.session.moveToWorktree.tooltip.other":
     "Move this conversation and {{files}} changed files into a dedicated worktree for isolated follow-up work.",
-  "sidebar.session.showChanges.tooltip.empty": "Open the changes view to inspect the current working tree.",
   "sidebar.session.progress.capturing": "Capturing changes...",
   "sidebar.session.progress.creating": "Creating worktree...",
   "sidebar.session.progress.setup": "Running setup...",

@@ -33,11 +33,27 @@ import { focusDiff, pageDiff } from "./review-scroll"
 import { createReviewSurface } from "./review-surface"
 import { SendAllButton } from "./SendAllButton"
 import type { PRDiffSnapshot, PRTarget } from "../../src/shared/pr-comment-actions"
+import {
+  pruneReviewStatuses,
+  reviewProgress,
+  reviewStatus,
+  setReviewStatus,
+  type ReviewStatusMap,
+} from "./review-status"
+import { createRevertConfirmation } from "./confirm-revert"
 
 type DiffStyle = "unified" | "split"
 
 interface FullScreenDiffViewProps extends ReviewViewProps {
+  onSessionDecision?: (action: "accept" | "reject", file: string, hunk?: string) => void
+  onAddFileToChat?: (file: string) => void
+  sessionBusy?: boolean
+  sessionReview?: boolean
+  active?: boolean
+  revision?: string
   loading: boolean
+  error?: string
+  onRetry?: () => void
   sessionId?: string
   /** Well-known source notice kind (e.g. "snapshots-disabled"), shown as a banner. */
   notice?: string
@@ -56,9 +72,12 @@ interface FullScreenDiffViewProps extends ReviewViewProps {
   prLoading?: boolean
   prError?: string
   onClose: () => void
+  reviewStatuses?: ReviewStatusMap
+  onReviewStatusesChange?: (statuses: ReviewStatusMap) => void
 }
 
 export const FullScreenDiffView: Component<FullScreenDiffViewProps> = (props) => {
+  const revert = createRevertConfirmation(props)
   let rootRef: HTMLDivElement | undefined
   const {
     t,
@@ -90,6 +109,20 @@ export const FullScreenDiffView: Component<FullScreenDiffViewProps> = (props) =>
   } = createReviewSurface(props, () => rootRef)
 
   const [manualActiveFile, setManualActiveFile] = createSignal<Record<string, string | null>>({})
+  const [statuses, setStatuses] = createSignal<Record<string, ReviewStatusMap>>({})
+  const statusMap = () => props.reviewStatuses ?? statuses()[props.sessionKey ?? ""] ?? {}
+  const updateStatuses = (next: ReviewStatusMap) => {
+    if (props.onReviewStatusesChange) return props.onReviewStatusesChange(next)
+    setStatuses((prev) => ({ ...prev, [props.sessionKey ?? ""]: next }))
+  }
+  const progress = createMemo(() => reviewProgress(statusMap(), props.diffs))
+  const updateStatus = (diff: (typeof props.diffs)[number], status: "pending" | "accepted") => {
+    updateStatuses(setReviewStatus(statusMap(), diff, status))
+  }
+  createEffect(() => {
+    const next = pruneReviewStatuses(statusMap(), props.diffs)
+    if (Object.keys(next).length !== Object.keys(statusMap()).length) updateStatuses(next)
+  })
   const activeFile = createMemo(() => {
     const key = props.sessionKey ?? ""
     const diffs = props.diffs
@@ -135,6 +168,11 @@ export const FullScreenDiffView: Component<FullScreenDiffViewProps> = (props) =>
 
   const handleExpandAll = () => {
     setOpen(toggleOpenFiles(props.diffs, open()))
+  }
+  const index = () => rows().findIndex((diff) => diff.file === activeFile())
+  const navigate = (offset: number) => {
+    const file = rows().at(index() + offset)?.file
+    if (file) handleFileSelect(file)
   }
 
   const syncActiveFileFromScroll = () => {
@@ -221,6 +259,9 @@ export const FullScreenDiffView: Component<FullScreenDiffViewProps> = (props) =>
             <span>{t("session.review.filesChanged", { count: totals().files })}</span>
             <span class="am-review-toolbar-adds">+{totals().additions}</span>
             <span class="am-review-toolbar-dels">-{totals().deletions}</span>
+            <Show when={!props.sessionReview && progress().total > 0}>
+              <span class="am-review-toolbar-reviewed">{t("review.progress", progress())}</span>
+            </Show>
             <Show when={totals().collapsed > 0}>
               <span class="am-review-toolbar-collapsed">
                 {totals().large > 0
@@ -234,6 +275,34 @@ export const FullScreenDiffView: Component<FullScreenDiffViewProps> = (props) =>
           </span>
         </div>
         <div class="am-review-toolbar-right">
+          <IconButton
+            icon="chevron-left"
+            size="small"
+            variant="ghost"
+            label={t("review.previousFile")}
+            disabled={index() <= 0}
+            onClick={() => navigate(-1)}
+          />
+          <IconButton
+            icon="chevron-right"
+            size="small"
+            variant="ghost"
+            label={t("review.nextFile")}
+            disabled={index() < 0 || index() >= rows().length - 1}
+            onClick={() => navigate(1)}
+          />
+          <Show when={!props.sessionReview}>
+            <Button
+              size="small"
+              variant="secondary"
+              disabled={props.loading || progress().pending === 0}
+              onClick={() => {
+                updateStatuses(setReviewStatus(statusMap(), props.diffs, "accepted"))
+              }}
+            >
+              {t("review.acceptAll")}
+            </Button>
+          </Show>
           <Button size="small" variant="ghost" onClick={handleExpandAll}>
             <Icon name="chevron-grabber-vertical" size="small" />
             {openLabel()}
@@ -258,7 +327,20 @@ export const FullScreenDiffView: Component<FullScreenDiffViewProps> = (props) =>
           <IconButton icon="close" size="small" variant="ghost" label={t("common.close")} onClick={props.onClose} />
         </div>
       </div>
+      <div class="am-review-guidance" role="status">
+        {t(props.sessionReview ? "review.sessionScope" : "review.guidance")}
+      </div>
       <DiffViewerNotice text={props.prError} role="alert" />
+      <Show when={props.error}>
+        <div class="am-review-guidance" role="alert">
+          {props.error}
+          <Show when={props.onRetry}>
+            <Button size="small" variant="secondary" onClick={props.onRetry}>
+              {t("common.retry")}
+            </Button>
+          </Show>
+        </div>
+      </Show>
 
       {/* Body: file tree + diff viewer */}
       <div class="am-review-body">
@@ -269,8 +351,12 @@ export const FullScreenDiffView: Component<FullScreenDiffViewProps> = (props) =>
               activeFile={activeFile()}
               onFileSelect={handleFileSelect}
               comments={comments()}
-              onRevertFile={props.canRevert !== false ? props.onRevertFile : undefined}
+              onRevertFile={props.canRevert !== false && props.onRevertFile ? revert : undefined}
               revertingFiles={props.revertingFiles}
+              reviewStatus={(file) => {
+                const diff = props.diffs.find((item) => item.file === file)
+                return diff ? reviewStatus(statusMap(), diff) : "pending"
+              }}
             />
           </div>
           <ResizeHandle
@@ -302,7 +388,7 @@ export const FullScreenDiffView: Component<FullScreenDiffViewProps> = (props) =>
               </div>
             </Show>
 
-            <Show when={!props.loading && props.diffs.length === 0 && !noticeText()}>
+            <Show when={!props.loading && !props.error && props.diffs.length === 0 && !noticeText()}>
               <div class="am-diff-empty">
                 <span>{t("session.review.noChanges")}</span>
               </div>
@@ -322,24 +408,37 @@ export const FullScreenDiffView: Component<FullScreenDiffViewProps> = (props) =>
                       const annotations = remote.annotations(diff.file)
                       return (
                         <ReviewDiffItem
+                          sessionReview={props.sessionReview}
+                          onSessionDecision={
+                            props.onSessionDecision
+                              ? (action, hunk) => props.onSessionDecision?.(action, diff.file, hunk)
+                              : undefined
+                          }
+                          onAddFileToChat={props.onAddFileToChat ? () => props.onAddFileToChat?.(diff.file) : undefined}
+                          sessionBusy={props.sessionBusy}
                           diff={diff}
+                          active={() => props.active !== false}
                           open={open}
                           viewport={viewport}
                           request={props.onRequestDiff ? request : undefined}
                           loading={() => props.loadingFiles?.has(diff.file) ?? false}
                           comments={() => (commentsByFile().get(diff.file) ?? []).length + remote.fileCount(diff.file)}
                           diffStyle={() => props.diffStyle}
-                          markdownRender={() => props.markdownRender ?? false}
+                          markdownRender={() => !props.sessionReview && (props.markdownRender ?? false)}
                           handle={(handle) => register(diff.file, handle)}
                           scrollTo={(offset) => virtualizer()?.scrollTo(offset)}
                           annotations={() => [...review.annotationsForFile(diff.file), ...annotations()]}
                           renderAnnotation={render}
                           onGutterUtilityClick={(result) => handleGutterClick(diff.file, result)}
                           onOpenFile={props.onOpenFile}
-                          onRevertFile={props.canRevert !== false ? props.onRevertFile : undefined}
+                          onRevertFile={props.canRevert !== false && props.onRevertFile ? revert : undefined}
                           reverting={() => props.revertingFiles?.has(diff.file) ?? false}
-                          onMarkdownRenderChange={props.onMarkdownRenderChange}
+                          onMarkdownRenderChange={props.sessionReview ? undefined : props.onMarkdownRenderChange}
                           canComment={() => props.canComment !== false}
+                          reviewStatus={() => reviewStatus(statusMap(), diff)}
+                          onReviewStatusChange={
+                            props.sessionReview ? undefined : (status) => updateStatus(diff, status)
+                          }
                           sessionKey={props.sessionKey}
                           showLoadingSpinner
                         />

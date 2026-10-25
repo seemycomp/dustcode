@@ -57,6 +57,40 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "review.changes": "Endrede områder",
+  "review.sessionFiles": "{{count}} endrede filer",
+  "review.undoAll": "Angre alle",
+  "review.keep": "Behold",
+  "review.keepAll": "Behold alle",
+  "review.undo": "Angre",
+  "review.addFileToChat": "Legg til fil i chatten",
+  "review.showEntireFile": "Vis hele filen",
+  "review.showDiffOnly": "Vis bare forskjeller",
+  "review.hiddenLines": "{{count}} skjulte linjer",
+  "review.expandAll": "Utvid alle",
+  "review.expandTwenty": "Vis 20 linjer til",
+  "review.reject": "Avvis",
+  "review.pending": "Venter",
+  "review.rejected": "Avvist",
+  "review.sessionWarning":
+    "Angre bare de ventende endringene fra denne chatten. Beholdte endringer blir grunnlaget for neste gjennomgang og angres ikke. Senere redigeringer som er i konflikt, blir ikke overskrevet. Chatloggen og Git-staging beholdes.",
+  "review.sessionTimeout": "Tidsavbrudd for øktgjennomgangen. Prøv igjen for å oppdatere endringene.",
+  "review.sessionScope":
+    "Bare endringer registrert av filredigeringsverktøy i denne chatten vises. Endringer fra skallet og eksterne verktøy tilskrives ikke chatten.",
+  "review.previousChange": "Forrige endring",
+  "review.nextChange": "Neste endring",
+  "review.changeCount": "{{current}} / {{total}} endringer",
+  "review.accept": "Godta",
+  "review.accepted": "Godtatt",
+  "review.acceptAll": "Godta alle",
+  "review.previousFile": "Forrige fil",
+  "review.nextFile": "Neste fil",
+  "review.progress": "{{accepted}} / {{total}} godtatt",
+  "review.guidance":
+    "Godta beholder endringene som allerede er på disken; de legges ikke til i stagingområdet eller committes. Tilbakestill gjenoppretter hele filen til sammenligningsgrunnlaget.",
+  "review.revertTitle": "Avvis filendringer?",
+  "review.revertWarning":
+    "Gjenopprette {{file}} til sammenligningsgrunnlaget? Dette forkaster alle endringer i denne filen, inkludert manuelle endringer og committede endringer på grenen. Filer som er lagt til, slettes. Dette kan ikke angres her.",
   "session.goal.complete": "Fullført (rapportert av modellen)",
   "session.goal.blocked": "Blokkert",
   "session.goal.restart": "Start mål på nytt",
@@ -382,7 +416,6 @@ export const dict = {
     "Flytt denne samtalen og 1 endret fil til en dedikert worktree for isolert oppfølgingsarbeid.",
   "sidebar.session.moveToWorktree.tooltip.other":
     "Flytt denne samtalen og {{files}} endrede filer til en dedikert worktree for isolert oppfølgingsarbeid.",
-  "sidebar.session.showChanges.tooltip.empty": "Åpne endringsvisningen for å inspisere det nåværende arbeidstreet.",
   "sidebar.session.progress.capturing": "Fanger endringer...",
   "sidebar.session.progress.creating": "Oppretter worktree...",
   "sidebar.session.progress.setup": "Kjører oppsett...",

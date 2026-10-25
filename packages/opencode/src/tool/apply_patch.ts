@@ -18,6 +18,7 @@ import * as EncodedIO from "../kilocode/tool/encoded-io" // kilocode_change
 import { Format } from "../format"
 import * as Bom from "@/util/bom"
 import { assertMutablePath } from "../kilocode/agent-manager/protection" // kilocode_change
+import { reviewPatch, refreshReviewPatches } from "../kilocode/tool/review-patch" // kilocode_change
 
 export const Parameters = Schema.Struct({
   patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
@@ -222,6 +223,7 @@ export const ApplyPatchTool = Tool.define(
         relativePath: path.relative(instance.worktree, change.movePath ?? change.filePath).replaceAll("\\", "/"),
         type: change.type,
         patch: change.diff,
+        rawPatch: reviewPatch(change.filePath, change.oldContent, change.newContent), // kilocode_change
         additions: change.additions,
         deletions: change.deletions,
         ...(change.movePath ? { movePath: change.movePath } : {}),
@@ -275,11 +277,13 @@ export const ApplyPatchTool = Tool.define(
 
         if (edited) {
           if (yield* format.file(edited)) {
-            yield* EncodedIO.sync(afs, edited, change.bom, change.encoding)
+            change.newContent = yield* EncodedIO.sync(afs, edited, change.bom, change.encoding) // kilocode_change
           }
           yield* events.publish(FileSystem.Event.Edited, { file: edited })
         }
       }
+
+      refreshReviewPatches(files, fileChanges) // kilocode_change - include formatted disk content
 
       // Publish file change events
       for (const update of updates) {

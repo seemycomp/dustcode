@@ -17,6 +17,7 @@ import { filterDiagnostics } from "./diagnostics" // kilocode_change
 import { ConfigValidation } from "../kilocode/config-validation" // kilocode_change
 import * as EncodedIO from "../kilocode/tool/encoded-io" // kilocode_change
 import { assertMutablePath } from "../kilocode/agent-manager/protection" // kilocode_change
+import { reviewPatch } from "../kilocode/tool/review-patch" // kilocode_change
 import * as Bom from "@/util/bom"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
@@ -74,7 +75,10 @@ export const WriteTool = Tool.define(
 
           yield* EncodedIO.write(fs, filepath, Bom.join(contentNew, desiredBom), source.encoding) // kilocode_change - encoding-aware write (mkdirs) replaces fs.writeWithDirs
           if (yield* format.file(filepath)) {
-            yield* EncodedIO.sync(fs, filepath, desiredBom, source.encoding)
+            // kilocode_change start - review the formatted content without changing the display diff
+            const formatted = yield* EncodedIO.sync(fs, filepath, desiredBom, source.encoding)
+            filediff.rawPatch = reviewPatch(filepath, contentOld, formatted)
+            // kilocode_change end
           }
           yield* events.publish(FileSystem.Event.Edited, { file: filepath })
           yield* events.publish(Watcher.Event.Updated, {

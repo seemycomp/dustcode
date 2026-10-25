@@ -54,6 +54,40 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "review.changes": "Değiştirilen bölgeler",
+  "review.sessionFiles": "{{count}} değiştirilmiş dosya",
+  "review.undoAll": "Tümünü geri al",
+  "review.keep": "Koru",
+  "review.keepAll": "Tümünü koru",
+  "review.undo": "Geri al",
+  "review.addFileToChat": "Dosyayı sohbete ekle",
+  "review.showEntireFile": "Dosyanın tamamını göster",
+  "review.showDiffOnly": "Yalnızca farkları göster",
+  "review.hiddenLines": "{{count}} gizli satır",
+  "review.expandAll": "Tümünü genişlet",
+  "review.expandTwenty": "20 satır daha göster",
+  "review.reject": "Reddet",
+  "review.pending": "Beklemede",
+  "review.rejected": "Reddedildi",
+  "review.sessionWarning":
+    "Yalnızca bu sohbetteki bekleyen değişiklikleri geri alın. Korunan değişiklikler bir sonraki incelemenin temelini oluşturur ve geri alınmaz. Daha sonraki çakışan düzenlemelerin üzerine yazılmaz. Sohbet geçmişi ve Git hazırlama alanı korunur.",
+  "review.sessionTimeout": "Oturum incelemesi zaman aşımına uğradı. Değişiklikleri yenilemek için tekrar deneyin.",
+  "review.sessionScope":
+    "Yalnızca bu sohbette dosya düzenleme araçları tarafından kaydedilen değişiklikler gösterilir. Kabuk ve harici araç değişiklikleri bu sohbete atfedilmez.",
+  "review.previousChange": "Önceki değişiklik",
+  "review.nextChange": "Sonraki değişiklik",
+  "review.changeCount": "{{current}} / {{total}} değişiklik",
+  "review.accept": "Kabul et",
+  "review.accepted": "Kabul edildi",
+  "review.acceptAll": "Tümünü kabul et",
+  "review.previousFile": "Önceki dosya",
+  "review.nextFile": "Sonraki dosya",
+  "review.progress": "{{accepted}} / {{total}} kabul edildi",
+  "review.guidance":
+    "Kabul etmek, diskte zaten bulunan değişiklikleri korur; bunları hazırlama alanına eklemez veya commit oluşturmaz. Geri almak, dosyanın tamamını karşılaştırmanın temel durumuna döndürür.",
+  "review.revertTitle": "Dosya değişiklikleri reddedilsin mi?",
+  "review.revertWarning":
+    "{{file}} karşılaştırmanın temel durumuna geri yüklensin mi? Bu işlem, elle yapılan düzenlemeler ve dalda zaten commit edilmiş düzenlemeler dahil olmak üzere bu dosyadaki tüm değişiklikleri siler. Eklenen dosyalar silinir. Bu işlem burada geri alınamaz.",
   "session.goal.complete": "Tamamlandı (model bildirdi)",
   "session.goal.blocked": "Engellendi",
   "session.goal.restart": "Hedefi yeniden başlat",
@@ -376,7 +410,6 @@ export const dict = {
     "Bu konuşmayı ve değiştirilen 1 dosyayı, izole edilmiş takip çalışmaları için özel bir worktree'ye taşıyın.",
   "sidebar.session.moveToWorktree.tooltip.other":
     "Bu konuşmayı ve değiştirilen {{files}} dosyayı, izole edilmiş takip çalışmaları için özel bir worktree'ye taşıyın.",
-  "sidebar.session.showChanges.tooltip.empty": "Mevcut çalışma ağacını incelemek için değişiklikler görünümünü açın.",
   "sidebar.session.progress.capturing": "Değişiklikler yakalanıyor...",
   "sidebar.session.progress.creating": "Worktree oluşturuluyor...",
   "sidebar.session.progress.setup": "Kurulum çalıştırılıyor...",

@@ -2,7 +2,7 @@ import * as fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import type Parser from "web-tree-sitter"
-type SyntaxNode = Parser.SyntaxNode
+type SyntaxNode = Parser.Tree["rootNode"]
 import { IDE, Position } from "../../.."
 import { localPathOrUriToPath } from "../../../util/pathToUri"
 import { getFullLanguageName, getQueryForFile } from "../../../util/treeSitter"

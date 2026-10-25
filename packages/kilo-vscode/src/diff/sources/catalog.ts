@@ -8,18 +8,12 @@ import type { BranchListItem } from "../../agent-manager/git-import"
 import type { PanelContext } from "../types"
 import type { DiffSource, DiffSourceDescriptor } from "./types"
 import { createWorktreeDiffSource, WORKSPACE_DESCRIPTOR, WORKSPACE_SOURCE_ID } from "./worktree"
-import {
-  SESSION_PREFIX,
-  createSessionDiffSource,
-  sessionDescriptor,
-  sessionSourceId,
-  type SessionDiffFetch,
-  type SnapshotEnabledCheck,
-} from "./session"
+import { SESSION_PREFIX, sessionDescriptor, sessionSourceId } from "./session"
 import { TURN_PREFIX, createTurnDiffSource, type TurnDiffFetch } from "./turn"
 import { STAGED_DESCRIPTOR, STAGED_SOURCE_ID, createStagedDiffSource } from "./staged"
 import { UNSTAGED_DESCRIPTOR, UNSTAGED_SOURCE_ID, createUnstagedDiffSource } from "./unstaged"
 import type { WorktreeDiffEntry } from "../../agent-manager/types"
+import { sessionReview } from "../../kilo-provider/session-review-host"
 
 export interface LocalDiffSource {
   summary: (dir: string, base: string) => Promise<WorktreeDiffEntry[]>
@@ -43,12 +37,6 @@ export interface WorkspaceBranchesResult {
  * Enumerates and constructs diff sources for a PanelContext.
  */
 export class DiffSourceCatalog implements vscode.Disposable {
-  private readonly sessionFetch: SessionDiffFetch = async ({ sessionID, directory }) => {
-    const client = this.connection.getClient()
-    const { data } = await client.session.diff({ sessionID, directory }, { throwOnError: true })
-    return data ?? []
-  }
-
   /**
    * Turn diffs are stored on the user message itself (`summary.diffs`), not
    * on the session-level snapshot. The `/session/:id/diff` endpoint ignores
@@ -60,13 +48,6 @@ export class DiffSourceCatalog implements vscode.Disposable {
     const info = data?.info
     if (!info || info.role !== "user") return []
     return info.summary?.diffs ?? []
-  }
-
-  private readonly checkSnapshotsEnabled: SnapshotEnabledCheck = async (directory) => {
-    const client = this.connection.getClient()
-    const { data } = await client.config.get({ directory }, { throwOnError: true })
-    // Snapshot tracking defaults to true when omitted.
-    return data?.snapshot !== false
   }
 
   // Lazily created git ops for branch listing / auto base resolution. The
@@ -131,7 +112,12 @@ export class DiffSourceCatalog implements vscode.Disposable {
     if (id.startsWith(SESSION_PREFIX)) {
       const sessionId = id.slice(SESSION_PREFIX.length)
       if (!sessionId) throw new Error(`DiffSourceCatalog.build: empty session id in "${id}"`)
-      return createSessionDiffSource(sessionId, this.sessionFetch, dir, this.checkSnapshotsEnabled, generated)
+      return {
+        descriptor: sessionDescriptor(sessionId),
+        fetch: async () => ({
+          diffs: dir ? (await sessionReview(this.connection).load(sessionId, dir)).files : [],
+        }),
+      }
     }
 
     throw new Error(`DiffSourceCatalog.build: unknown source id "${id}"`)

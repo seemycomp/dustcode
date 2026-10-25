@@ -54,6 +54,40 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "review.changes": "ส่วนที่เปลี่ยนแปลง",
+  "review.sessionFiles": "ไฟล์ที่เปลี่ยนแปลง {{count}} ไฟล์",
+  "review.undoAll": "เลิกทำทั้งหมด",
+  "review.keep": "เก็บไว้",
+  "review.keepAll": "เก็บไว้ทั้งหมด",
+  "review.undo": "เลิกทำ",
+  "review.addFileToChat": "เพิ่มไฟล์ในแชท",
+  "review.showEntireFile": "แสดงทั้งไฟล์",
+  "review.showDiffOnly": "แสดงเฉพาะความแตกต่าง",
+  "review.hiddenLines": "ซ่อนอยู่ {{count}} บรรทัด",
+  "review.expandAll": "ขยายทั้งหมด",
+  "review.expandTwenty": "แสดงอีก 20 บรรทัด",
+  "review.reject": "ปฏิเสธ",
+  "review.pending": "รอดำเนินการ",
+  "review.rejected": "ปฏิเสธแล้ว",
+  "review.sessionWarning":
+    "เลิกทำเฉพาะการเปลี่ยนแปลงที่รอดำเนินการจากแชทนี้ การเปลี่ยนแปลงที่เก็บไว้จะกลายเป็นฐานสำหรับการตรวจทานครั้งถัดไปและจะไม่ถูกเลิกทำ การแก้ไขภายหลังที่ขัดแย้งกันจะไม่ถูกเขียนทับ ประวัติแชทและสถานะการจัดเตรียมของ Git จะยังคงอยู่",
+  "review.sessionTimeout": "การตรวจทานเซสชันหมดเวลาแล้ว ลองอีกครั้งเพื่อรีเฟรชการเปลี่ยนแปลง",
+  "review.sessionScope":
+    "แสดงเฉพาะการเปลี่ยนแปลงที่เครื่องมือแก้ไขไฟล์บันทึกไว้ในแชทนี้ การเปลี่ยนแปลงจากเชลล์และเครื่องมือภายนอกจะไม่ถูกระบุว่าเป็นของแชทนี้",
+  "review.previousChange": "การเปลี่ยนแปลงก่อนหน้า",
+  "review.nextChange": "การเปลี่ยนแปลงถัดไป",
+  "review.changeCount": "{{current}} / {{total}} การเปลี่ยนแปลง",
+  "review.accept": "ยอมรับ",
+  "review.accepted": "ยอมรับแล้ว",
+  "review.acceptAll": "ยอมรับทั้งหมด",
+  "review.previousFile": "ไฟล์ก่อนหน้า",
+  "review.nextFile": "ไฟล์ถัดไป",
+  "review.progress": "ยอมรับแล้ว {{accepted}} / {{total}}",
+  "review.guidance":
+    "การยอมรับจะเก็บการเปลี่ยนแปลงที่มีอยู่บนดิสก์ไว้ โดยไม่เพิ่มไปยังพื้นที่จัดเตรียมหรือคอมมิต การย้อนกลับจะคืนค่าทั้งไฟล์ไปยังสถานะฐานที่ใช้เปรียบเทียบ",
+  "review.revertTitle": "ปฏิเสธการเปลี่ยนแปลงของไฟล์หรือไม่?",
+  "review.revertWarning":
+    "คืนค่า {{file}} ไปยังสถานะฐานที่ใช้เปรียบเทียบหรือไม่? การดำเนินการนี้จะละทิ้งการเปลี่ยนแปลงทั้งหมดในไฟล์นี้ รวมถึงการแก้ไขด้วยตนเองและการแก้ไขในสาขาที่คอมมิตแล้ว ไฟล์ที่เพิ่มเข้ามาจะถูกลบ ไม่สามารถเลิกทำการดำเนินการนี้ได้ที่นี่",
   "session.goal.complete": "เสร็จสมบูรณ์ (โมเดลรายงาน)",
   "session.goal.blocked": "ถูกบล็อก",
   "session.goal.restart": "เริ่มเป้าหมายใหม่",
@@ -376,7 +410,6 @@ export const dict = {
     "ย้ายบทสนทนานี้และ 1 ไฟล์ที่ถูกแก้ไขไปยัง worktree เฉพาะสำหรับการทำงานต่อเนื่องแบบแยกส่วน",
   "sidebar.session.moveToWorktree.tooltip.other":
     "ย้ายบทสนทนานี้และ {{files}} ไฟล์ที่ถูกแก้ไขไปยัง worktree เฉพาะสำหรับการทำงานต่อเนื่องแบบแยกส่วน",
-  "sidebar.session.showChanges.tooltip.empty": "เปิดมุมมองการเปลี่ยนแปลงเพื่อตรวจสอบ working tree ปัจจุบัน",
   "sidebar.session.progress.capturing": "กำลังบันทึกการเปลี่ยนแปลง...",
   "sidebar.session.progress.creating": "กำลังสร้าง worktree...",
   "sidebar.session.progress.setup": "กำลังรันการตั้งค่า...",

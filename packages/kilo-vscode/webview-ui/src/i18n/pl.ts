@@ -54,6 +54,40 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "review.changes": "Zmienione fragmenty",
+  "review.sessionFiles": "{{count}} zmienionych plików",
+  "review.undoAll": "Cofnij wszystko",
+  "review.keep": "Zachowaj",
+  "review.keepAll": "Zachowaj wszystko",
+  "review.undo": "Cofnij",
+  "review.addFileToChat": "Dodaj plik do czatu",
+  "review.showEntireFile": "Pokaż cały plik",
+  "review.showDiffOnly": "Pokaż tylko różnice",
+  "review.hiddenLines": "{{count}} ukrytych wierszy",
+  "review.expandAll": "Rozwiń wszystko",
+  "review.expandTwenty": "Pokaż kolejne 20 wierszy",
+  "review.reject": "Odrzuć",
+  "review.pending": "Oczekujące",
+  "review.rejected": "Odrzucone",
+  "review.sessionWarning":
+    "Cofnij tylko oczekujące zmiany z tego czatu. Zachowane zmiany stają się podstawą następnego przeglądu i nie są cofane. Późniejsze, kolidujące edycje nie są nadpisywane. Historia czatu i obszar przygotowania Git zostają zachowane.",
+  "review.sessionTimeout": "Upłynął limit czasu przeglądu sesji. Spróbuj ponownie, aby odświeżyć zmiany.",
+  "review.sessionScope":
+    "Wyświetlane są tylko zmiany zarejestrowane przez narzędzia edycji plików w tym czacie. Zmiany powłoki i narzędzi zewnętrznych nie są przypisywane do czatu.",
+  "review.previousChange": "Poprzednia zmiana",
+  "review.nextChange": "Następna zmiana",
+  "review.changeCount": "{{current}} / {{total}} zmian",
+  "review.accept": "Zaakceptuj",
+  "review.accepted": "Zaakceptowano",
+  "review.acceptAll": "Zaakceptuj wszystkie",
+  "review.previousFile": "Poprzedni plik",
+  "review.nextFile": "Następny plik",
+  "review.progress": "{{accepted}} / {{total}} zaakceptowano",
+  "review.guidance":
+    "Akceptacja zachowuje zmiany już zapisane na dysku; nie dodaje ich do obszaru przygotowania ani nie tworzy commita. Przywrócenie przywraca cały plik do wersji bazowej porównania.",
+  "review.revertTitle": "Odrzucić zmiany w pliku?",
+  "review.revertWarning":
+    "Przywrócić {{file}} do wersji bazowej porównania? Spowoduje to odrzucenie wszystkich zmian w tym pliku, w tym ręcznych edycji i zmian zapisanych już w commitach na gałęzi. Dodane pliki zostaną usunięte. Tej operacji nie można tutaj cofnąć.",
   "session.goal.complete": "Ukończony (według modelu)",
   "session.goal.blocked": "Zablokowany",
   "session.goal.restart": "Uruchom cel ponownie",
@@ -377,7 +411,6 @@ export const dict = {
     "Przenieś tę rozmowę i 1 zmieniony plik do dedykowanego worktree w celu izolowanej dalszej pracy.",
   "sidebar.session.moveToWorktree.tooltip.other":
     "Przenieś tę rozmowę i {{files}} zmienionych plików do dedykowanego worktree w celu izolowanej dalszej pracy.",
-  "sidebar.session.showChanges.tooltip.empty": "Otwórz widok zmian, aby sprawdzić obecne drzewo robocze.",
   "sidebar.session.progress.capturing": "Przechwytywanie zmian...",
   "sidebar.session.progress.creating": "Tworzenie worktree...",
   "sidebar.session.progress.setup": "Uruchamianie konfiguracji...",

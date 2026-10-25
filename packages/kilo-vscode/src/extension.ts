@@ -1,4 +1,5 @@
 import * as vscode from "vscode"
+import { configureSessionReview } from "./kilo-provider/session-review-host"
 import { basename } from "node:path"
 import { realpathSync } from "node:fs"
 import { KiloProvider } from "./KiloProvider"
@@ -93,6 +94,7 @@ export async function activate(context: vscode.ExtensionContext) {
     () => browserBroker.env(),
     (dir): Promise<void> => browserAutomationService.ready(dir),
   )
+  configureSessionReview(connectionService, context.globalStorageUri.fsPath)
 
   // One MCP OAuth sign-in service for the whole extension (sidebar, Kilo tabs, Settings, Marketplace).
   // Initialize it eagerly so its MCP OAuth URL subscriptions and `onUrl`

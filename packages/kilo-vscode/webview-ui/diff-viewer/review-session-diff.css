@@ -1,0 +1,171 @@
+.session-review-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 4px;
+  min-height: 36px;
+  padding: 0 8px !important;
+  border-block: 1px solid var(--border-weak-base);
+}
+
+.session-review-header .session-review-toggle[data-slot="accordion-trigger"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center !important;
+  position: relative;
+  flex: 0 0 24px;
+  width: 24px !important;
+  max-width: 24px;
+  height: 28px;
+  padding: 4px;
+  border: 0 !important;
+  background: transparent !important;
+}
+
+.session-review-file-icon,
+.session-review-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.session-review-chevron {
+  display: none;
+}
+
+.session-review-header:hover .session-review-file-icon,
+.session-review-header:focus-within .session-review-file-icon {
+  display: none;
+}
+
+.session-review-header:hover .session-review-chevron,
+.session-review-header:focus-within .session-review-chevron {
+  display: flex;
+}
+
+.session-review-header .session-review-file {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0 4px;
+  overflow: hidden;
+}
+
+.session-review-name {
+  flex-shrink: 0;
+  color: var(--text-strong);
+}
+
+.session-review-directory {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-weak);
+}
+
+.session-review-file [data-component="diff-changes"],
+.session-review-file-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+.session-review-diff {
+  position: relative;
+  min-width: 0;
+}
+
+.session-review-placeholder {
+  min-height: 160px;
+}
+
+.session-review-gap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 24px;
+  min-height: 0;
+  box-sizing: border-box;
+  white-space: normal;
+  padding-inline: 12px;
+  margin-block: 0;
+  background: var(--background-stronger);
+  color: var(--text-weak);
+  font: var(--font-size-small) / 1.5 var(--font-family-sans);
+}
+
+.session-review-gap [data-component="button"] {
+  height: 24px;
+  min-height: 0;
+  padding-block: 0;
+}
+
+.session-review-hunk-actions {
+  position: absolute;
+  z-index: 2;
+  inset-inline-end: 12px;
+  top: var(--session-review-action-top);
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--border-weak-base);
+  border-radius: var(--radius-md);
+  background: var(--background-stronger);
+  box-shadow: 0 2px 8px var(--shadow-color, #0003);
+}
+
+.session-review-keyboard-actions {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.session-review-keyboard-actions:focus-within {
+  position: relative;
+  width: auto;
+  height: auto;
+  clip-path: none;
+  padding: 4px 12px;
+}
+
+.session-review-keyboard-actions [role="group"] {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+}
+
+.session-review-header button:focus-visible,
+.session-review-diff button:focus-visible {
+  outline: 1px solid var(--border-focus);
+  outline-offset: -1px;
+}
+
+@media (max-width: 480px) {
+  .session-review-header {
+    padding-inline: 4px !important;
+  }
+
+  .session-review-header .session-review-file {
+    gap: 4px;
+  }
+
+  .session-review-name {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .session-review-directory {
+    display: none;
+  }
+}

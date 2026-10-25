@@ -90,11 +90,9 @@ export function createStagedDiffSource(opts: StagedDiffSourceOptions = {}): Diff
         tracked: true,
         binary: counts.get(item.file)?.binary ?? false,
       }
-      return stamp(
-        entry,
-        item.status === "added" ? "missing" : (ref?.before ?? "missing"),
-        item.status === "deleted" ? "missing" : (ref?.after ?? "missing"),
-      )
+      const before = item.status === "added" ? "missing" : (ref?.before ?? "missing")
+      const after = item.status === "deleted" ? "missing" : (ref?.after ?? "missing")
+      return stamp(entry, before, after)
     })
     return applyGeneratedAttributes(git, dir, entries, true)
   }
@@ -204,7 +202,6 @@ async function fileEntry(
   const entry = createFileEntry(item, stats)
   const marked = (await applyGeneratedAttributes(git, dir, [entry], true)).at(0)
   if (!marked) return undefined
-  if (!imageMime(item.file)) return marked
   const [before, after] = await Promise.all([
     item.status === "added" ? "missing" : blobOid(git, dir, "HEAD", item.file),
     item.status === "deleted" ? "missing" : blobOid(git, dir, INDEX_REF, item.file),

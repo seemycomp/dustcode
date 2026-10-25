@@ -1695,7 +1695,16 @@ const AgentManagerContent: Component = () => {
   const diffFileLoadingForCurrent = createMemo(() => diffs.diffFileLoadingFor(diffScopeId))
   const diffLoadingForCurrent = createMemo(() => diffs.diffLoadingFor(diffScopeId))
 
-  const revertCtl = createRevertFile(diffScopeId, diffCtx, () => review.scope(), vscode, showToast, t, activeProjectId)
+  const revertCtl = createRevertFile(
+    diffScopeId,
+    diffCtx,
+    () => review.scope(),
+    vscode,
+    showToast,
+    t,
+    activeProjectId,
+    diffs.revision,
+  )
 
   createEffect(() => diffOpen() && setDiffMounted(true))
 
@@ -2378,6 +2387,7 @@ const AgentManagerContent: Component = () => {
                   <div class="am-diff-panel-wrapper">
                     <DiffPanelCache
                       current={diffScopeId}
+                      revision={diffs.revision(diffScopeId() ?? "")}
                       context={diffCtx}
                       project={activeProjectId}
                       active={() => diffOpen() && !history() && !reviewActive()}
@@ -2501,11 +2511,14 @@ const AgentManagerContent: Component = () => {
             <Show when={reviewOpen()}>
               <div class="am-review-host" style={{ display: reviewActive() && !terms.activeId() ? undefined : "none" }}>
                 <FullScreenDiffView
+                  sessionReview={review.scope() === "session"}
+                  active={reviewActive() && !terms.activeId()}
                   diffs={reviewDiffs()}
                   loading={diffLoadingForCurrent()}
                   loadingFiles={diffFileLoadingForCurrent()}
                   sessionId={activeDiffSession()}
-                  sessionKey={`${activeProjectId() ?? "single"}\0${diffScopeId() ?? ""}`}
+                  sessionKey={`${activeProjectId() ?? "single"}\0${diffScopeId() ?? ""}\0${review.currentBase() ?? ""}`}
+                  revision={diffs.revision(diffScopeId() ?? "")}
                   projectId={activeProjectId()}
                   worktreeId={diffCtx()}
                   prTarget={prDiffComments.target(diffCtx())}
@@ -2514,7 +2527,7 @@ const AgentManagerContent: Component = () => {
                   prError={prDiffComments.error(diffCtx())}
                   notice={diffNotice()}
                   lead={diffScopeControls(false)}
-                  canRevert={scopeCapabilities(review.scope()).revert}
+                  canRevert={scopeCapabilities(review.scope()).revert && !!diffs.revision(diffScopeId() ?? "")}
                   canComment={scopeCapabilities(review.scope()).comments}
                   comments={reviewComments()}
                   remoteComments={remote.comments()}

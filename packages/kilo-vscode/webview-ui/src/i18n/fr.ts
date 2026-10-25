@@ -54,6 +54,40 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "review.changes": "Zones modifiées",
+  "review.sessionFiles": "{{count}} fichiers modifiés",
+  "review.undoAll": "Tout annuler",
+  "review.keep": "Conserver",
+  "review.keepAll": "Tout conserver",
+  "review.undo": "Annuler",
+  "review.addFileToChat": "Ajouter le fichier à la conversation",
+  "review.showEntireFile": "Afficher le fichier entier",
+  "review.showDiffOnly": "Afficher uniquement les différences",
+  "review.hiddenLines": "{{count}} lignes masquées",
+  "review.expandAll": "Tout développer",
+  "review.expandTwenty": "Afficher 20 lignes de plus",
+  "review.reject": "Rejeter",
+  "review.pending": "En attente",
+  "review.rejected": "Rejeté",
+  "review.sessionWarning":
+    "Annulez uniquement les modifications en attente de cette conversation. Les modifications conservées deviennent la référence de la prochaine révision et ne sont pas annulées. Les modifications ultérieures en conflit ne sont pas écrasées. L’historique de la conversation et la zone d’index de Git sont conservés.",
+  "review.sessionTimeout": "Le délai de révision de la session a expiré. Réessayez pour actualiser les modifications.",
+  "review.sessionScope":
+    "Seules les modifications enregistrées par les outils d’édition de fichiers dans cette conversation sont affichées. Les modifications du shell et des outils externes ne sont pas attribuées.",
+  "review.previousChange": "Modification précédente",
+  "review.nextChange": "Modification suivante",
+  "review.changeCount": "{{current}} / {{total}} modifications",
+  "review.accept": "Accepter",
+  "review.accepted": "Accepté",
+  "review.acceptAll": "Tout accepter",
+  "review.previousFile": "Fichier précédent",
+  "review.nextFile": "Fichier suivant",
+  "review.progress": "{{accepted}} / {{total}} acceptés",
+  "review.guidance":
+    "Accepter conserve les modifications déjà présentes sur le disque, sans les ajouter à la zone de préparation ni créer de commit. Rétablir restaure l'intégralité du fichier à la version de référence utilisée pour la comparaison.",
+  "review.revertTitle": "Rejeter les modifications du fichier ?",
+  "review.revertWarning":
+    "Restaurer {{file}} à la version de référence utilisée pour la comparaison ? Cela supprime toutes les modifications de ce fichier, y compris les modifications manuelles et celles déjà commitées sur la branche. Les fichiers ajoutés sont supprimés. Cette action ne peut pas être annulée ici.",
   "session.goal.complete": "Terminé (signalé par le modèle)",
   "session.goal.blocked": "Bloqué",
   "session.goal.restart": "Relancer l'objectif",
@@ -380,8 +414,6 @@ export const dict = {
     "Déplacer cette conversation et 1 fichier modifié vers un worktree dédié pour un travail de suivi isolé.",
   "sidebar.session.moveToWorktree.tooltip.other":
     "Déplacer cette conversation et {{files}} fichiers modifiés vers un worktree dédié pour un travail de suivi isolé.",
-  "sidebar.session.showChanges.tooltip.empty":
-    "Ouvrez la vue des modifications pour inspecter l'arborescence de travail actuelle.",
   "sidebar.session.progress.capturing": "Capture des modifications...",
   "sidebar.session.progress.creating": "Création du worktree...",
   "sidebar.session.progress.setup": "Exécution de la configuration...",

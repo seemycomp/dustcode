@@ -54,6 +54,40 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "review.changes": "Sezioni modificate",
+  "review.sessionFiles": "{{count}} file modificati",
+  "review.undoAll": "Annulla tutto",
+  "review.keep": "Mantieni",
+  "review.keepAll": "Mantieni tutto",
+  "review.undo": "Annulla",
+  "review.addFileToChat": "Aggiungi file alla chat",
+  "review.showEntireFile": "Mostra l'intero file",
+  "review.showDiffOnly": "Mostra solo le differenze",
+  "review.hiddenLines": "{{count}} righe nascoste",
+  "review.expandAll": "Espandi tutto",
+  "review.expandTwenty": "Mostra altre 20 righe",
+  "review.reject": "Rifiuta",
+  "review.pending": "In attesa",
+  "review.rejected": "Rifiutato",
+  "review.sessionWarning":
+    "Annulla solo le modifiche in attesa di questa chat. Le modifiche mantenute diventano la base della prossima revisione e non vengono annullate. Le modifiche successive in conflitto non vengono sovrascritte. La cronologia della chat e l’area di staging di Git vengono mantenute.",
+  "review.sessionTimeout": "Tempo scaduto per la revisione della sessione. Riprova per aggiornare le modifiche.",
+  "review.sessionScope":
+    "Vengono mostrate solo le modifiche registrate dagli strumenti di modifica dei file in questa chat. Le modifiche della shell e degli strumenti esterni non vengono attribuite.",
+  "review.previousChange": "Modifica precedente",
+  "review.nextChange": "Modifica successiva",
+  "review.changeCount": "{{current}} / {{total}} modifiche",
+  "review.accept": "Accetta",
+  "review.accepted": "Accettato",
+  "review.acceptAll": "Accetta tutto",
+  "review.previousFile": "File precedente",
+  "review.nextFile": "File successivo",
+  "review.progress": "{{accepted}} / {{total}} accettati",
+  "review.guidance":
+    "Accettare mantiene le modifiche già presenti sul disco; non le aggiunge all'area di staging né crea un commit. Ripristinare riporta l'intero file alla base di confronto.",
+  "review.revertTitle": "Rifiutare le modifiche al file?",
+  "review.revertWarning":
+    "Ripristinare {{file}} alla base di confronto? Questa operazione elimina tutte le modifiche al file, incluse quelle manuali e quelle del branch già incluse nei commit. I file aggiunti vengono eliminati. Questa operazione non può essere annullata qui.",
   "session.goal.complete": "Completato (segnalato dal modello)",
   "session.goal.blocked": "Bloccato",
   "session.goal.restart": "Riavvia obiettivo",
@@ -666,7 +700,6 @@ export const dict = {
     "Sposta questa conversazione e 1 file modificato in un worktree dedicato per lavoro successivo isolato.",
   "sidebar.session.moveToWorktree.tooltip.other":
     "Sposta questa conversazione e {{files}} file modificati in un worktree dedicato per lavoro successivo isolato.",
-  "sidebar.session.showChanges.tooltip.empty": "Apri la vista modifiche per ispezionare il working tree corrente.",
   "sidebar.session.progress.capturing": "Acquisizione modifiche...",
   "sidebar.session.progress.creating": "Creazione worktree...",
   "sidebar.session.progress.setup": "Esecuzione setup...",

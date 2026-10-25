@@ -54,6 +54,41 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "review.changes": "Trechos alterados",
+  "review.sessionFiles": "{{count}} arquivos alterados",
+  "review.undoAll": "Desfazer tudo",
+  "review.keep": "Manter",
+  "review.keepAll": "Manter tudo",
+  "review.undo": "Desfazer",
+  "review.addFileToChat": "Adicionar arquivo à conversa",
+  "review.showEntireFile": "Mostrar arquivo inteiro",
+  "review.showDiffOnly": "Mostrar apenas diferenças",
+  "review.hiddenLines": "{{count}} linhas ocultas",
+  "review.expandAll": "Expandir tudo",
+  "review.expandTwenty": "Mostrar mais 20 linhas",
+  "review.reject": "Rejeitar",
+  "review.pending": "Pendente",
+  "review.rejected": "Rejeitado",
+  "review.sessionWarning":
+    "Desfaça apenas as alterações pendentes desta conversa. As alterações mantidas se tornam a base da próxima revisão e não são desfeitas. Edições posteriores conflitantes não são sobrescritas. O histórico da conversa e a área de stage do Git são preservados.",
+  "review.sessionTimeout":
+    "O tempo limite da revisão da sessão foi excedido. Tente novamente para atualizar as alterações.",
+  "review.sessionScope":
+    "São exibidas apenas as alterações registradas por ferramentas de edição de arquivos nesta conversa. Alterações do shell e de ferramentas externas não são atribuídas.",
+  "review.previousChange": "Alteração anterior",
+  "review.nextChange": "Próxima alteração",
+  "review.changeCount": "{{current}} / {{total}} alterações",
+  "review.accept": "Aceitar",
+  "review.accepted": "Aceito",
+  "review.acceptAll": "Aceitar tudo",
+  "review.previousFile": "Arquivo anterior",
+  "review.nextFile": "Próximo arquivo",
+  "review.progress": "{{accepted}} / {{total}} aceitos",
+  "review.guidance":
+    "Aceitar mantém as alterações já presentes no disco; não as adiciona à área de preparação nem cria um commit. Reverter restaura o arquivo inteiro à base de comparação.",
+  "review.revertTitle": "Rejeitar alterações do arquivo?",
+  "review.revertWarning":
+    "Restaurar {{file}} à base de comparação? Isso descarta todas as alterações neste arquivo, incluindo edições manuais e alterações da branch já incluídas em commits. Arquivos adicionados são excluídos. Isso não pode ser desfeito aqui.",
   "session.goal.complete": "Concluído (informado pelo modelo)",
   "session.goal.blocked": "Bloqueado",
   "session.goal.restart": "Reiniciar objetivo",
@@ -379,8 +414,6 @@ export const dict = {
     "Mover esta conversa e 1 arquivo alterado para um worktree dedicado para trabalho de acompanhamento isolado.",
   "sidebar.session.moveToWorktree.tooltip.other":
     "Mover esta conversa e {{files}} arquivos alterados para um worktree dedicado para trabalho de acompanhamento isolado.",
-  "sidebar.session.showChanges.tooltip.empty":
-    "Abra a visualização de alterações para inspecionar a árvore de trabalho atual.",
   "sidebar.session.progress.capturing": "Capturando alterações...",
   "sidebar.session.progress.creating": "Criando worktree...",
   "sidebar.session.progress.setup": "Executando configuração...",

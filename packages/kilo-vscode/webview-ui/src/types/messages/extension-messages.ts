@@ -1263,6 +1263,7 @@ export interface AgentManagerWorktreeDiffLoadingMessage {
   sessionId: string
   loading: boolean
   reset?: boolean
+  revision?: string
 }
 
 // Agent Manager: Source-level diff notice (extension → webview)
@@ -1285,6 +1286,8 @@ export interface AgentManagerApplyWorktreeDiffResultMessage {
 // Agent Manager: Revert single file result (extension → webview)
 export interface AgentManagerRevertWorktreeFileResultMessage {
   type: "agentManager.revertWorktreeFileResult"
+  revision?: string
+  revertId?: string
   projectId?: string
   sessionId: string
   file: string
@@ -1438,6 +1441,8 @@ export interface DiffViewerRevertFileResultMessage {
   file: string
   status: "success" | "error"
   message: string
+  requestId: string
+  revision?: string
 }
 
 export interface DiffViewerDiffFileMessage {
@@ -1470,6 +1475,7 @@ export interface SetAvailableSourcesMessage {
   type: "setAvailableSources"
   descriptors: DiffSourceDescriptor[]
   currentId: string
+  revision: string
 }
 
 export interface DiffViewerCapabilitiesMessage {
@@ -1788,6 +1794,26 @@ export interface AgentManagerBrowserDevtoolsMessage {
 
 export type ExtensionMessage =
   | {
+      type: "diffViewer.review.result"
+      requestId: string
+      revision?: string
+      diffs?: WorktreeFileDiff[]
+      error?: string
+    }
+  | {
+      type: "sessionReview.result"
+      sessionID: string
+      requestId: string
+      revision?: string
+      files?: Array<
+        import("./agent-manager").WorktreeFileDiff & {
+          reviewStatus: "pending" | "accepted" | "rejected"
+          rejectable: boolean
+        }
+      >
+      error?: string
+    }
+  | {
       type: "agentManager.resolveCommentResult" | "agentManager.unresolveCommentResult"
       projectId?: string
       worktreeId: string
@@ -1981,6 +2007,8 @@ export type ExtensionMessage =
   | DiffViewerDiffsMessage
   | DiffViewerLoadingMessage
   | DiffViewerRevertFileResultMessage
+  | { type: "diffViewer.error"; message?: string }
+  | { type: "diffViewer.ready"; revision: string }
   | DiffViewerDiffFileMessage
   | DiffViewerMarkdownRenderMessage
   | DiffViewerInitialDiffStyleMessage

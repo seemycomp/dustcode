@@ -54,6 +54,40 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "review.changes": "Змінені ділянки",
+  "review.sessionFiles": "{{count}} змінених файлів",
+  "review.undoAll": "Скасувати все",
+  "review.keep": "Зберегти",
+  "review.keepAll": "Зберегти все",
+  "review.undo": "Скасувати",
+  "review.addFileToChat": "Додати файл до чату",
+  "review.showEntireFile": "Показати весь файл",
+  "review.showDiffOnly": "Показати лише відмінності",
+  "review.hiddenLines": "Приховано рядків: {{count}}",
+  "review.expandAll": "Розгорнути все",
+  "review.expandTwenty": "Показати ще 20 рядків",
+  "review.reject": "Відхилити",
+  "review.pending": "Очікує рішення",
+  "review.rejected": "Відхилено",
+  "review.sessionWarning":
+    "Скасовуйте лише зміни з цього чату, що очікують рішення. Збережені зміни стають основою наступної перевірки й не скасовуються. Пізніші правки, які конфліктують, не перезаписуються. Історія чату та індекс Git зберігаються.",
+  "review.sessionTimeout": "Час очікування перевірки сеансу минув. Спробуйте ще раз, щоб оновити зміни.",
+  "review.sessionScope":
+    "Показано лише зміни, записані інструментами редагування файлів у цьому чаті. Зміни оболонки та зовнішніх інструментів не пов’язуються з чатом.",
+  "review.previousChange": "Попередня зміна",
+  "review.nextChange": "Наступна зміна",
+  "review.changeCount": "{{current}} / {{total}} змін",
+  "review.accept": "Прийняти",
+  "review.accepted": "Прийнято",
+  "review.acceptAll": "Прийняти всі",
+  "review.previousFile": "Попередній файл",
+  "review.nextFile": "Наступний файл",
+  "review.progress": "{{accepted}} / {{total}} прийнято",
+  "review.guidance":
+    "Прийняття зберігає зміни, які вже є на диску; воно не додає їх до індексу й не створює коміт. Відкочування відновлює весь файл до базового стану для порівняння.",
+  "review.revertTitle": "Відхилити зміни файлу?",
+  "review.revertWarning":
+    "Відновити {{file}} до базового стану для порівняння? Це відкине всі зміни в цьому файлі, включно з ручними правками та правками, уже збереженими в комітах гілки. Додані файли буде видалено. Цю дію неможливо скасувати тут.",
   "session.goal.complete": "Завершено (за повідомленням моделі)",
   "session.goal.blocked": "Заблоковано",
   "session.goal.restart": "Перезапустити ціль",
@@ -380,7 +414,6 @@ export const dict = {
     "Перемістити цю розмову та 1 змінений файл у виділений worktree для ізольованої подальшої роботи.",
   "sidebar.session.moveToWorktree.tooltip.other":
     "Перемістити цю розмову та {{files}} змінених файлів у виділений worktree для ізольованої подальшої роботи.",
-  "sidebar.session.showChanges.tooltip.empty": "Відкрийте перегляд змін, щоб оглянути поточне робоче дерево.",
   "sidebar.session.progress.capturing": "Захоплення змін...",
   "sidebar.session.progress.creating": "Створення worktree...",
   "sidebar.session.progress.setup": "Виконання налаштування...",

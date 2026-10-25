@@ -154,6 +154,8 @@ export interface DiffImage {
 
 // Shared FileDiff shape (matches Snapshot.FileDiff from CLI backend)
 export interface WorktreeFileDiff {
+  hunks?: Array<{ id: string }>
+  rejectable?: boolean
   file: string
   before: string
   after: string

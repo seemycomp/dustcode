@@ -1263,6 +1263,8 @@ export interface ApplyWorktreeDiffMessage {
 // Agent Manager: Revert a single file in a worktree (webview → extension)
 export interface RevertWorktreeFileMessage {
   type: "agentManager.revertWorktreeFile"
+  revision: string
+  requestId: string
   sessionId: string
   file: string
   scope?: string
@@ -1290,6 +1292,7 @@ export interface EnhancePromptRequest {
 // Open the standalone changes viewer tab from the sidebar
 export interface OpenChangesRequest {
   type: "openChanges"
+  file?: string
   /**
    * When set, opens the viewer scoped to a single turn (identified by the
    * user message ID). The source picker is hidden and polling is disabled
@@ -1331,6 +1334,12 @@ export interface DiffViewerSetMarkdownRenderRequest {
 export interface DiffViewerRevertFileRequest {
   type: "diffViewer.revertFile"
   file: string
+  revision: string
+  requestId: string
+}
+
+export interface DiffViewerRefreshRequest {
+  type: "diffViewer.refresh"
 }
 
 export interface DiffViewerRequestFileRequest {
@@ -1737,6 +1746,26 @@ export interface DismissAgentMigrationBannerMessage {
 }
 
 export type WebviewMessage =
+  | { type: "sessionReview.load"; sessionID: string; requestId: string }
+  | {
+      type: "sessionReview.decide"
+      sessionID: string
+      requestId: string
+      revision: string
+      action: "accept" | "accept-all" | "reject" | "undo-all"
+      file?: string
+      hunk?: string
+    }
+  | { type: "diffViewer.review.load"; requestId: string }
+  | {
+      type: "diffViewer.review.decide"
+      requestId: string
+      revision: string
+      action: "accept" | "reject"
+      file: string
+      hunk?: string
+    }
+  | { type: "diffViewer.addFileToChat"; file: string }
   | import("./agent-manager").BaseUpdateRequest
   | PRMergeRequest
   | { type: "sessionActivity"; state: Activity }
@@ -1947,6 +1976,7 @@ export type WebviewMessage =
   | DiffViewerSetDiffStyleRequest
   | DiffViewerSetMarkdownRenderRequest
   | DiffViewerRevertFileRequest
+  | DiffViewerRefreshRequest
   | DiffViewerRequestFileRequest
   | DiffViewerCloseRequest
   | DiffViewerRequestBranchesRequest

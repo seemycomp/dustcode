@@ -8,6 +8,7 @@ import type { WorktreeFileDiff } from "../src/types/messages"
 import { useLanguage } from "../src/context/language"
 import { buildFileTree, flatten, type FileTreeNode } from "./file-tree-utils"
 import type { ReviewComment } from "./review-comments"
+import type { ReviewStatus } from "./review-status"
 
 interface FileTreeProps {
   diffs: WorktreeFileDiff[]
@@ -18,6 +19,7 @@ interface FileTreeProps {
   onFileToggle?: (path: string, checked: boolean) => void
   onRevertFile?: (path: string) => void
   revertingFiles?: Set<string>
+  reviewStatus?: (path: string) => ReviewStatus
   showSummary?: boolean
 }
 
@@ -33,6 +35,7 @@ const FileNode: Component<{
   onFileToggle?: (path: string, checked: boolean) => void
   onRevertFile?: (path: string) => void
   revertingFiles?: Set<string>
+  reviewStatus?: (path: string) => ReviewStatus
 }> = (props) => {
   const { t } = useLanguage()
   const active = () => props.activeFile === props.node.path
@@ -45,6 +48,7 @@ const FileNode: Component<{
   const showAdd = () => additions() > 0 || status() === "added"
   const showDel = () => deletions() > 0 || status() === "deleted"
   const comments = () => props.commentsByFile?.get(props.node.path) ?? 0
+  const reviewed = () => props.reviewStatus?.(props.node.path) === "accepted"
 
   return (
     <div
@@ -78,6 +82,11 @@ const FileNode: Component<{
         <span class="am-file-tree-name">{props.node.name}</span>
         <Show when={comments() > 0}>
           <span class="am-file-tree-comment-badge">{comments()}</span>
+        </Show>
+        <Show when={reviewed()}>
+          <span class="am-file-tree-reviewed-badge" title={t("review.accepted")} aria-label={t("review.accepted")}>
+            <Icon name="check" size="small" />
+          </span>
         </Show>
         <Show when={props.node.diff}>
           {(diff) => (
@@ -185,6 +194,7 @@ export const FileTree: Component<FileTreeProps> = (props) => {
           onFileToggle={props.onFileToggle}
           onRevertFile={props.onRevertFile}
           revertingFiles={props.revertingFiles}
+          reviewStatus={props.reviewStatus}
         />
       }
     >

@@ -68,6 +68,8 @@ import { normalize, type SSEPayload, type SyncPayload, type WirePayload } from "
 import { slimInfo, slimPart, slimParts } from "./kilo-provider/slim-metadata"
 import { ToolInputStream } from "./kilo-provider/tool-input-stream"
 import { handleSidebarWorktreeMessage } from "./kilo-provider/sidebar-worktree"
+import { handleSessionReview } from "./kilo-provider/session-review-host"
+import { sessionSourceId } from "./diff/sources/session"
 import { parseMessageFiles, type MessageFile } from "./kilo-provider/message-files"
 import { renameSession } from "./kilo-provider/rename-session"
 import { handleFileSearch, type SearchRoot } from "./kilo-provider/file-search"
@@ -1282,6 +1284,19 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       message = intercepted
 
       if (
+        await handleSessionReview(message, {
+          connection: this.connectionService,
+          sessionID: this.currentSession?.id,
+          directory: (id) => {
+            const directory = this.routeSessionDirectory(id)
+            return directory === null ? null : (directory ?? this.getWorkspaceDirectory(id))
+          },
+          post: (value) => this.postMessage(value),
+        })
+      )
+        return
+
+      if (
         await routeEarlyMessage(message, {
           question: this.questionCtx,
           client: this.client,
@@ -1328,7 +1343,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           post: (msg) => this.postMessage(msg),
           openAgentManager: () => vscode.commands.executeCommand("dustcode.agentManagerOpen"),
           openAdvancedWorktree: () => vscode.commands.executeCommand("dustcode.agentManager.advancedWorktree"),
-          openChanges: (sessionId?: string, turnId?: string) => this.openChanges(sessionId, turnId),
+          openChanges: (sessionId?: string, turnId?: string, file?: string) =>
+            this.openChanges(sessionId, turnId, undefined, file),
           openProfile: () => vscode.commands.executeCommand("dustcode.profileButtonClicked"),
           currentSessionId: this.currentSession?.id,
           createWorktree: async (baseBranch, branchName) => {
@@ -1877,18 +1893,27 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.releaseChildSession(message.sessionID)
   }
 
-  private async openChanges(sessionId?: string, turnId?: string, comment?: PRReviewCommentData): Promise<void> {
+  private async openChanges(
+    sessionId?: string,
+    turnId?: string,
+    comment?: PRReviewCommentData,
+    file?: string,
+  ): Promise<void> {
     const id = sessionId ?? this.currentSession?.id
     const dir = this.routeSessionDirectory(id)
     if (dir === null) return
-    const directory = comment
-      ? (dir ?? this.getWorkspaceDirectory(id))
-      : id
-        ? this.sessionGitDirectories.get(id)
-        : undefined
+    const directory =
+      comment || (id && !turnId)
+        ? (dir ?? this.getWorkspaceDirectory(id))
+        : id
+          ? this.sessionGitDirectories.get(id)
+          : undefined
     const args = {
       sessionId: id,
       turnId,
+      file,
+      initialSourceId: !comment && id && !turnId ? sessionSourceId(id) : undefined,
+      hidePicker: !comment && !!id,
       directory,
       comment,
       beside: this.opts.topBarSurface === "tab",

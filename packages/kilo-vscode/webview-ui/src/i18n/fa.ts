@@ -54,6 +54,40 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "review.changes": "بخش‌های تغییریافته",
+  "review.sessionFiles": "{{count}} فایل تغییریافته",
+  "review.undoAll": "واگردانی همه",
+  "review.keep": "نگه داشتن",
+  "review.keepAll": "نگه داشتن همه",
+  "review.undo": "واگردانی",
+  "review.addFileToChat": "افزودن فایل به گفتگو",
+  "review.showEntireFile": "نمایش کل فایل",
+  "review.showDiffOnly": "نمایش فقط تفاوت‌ها",
+  "review.hiddenLines": "{{count}} خط پنهان",
+  "review.expandAll": "باز کردن همه",
+  "review.expandTwenty": "نمایش ۲۰ خط بیشتر",
+  "review.reject": "رد",
+  "review.pending": "در انتظار",
+  "review.rejected": "ردشده",
+  "review.sessionWarning":
+    "فقط تغییرات در انتظار این گفتگو را واگردانی کنید. تغییرات نگه‌داشته‌شده مبنای بازبینی بعدی می‌شوند و واگردانی نمی‌شوند. ویرایش‌های بعدی که تداخل دارند بازنویسی نمی‌شوند. تاریخچهٔ گفتگو و ناحیهٔ آماده‌سازی Git حفظ می‌شوند.",
+  "review.sessionTimeout": "مهلت بازبینی نشست به پایان رسید. برای تازه‌سازی تغییرات دوباره تلاش کنید.",
+  "review.sessionScope":
+    "فقط تغییراتی نمایش داده می‌شوند که ابزارهای ویرایش فایل در این گفتگو ثبت کرده‌اند. تغییرات پوسته و ابزارهای خارجی به این گفتگو نسبت داده نمی‌شوند.",
+  "review.previousChange": "تغییر قبلی",
+  "review.nextChange": "تغییر بعدی",
+  "review.changeCount": "{{current}} / {{total}} تغییر",
+  "review.accept": "پذیرش",
+  "review.accepted": "پذیرفته‌شده",
+  "review.acceptAll": "پذیرش همه",
+  "review.previousFile": "فایل قبلی",
+  "review.nextFile": "فایل بعدی",
+  "review.progress": "{{accepted}} / {{total}} پذیرفته‌شده",
+  "review.guidance":
+    "پذیرش، تغییراتی را که از قبل روی دیسک هستند نگه می‌دارد؛ آن‌ها را به ناحیهٔ آماده‌سازی اضافه یا کامیت نمی‌کند. بازگردانی، کل فایل را به مبنای مقایسه برمی‌گرداند.",
+  "review.revertTitle": "تغییرات فایل رد شوند؟",
+  "review.revertWarning":
+    "{{file}} به مبنای مقایسه بازگردانده شود؟ این کار همهٔ تغییرات این فایل، از جمله ویرایش‌های دستی و ویرایش‌های کامیت‌شدهٔ شاخه را دور می‌ریزد. فایل‌های اضافه‌شده حذف می‌شوند. این کار در اینجا قابل واگرد نیست.",
   "session.goal.complete": "تکمیل‌شده (گزارش مدل)",
   "session.goal.blocked": "مسدود",
   "session.goal.restart": "شروع مجدد هدف",
@@ -783,7 +817,6 @@ export const dict = {
     "این مکالمه و ۱ فایل تغییریافته را به یک worktree اختصاصی برای کار پیگیری ایزوله منتقل کنید.",
   "sidebar.session.moveToWorktree.tooltip.other":
     "این مکالمه و {{files}} فایل تغییریافته را به یک worktree اختصاصی برای کار پیگیری ایزوله منتقل کنید.",
-  "sidebar.session.showChanges.tooltip.empty": "نمای تغییرات را برای بررسی working tree فعلی باز کنید.",
   "sidebar.session.progress.capturing": "در حال ثبت تغییرات...",
   "sidebar.session.progress.creating": "در حال ایجاد worktree...",
   "sidebar.session.progress.setup": "در حال اجرای راه‌اندازی...",

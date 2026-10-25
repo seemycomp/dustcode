@@ -12,7 +12,7 @@ import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { Button } from "@kilocode/kilo-ui/button"
 import { Spinner } from "@kilocode/kilo-ui/spinner"
 import { ThemeProvider } from "@kilocode/kilo-ui/theme"
-import { Toast } from "@kilocode/kilo-ui/toast"
+import { Toast, showToast } from "@kilocode/kilo-ui/toast"
 import { FullScreenDiffView } from "./FullScreenDiffView"
 import { mergeWorktreeDiffs, resolveDiffFile } from "./diff-state"
 import { LanguageProvider, useLanguage } from "../src/context/language"
@@ -22,7 +22,7 @@ import { ProviderProvider } from "../src/context/provider"
 import { getVSCodeAPI, VSCodeProvider, useVSCode } from "../src/context/vscode"
 import type { BranchInfo, ReviewComment, WebviewMessage, WorktreeFileDiff } from "../src/types/messages"
 import type { DiffSourceCapabilities, DiffSourceDescriptor } from "../../src/diff/sources/types"
-import type { DiffViewerNotice } from "../src/types/messages/extension-messages"
+import type { DiffViewerNotice, DiffViewerRevertFileResultMessage } from "../src/types/messages/extension-messages"
 import type { PRComment } from "../agent-manager/pr/pr-types"
 import { reviewRequest } from "../agent-manager/pr/pr-review-request"
 import type { PRDiffSnapshot, PRTarget } from "../../src/shared/pr-comment-actions"
@@ -39,6 +39,9 @@ import { DiffPickerHeader } from "./DiffPickerHeader"
 import { BaseBranchPicker } from "./BaseBranchPicker"
 import { SpeechToTextPrewarm } from "../src/components/speech-to-text/SpeechToTextPrewarm"
 import { SpeechToTextModelsProvider } from "../src/context/speech-to-text-models"
+import { createReviewActions } from "./session-review"
+import { useDialog } from "@kilocode/kilo-ui/context/dialog"
+import { Dialog } from "@kilocode/kilo-ui/dialog"
 
 type DiffStyle = "unified" | "split"
 
@@ -64,6 +67,35 @@ const DiffViewerContent: Component = () => {
   const [loadingFiles, setLoadingFiles] = createSignal<Set<string>>(new Set())
   const [availableSources, setAvailableSources] = createSignal<DiffSourceDescriptor[]>([])
   const [currentSourceId, setCurrentSourceId] = createSignal<string | undefined>(undefined)
+  const actions = createReviewActions(context, currentSourceId)
+  const dialog = useDialog()
+  const decision = (action: "accept" | "reject", file: string, hunk?: string) => {
+    if (action === "accept") return actions.decide(action, file, hunk)
+    const revision = actions.revision()
+    const key = context()
+    dialog.show(() => (
+      <Dialog title={t("review.undo")} fit>
+        <div class="dialog-confirm-body">
+          <span>{t("review.sessionWarning")}</span>
+          <div class="dialog-confirm-actions">
+            <Button variant="secondary" onClick={() => dialog.close()}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              disabled={actions.busy() || revision !== actions.revision() || key !== context()}
+              onClick={() => {
+                if (actions.busy() || revision !== actions.revision() || key !== context()) return
+                dialog.close()
+                actions.decide(action, file, hunk)
+              }}
+            >
+              {t("review.undo")}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    ))
+  }
   const [initialFile, setInitialFile] = createSignal<string | undefined>(undefined)
   const [capabilities, setCapabilities] = createSignal<DiffSourceCapabilities | undefined>(undefined)
   const [notice, setNotice] = createSignal<DiffViewerNotice | undefined>(undefined)
@@ -78,6 +110,9 @@ const DiffViewerContent: Component = () => {
   const [prSnapshot, setPRSnapshot] = createSignal<PRDiffSnapshot>()
   const [prLoading, setPRLoading] = createSignal(false)
   const [prError, setPRError] = createSignal<string>()
+  const [error, setError] = createSignal<string>()
+  const [revision, setRevision] = createSignal("")
+  const pending = new Map<string, string>()
   let prKey = ""
   let prRequestId = ""
 
@@ -85,7 +120,8 @@ const DiffViewerContent: Component = () => {
     const snapshot = prSnapshot()
     return snapshot ? createPRDiffs(snapshot) : []
   })
-  const activeDiffs = () => (prMode() ? prDiffs() : diffs())
+  const activeDiffs = () =>
+    prMode() ? prDiffs() : currentSourceId()?.startsWith("session:") ? (actions.diffs() ?? diffs()) : diffs()
   const activeLoading = () => (prMode() ? prLoading() : loading())
   const noLoadingFiles = new Set<string>()
   const activeLoadingFiles = () => (prMode() ? noLoadingFiles : loadingFiles())
@@ -185,11 +221,30 @@ const DiffViewerContent: Component = () => {
     setPRMode((value) => !value)
   }
 
+  const reverted = (msg: DiffViewerRevertFileResultMessage) => {
+    if (!msg.requestId || pending.get(msg.file) !== msg.requestId || msg.revision !== revision()) return
+    pending.delete(msg.file)
+    markReverting(msg.file, false)
+    showToast({
+      variant: msg.status === "success" ? "success" : "error",
+      title: msg.status === "success" ? t("agentManager.diff.revertSuccess") : t("agentManager.diff.revertError"),
+      description: msg.message,
+    })
+  }
+  const mergedDiffs = (next: WorktreeFileDiff[]) => {
+    const merged = mergeWorktreeDiffs(diffs(), next)
+    setDiffs(merged.diffs)
+    if (merged.stale.size > 0) refreshStaleDiffs(merged.stale)
+  }
+
   const unsubscribe = vscode.onMessage((msg) => {
     if (msg.type === "diffViewer.context") {
       if (context() === msg.key) return
       batch(() => {
         setContext(msg.key)
+        setError(undefined)
+        setRevision("")
+        pending.clear()
         setDiffs([])
         setComments([])
         setRemote([])
@@ -234,9 +289,7 @@ const DiffViewerContent: Component = () => {
       // Preserve cached `before`/`after` across polls so summarized polling
       // updates don't clobber loaded detail. Mirrors the agent manager's
       // worktree diff merge — see worktree-diff-controller.ts.
-      const merged = mergeWorktreeDiffs(diffs(), msg.diffs)
-      setDiffs(merged.diffs)
-      if (merged.stale.size > 0) refreshStaleDiffs(merged.stale)
+      mergedDiffs(msg.diffs)
       return
     }
 
@@ -252,7 +305,7 @@ const DiffViewerContent: Component = () => {
     }
 
     if (msg.type === "diffViewer.revertFileResult") {
-      markReverting(msg.file, false)
+      reverted(msg)
       return
     }
 
@@ -277,13 +330,21 @@ const DiffViewerContent: Component = () => {
     }
     if (msg.type === "setAvailableSources") {
       batch(() => {
+        setRevision("")
+        setDiffs([])
+        setReverting(new Set<string>())
+        pending.clear()
+        setError(undefined)
         setAvailableSources(msg.descriptors)
         setCurrentSourceId(msg.currentId)
         setLoadingFiles(new Set<string>())
       })
       return
     }
-
+    if (msg.type === "diffViewer.error") {
+      setError(msg.message)
+      return
+    }
     if (msg.type === "diffViewer.capabilities") {
       setCapabilities(msg.capabilities)
       return
@@ -306,8 +367,13 @@ const DiffViewerContent: Component = () => {
     }
   })
 
+  const readiness = vscode.onMessage((msg) => {
+    if (msg.type === "diffViewer.ready") setRevision(msg.revision)
+  })
+
   const selectSource = (id: string) => {
     if (id === currentSourceId()) return
+    setRevision("")
     setFocus(undefined)
     setInitialFile(undefined)
     post({ type: "selectSource", id })
@@ -341,6 +407,7 @@ const DiffViewerContent: Component = () => {
   )
 
   const onBaseBranchSelect = (branch: string | undefined) => {
+    setRevision("")
     // Optimistically reflect the new selection so the trigger label updates
     // immediately; the extension echoes back authoritative state next.
     setCurrentBase(branch ?? autoBase())
@@ -357,6 +424,7 @@ const DiffViewerContent: Component = () => {
   window.addEventListener("message", handler)
   onCleanup(() => {
     unsubscribe()
+    readiness()
     window.removeEventListener("message", handler)
   })
 
@@ -415,11 +483,22 @@ const DiffViewerContent: Component = () => {
       <DiffViewerNoticeBanner text={noticeText()} role="status" />
       <DiffViewerNoticeBanner text={prError()} role="alert" />
       <FullScreenDiffView
+        sessionReview={currentSourceId()?.startsWith("session:")}
+        sessionBusy={actions.busy() || !actions.revision()}
+        onSessionDecision={currentSourceId()?.startsWith("session:") ? decision : undefined}
+        onAddFileToChat={(file) => post({ type: "diffViewer.addFileToChat", file })}
         diffs={activeDiffs()}
         loading={activeLoading()}
+        revision={revision()}
+        error={actions.error() ?? error()}
+        onRetry={() => {
+          setError(undefined)
+          actions.refresh()
+          post({ type: "diffViewer.refresh" })
+        }}
         loadingFiles={activeLoadingFiles()}
         onRequestDiff={prMode() ? undefined : requestDiffFile}
-        sessionKey={`${context()}\0${currentSourceId() ?? "local"}\0${prMode() ? "pr" : "local"}`}
+        sessionKey={`${context()}\0${currentSourceId() ?? "local"}\0${currentBase() ?? ""}\0${prMode() ? "pr" : "local"}`}
         worktreeId="diff"
         remoteComments={remote()}
         remoteTarget={(comment) => (threads().includes(comment.threadId) ? target() : undefined)}
@@ -446,11 +525,14 @@ const DiffViewerContent: Component = () => {
         }}
         initialFile={initialFile()}
         onRevertFile={(file) => {
+          if (!revision()) return
+          const requestId = crypto.randomUUID()
+          pending.set(file, requestId)
           markReverting(file, true)
-          post({ type: "diffViewer.revertFile", file })
+          post({ type: "diffViewer.revertFile", file, revision: revision(), requestId })
         }}
         revertingFiles={reverting()}
-        canRevert={!prMode() && (capabilities()?.revert ?? true)}
+        canRevert={!prMode() && !!revision() && (capabilities()?.revert ?? false)}
         canComment={capabilities()?.comments ?? true}
         onClose={() => {
           post({ type: "diffViewer.close" })

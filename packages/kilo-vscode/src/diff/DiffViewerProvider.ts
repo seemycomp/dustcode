@@ -12,6 +12,7 @@ import type { DiffSourceCatalog } from "./sources/catalog"
 import { turnSourceId } from "./sources/turn"
 import { WORKSPACE_SOURCE_ID } from "./sources/worktree"
 import type { PanelContext } from "./types"
+import { sessionReview } from "../kilo-provider/session-review-host"
 import { SourceController } from "./SourceController"
 import { addCommentReaction, isPRReactionContent, removeCommentReaction } from "../agent-manager/pr/PRActions"
 import type { PRStatus } from "../agent-manager/types"
@@ -31,6 +32,7 @@ type OpenArgs = {
   comment?: PRReviewCommentData
   onComments?: CommentHandler
   beside?: boolean
+  hidePicker?: boolean
 }
 
 function openDirectory(
@@ -88,13 +90,13 @@ function context(
     beside: arg?.beside,
     initialSourceId: source,
     initialFile: arg?.file ?? arg?.comment?.file,
-    hidePicker: !!(!arg?.comment && arg?.turnId && sessionId),
+    hidePicker: arg?.hidePicker ?? !!(!arg?.comment && arg?.turnId && sessionId),
   }
   if (arg?.comment) {
     ctx.initialMarkdown = false
     return ctx
   }
-  if (typeof arg?.file === "string" && /\.(md|mdx|markdown)$/i.test(arg.file)) {
+  if (!source?.startsWith("session:") && typeof arg?.file === "string" && /\.(md|mdx|markdown)$/i.test(arg.file)) {
     ctx.initialMarkdown = true
   }
   return ctx
@@ -364,7 +366,37 @@ export class DiffViewerProvider implements vscode.Disposable {
       if (typeof msg.render === "boolean") void setDiffMarkdownRender(msg.render)
     },
     "diffViewer.revertFile": (msg) => {
-      if (typeof msg.file === "string") void this.controller?.revertFile(msg.file)
+      if (typeof msg.file !== "string" || typeof msg.revision !== "string" || typeof msg.requestId !== "string") return
+      void this.controller?.revertFile(msg.file, { revision: msg.revision, requestId: msg.requestId })
+    },
+    "diffViewer.refresh": () => void this.controller?.refresh(),
+    "diffViewer.review.load": (msg) => void this.review(msg),
+    "diffViewer.review.decide": (msg) => void this.review(msg),
+    "diffViewer.addFileToChat": (msg) => {
+      const dir = this.ctx?.dir ?? this.ctx?.workspaceRoot
+      if (!dir || typeof msg.file !== "string" || !this.controller?.currentId?.startsWith("session:")) return
+      const target = this.target
+      const generation = this.openGeneration
+      void sessionReview(this.connection)
+        .load(this.ctx!.sessionId!, dir)
+        .then((state) => {
+          if (generation !== this.openGeneration || target !== this.target) return
+          if (!state.files.some((file) => file.file === msg.file)) return
+          target?.(
+            [
+              {
+                id: crypto.randomUUID(),
+                file: msg.file,
+                side: "additions",
+                line: 1,
+                comment: `@${msg.file}`,
+                selectedText: "",
+              },
+            ],
+            false,
+          )
+        })
+        .catch((error) => this.log("Failed to add review file to chat", error))
     },
     "diffViewer.requestFile": (msg) => {
       if (typeof msg.file === "string") void this.controller?.requestFile(msg.file)
@@ -392,6 +424,48 @@ export class DiffViewerProvider implements vscode.Disposable {
         typeof msg.line === "number" ? msg.line : undefined,
       )
     },
+  }
+
+  private async review(msg: Record<string, unknown>): Promise<void> {
+    if (typeof msg.requestId !== "string") return
+    const panel = this.panel
+    const ctx = this.ctx
+    const id = this.controller?.currentId
+    const generation = this.openGeneration
+    const result = (value: Record<string, unknown>) => {
+      if (panel !== this.panel || generation !== this.openGeneration || id !== this.controller?.currentId) return
+      void panel?.webview.postMessage({ type: "diffViewer.review.result", requestId: msg.requestId, ...value })
+    }
+    try {
+      const dir = ctx?.dir ?? ctx?.workspaceRoot
+      if (!ctx?.sessionId || !dir || id !== `session:${ctx.sessionId}`)
+        throw new Error("The session review source changed")
+      const service = sessionReview(this.connection)
+      const state =
+        msg.type === "diffViewer.review.load"
+          ? await service.load(ctx.sessionId, dir)
+          : await (async () => {
+              if (
+                typeof msg.revision !== "string" ||
+                typeof msg.file !== "string" ||
+                (msg.action !== "accept" && msg.action !== "reject") ||
+                (msg.hunk != null && typeof msg.hunk !== "string")
+              )
+                throw new Error("Invalid review action")
+              return service.decide(
+                ctx.sessionId!,
+                dir,
+                msg.revision,
+                msg.action,
+                msg.file,
+                msg.hunk as string | undefined,
+              )
+            })()
+      result({ revision: state.revision, diffs: state.files })
+      if (msg.type === "diffViewer.review.decide") await this.controller?.refresh()
+    } catch (error) {
+      result({ error: error instanceof Error ? error.message : String(error) })
+    }
   }
 
   private async sendBranches(): Promise<void> {
@@ -446,7 +520,7 @@ export class DiffViewerProvider implements vscode.Disposable {
 
     this.prPolling.sync(this.ctx, id, this.panel.visible)
     this.resetView()
-    await this.controller.activate(id).catch((err) => {
+    await this.controller.activate(id, { poll: !id.startsWith("session:") }).catch((err) => {
       const message = err instanceof Error ? err.message : String(err)
       this.log("Failed to activate source:", message)
     })

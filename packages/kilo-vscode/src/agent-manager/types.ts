@@ -375,6 +375,7 @@ interface WorktreeDiffLoadingMessage {
   sessionId: string
   loading: boolean
   reset?: boolean
+  revision?: string
 }
 
 /** Source-level notice for a diff context (e.g. snapshots disabled). */
@@ -415,6 +416,8 @@ interface DocumentMessage {
 
 interface RevertWorktreeFileResultMessage {
   type: "agentManager.revertWorktreeFileResult"
+  revision?: string
+  revertId?: string
   projectId?: string
   sessionId: string
   file: string
@@ -944,6 +947,8 @@ interface StopDiffWatchIn {
 
 interface RevertWorktreeFileIn {
   type: "agentManager.revertWorktreeFile"
+  revision: string
+  requestId: string
   projectId?: string
   sessionId: string
   file: string

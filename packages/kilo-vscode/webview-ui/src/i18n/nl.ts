@@ -54,6 +54,41 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "review.changes": "Gewijzigde gedeelten",
+  "review.sessionFiles": "{{count}} gewijzigde bestanden",
+  "review.undoAll": "Alles ongedaan maken",
+  "review.keep": "Behouden",
+  "review.keepAll": "Alles behouden",
+  "review.undo": "Ongedaan maken",
+  "review.addFileToChat": "Bestand aan chat toevoegen",
+  "review.showEntireFile": "Volledig bestand tonen",
+  "review.showDiffOnly": "Alleen verschillen tonen",
+  "review.hiddenLines": "{{count}} verborgen regels",
+  "review.expandAll": "Alles uitvouwen",
+  "review.expandTwenty": "Nog 20 regels tonen",
+  "review.reject": "Afwijzen",
+  "review.pending": "In afwachting",
+  "review.rejected": "Afgewezen",
+  "review.sessionWarning":
+    "Maak alleen de wijzigingen in afwachting uit deze chat ongedaan. Behouden wijzigingen vormen de basis voor de volgende beoordeling en worden niet ongedaan gemaakt. Latere bewerkingen die conflicteren worden niet overschreven. De chatgeschiedenis en het Git-staginggebied blijven behouden.",
+  "review.sessionTimeout":
+    "De sessiebeoordeling heeft de tijdslimiet overschreden. Probeer het opnieuw om de wijzigingen te vernieuwen.",
+  "review.sessionScope":
+    "Alleen wijzigingen die door bestandsbewerkingstools in deze chat zijn vastgelegd, worden getoond. Wijzigingen van de shell en externe tools worden niet toegeschreven.",
+  "review.previousChange": "Vorige wijziging",
+  "review.nextChange": "Volgende wijziging",
+  "review.changeCount": "{{current}} / {{total}} wijzigingen",
+  "review.accept": "Accepteren",
+  "review.accepted": "Geaccepteerd",
+  "review.acceptAll": "Alles accepteren",
+  "review.previousFile": "Vorig bestand",
+  "review.nextFile": "Volgend bestand",
+  "review.progress": "{{accepted}} / {{total}} geaccepteerd",
+  "review.guidance":
+    "Accepteren behoudt de wijzigingen die al op de schijf staan; ze worden niet gestaged of gecommit. Terugdraaien herstelt het hele bestand naar de vergelijkingsbasis.",
+  "review.revertTitle": "Bestandswijzigingen afwijzen?",
+  "review.revertWarning":
+    "{{file}} herstellen naar de vergelijkingsbasis? Hiermee worden alle wijzigingen in dit bestand verwijderd, inclusief handmatige bewerkingen en al gecommitte wijzigingen op de branch. Toegevoegde bestanden worden verwijderd. Dit kan hier niet ongedaan worden gemaakt.",
   "session.goal.complete": "Voltooid (gemeld door het model)",
   "session.goal.blocked": "Geblokkeerd",
   "session.goal.restart": "Doel opnieuw starten",
@@ -380,8 +415,6 @@ export const dict = {
     "Verplaats deze conversatie en 1 gewijzigd bestand naar een specifieke worktree voor geïsoleerd vervolgwerk.",
   "sidebar.session.moveToWorktree.tooltip.other":
     "Verplaats deze conversatie en {{files}} gewijzigde bestanden naar een specifieke worktree voor geïsoleerd vervolgwerk.",
-  "sidebar.session.showChanges.tooltip.empty":
-    "Open de weergave met wijzigingen om de huidige worktree te inspecteren.",
   "sidebar.session.progress.capturing": "Wijzigingen vastleggen...",
   "sidebar.session.progress.creating": "Worktree aanmaken...",
   "sidebar.session.progress.setup": "Setup uitvoeren...",

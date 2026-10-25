@@ -54,6 +54,40 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "review.changes": "Изменённые участки",
+  "review.sessionFiles": "{{count}} изменённых файлов",
+  "review.undoAll": "Отменить всё",
+  "review.keep": "Сохранить",
+  "review.keepAll": "Сохранить всё",
+  "review.undo": "Отменить",
+  "review.addFileToChat": "Добавить файл в чат",
+  "review.showEntireFile": "Показать весь файл",
+  "review.showDiffOnly": "Показать только различия",
+  "review.hiddenLines": "Скрыто строк: {{count}}",
+  "review.expandAll": "Развернуть всё",
+  "review.expandTwenty": "Показать ещё 20 строк",
+  "review.reject": "Отклонить",
+  "review.pending": "Ожидает решения",
+  "review.rejected": "Отклонено",
+  "review.sessionWarning":
+    "Отменяйте только изменения из этого чата, ожидающие решения. Сохранённые изменения становятся основой следующей проверки и не отменяются. Более поздние конфликтующие правки не перезаписываются. История чата и индекс Git сохраняются.",
+  "review.sessionTimeout": "Время ожидания проверки сессии истекло. Повторите попытку, чтобы обновить изменения.",
+  "review.sessionScope":
+    "Показаны только изменения, записанные инструментами редактирования файлов в этом чате. Изменения оболочки и внешних инструментов не привязываются к чату.",
+  "review.previousChange": "Предыдущее изменение",
+  "review.nextChange": "Следующее изменение",
+  "review.changeCount": "{{current}} / {{total}} изменений",
+  "review.accept": "Принять",
+  "review.accepted": "Принято",
+  "review.acceptAll": "Принять все",
+  "review.previousFile": "Предыдущий файл",
+  "review.nextFile": "Следующий файл",
+  "review.progress": "{{accepted}} / {{total}} принято",
+  "review.guidance":
+    "Принятие сохраняет изменения, уже находящиеся на диске; оно не добавляет их в индекс и не создаёт коммит. Откат восстанавливает весь файл до базового состояния для сравнения.",
+  "review.revertTitle": "Отклонить изменения файла?",
+  "review.revertWarning":
+    "Восстановить {{file}} до базового состояния для сравнения? Это удалит все изменения в этом файле, включая ручные правки и правки, уже сохранённые в коммитах ветки. Добавленные файлы будут удалены. Это действие нельзя отменить здесь.",
   "session.goal.complete": "Завершено (по сообщению модели)",
   "session.goal.blocked": "Заблокировано",
   "session.goal.restart": "Перезапустить цель",
@@ -375,7 +409,6 @@ export const dict = {
     "Переместить этот разговор и 1 измененный файл в выделенный worktree для изолированной дальнейшей работы.",
   "sidebar.session.moveToWorktree.tooltip.other":
     "Переместить этот разговор и {{files}} измененных файлов в выделенный worktree для изолированной дальнейшей работы.",
-  "sidebar.session.showChanges.tooltip.empty": "Откройте просмотр изменений, чтобы изучить текущее рабочее дерево.",
   "sidebar.session.progress.capturing": "Захват изменений...",
   "sidebar.session.progress.creating": "Создание worktree...",
   "sidebar.session.progress.setup": "Выполнение настройки...",

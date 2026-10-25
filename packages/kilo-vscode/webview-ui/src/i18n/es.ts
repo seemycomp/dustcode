@@ -55,6 +55,41 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "review.changes": "Regiones modificadas",
+  "review.sessionFiles": "{{count}} archivos modificados",
+  "review.undoAll": "Deshacer todo",
+  "review.keep": "Conservar",
+  "review.keepAll": "Conservar todo",
+  "review.undo": "Deshacer",
+  "review.addFileToChat": "Añadir archivo al chat",
+  "review.showEntireFile": "Mostrar archivo completo",
+  "review.showDiffOnly": "Mostrar solo diferencias",
+  "review.hiddenLines": "{{count}} líneas ocultas",
+  "review.expandAll": "Expandir todo",
+  "review.expandTwenty": "Mostrar 20 líneas más",
+  "review.reject": "Rechazar",
+  "review.pending": "Pendiente",
+  "review.rejected": "Rechazado",
+  "review.sessionWarning":
+    "Deshaz solo los cambios pendientes de este chat. Los cambios conservados se convierten en la base de la siguiente revisión y no se deshacen. No se sobrescriben las ediciones posteriores que entren en conflicto. Se conservan el historial del chat y el área de preparación de Git.",
+  "review.sessionTimeout":
+    "Se agotó el tiempo de espera de la revisión de la sesión. Vuelve a intentarlo para actualizar los cambios.",
+  "review.sessionScope":
+    "Solo se muestran los cambios registrados por herramientas de edición de archivos en este chat. No se atribuyen los cambios del shell ni de herramientas externas.",
+  "review.previousChange": "Cambio anterior",
+  "review.nextChange": "Siguiente cambio",
+  "review.changeCount": "{{current}} / {{total}} cambios",
+  "review.accept": "Aceptar",
+  "review.accepted": "Aceptado",
+  "review.acceptAll": "Aceptar todo",
+  "review.previousFile": "Archivo anterior",
+  "review.nextFile": "Siguiente archivo",
+  "review.progress": "{{accepted}} / {{total}} aceptados",
+  "review.guidance":
+    "Aceptar conserva los cambios que ya están en el disco; no los añade al área de preparación ni crea un commit. Revertir restaura todo el archivo a la base de comparación.",
+  "review.revertTitle": "¿Rechazar los cambios del archivo?",
+  "review.revertWarning":
+    "¿Restaurar {{file}} a la base de comparación? Esto descarta todos los cambios de este archivo, incluidas las ediciones manuales y las modificaciones de la rama ya incluidas en commits. Los archivos añadidos se eliminan. Esto no se puede deshacer aquí.",
   "session.goal.complete": "Completo (según el modelo)",
   "session.goal.blocked": "Bloqueado",
   "session.goal.restart": "Reiniciar objetivo",
@@ -381,7 +416,6 @@ export const dict = {
     "Mover esta conversación y 1 archivo modificado a un worktree dedicado para trabajo de seguimiento aislado.",
   "sidebar.session.moveToWorktree.tooltip.other":
     "Mover esta conversación y {{files}} archivos modificados a un worktree dedicado para trabajo de seguimiento aislado.",
-  "sidebar.session.showChanges.tooltip.empty": "Abre la vista de cambios para inspeccionar el árbol de trabajo actual.",
   "sidebar.session.progress.capturing": "Capturando cambios...",
   "sidebar.session.progress.creating": "Creando worktree...",
   "sidebar.session.progress.setup": "Ejecutando configuración...",

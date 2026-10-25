@@ -1,4 +1,4 @@
-import { createEffect, type Accessor, type Component, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, type Accessor, type Component, Show } from "solid-js"
 import { Accordion } from "@kilocode/kilo-ui/accordion"
 import { Button } from "@kilocode/kilo-ui/button"
 import { Diff } from "@kilocode/kilo-ui/diff"
@@ -16,11 +16,14 @@ import { KILO_FILE_PATH_MIME } from "../src/utils/path-mentions"
 import { useLanguage } from "../src/context/language"
 import { diffSizeKey } from "./diff-state"
 import type { DiffViewport } from "./diff-requests"
+import type { ReviewStatus } from "./review-status"
+import { reviewHunks } from "./review-hunks"
 import { isDiffExpandable, isLargeDiffFile, shouldVirtualizeDiff } from "./diff-open-policy"
 import { isMarkdownFile, MarkdownDiffView } from "./MarkdownDiffView"
 import { ImageDiffView } from "./ImageDiffView"
 import type { AnnotationMeta } from "./review-annotations"
 import type { DiffAnnotationMeta } from "./remote-comment-renderer"
+import { ReviewSessionDiff, SessionReviewHeader } from "./review-session-diff"
 
 type Props = {
   diff: WorktreeFileDiff
@@ -43,9 +46,15 @@ type Props = {
   reverting: Accessor<boolean>
   onMarkdownRenderChange?: (render: boolean) => void
   canComment: Accessor<boolean>
+  reviewStatus?: Accessor<ReviewStatus>
+  onReviewStatusChange?: (status: ReviewStatus) => void
   sessionKey?: string
   sessionReviewSlot?: boolean
   showLoadingSpinner?: boolean
+  sessionReview?: boolean
+  onSessionDecision?: (action: "accept" | "reject", hunk?: string) => void
+  onAddFileToChat?: () => void
+  sessionBusy?: boolean
 }
 
 export const ReviewDiffItem: Component<Props> = (props) => {
@@ -54,6 +63,49 @@ export const ReviewDiffItem: Component<Props> = (props) => {
   const isDeleted = () => props.diff.status === "deleted"
   const isLargeCollapsed = () => isLargeDiffFile(props.diff) && !props.open().includes(props.diff.file)
   const active = () => props.active?.() ?? true
+  const [expanded, setExpanded] = createSignal(false)
+  const labels = () => ({
+    keep: t("review.keep"),
+    undo: t("review.undo"),
+    keepAll: t("review.keepAll"),
+    addFileToChat: t("review.addFileToChat"),
+    showEntireFile: t("review.showEntireFile"),
+    showDiffOnly: t("review.showDiffOnly"),
+    hiddenLines: (count: number) => t("review.hiddenLines", { count }),
+    expandAll: t("review.expandAll"),
+    expandTwenty: t("review.expandTwenty"),
+  })
+  const [hunk, setHunk] = createSignal(-1)
+  const hunks = createMemo(() => {
+    if (
+      props.sessionReview ||
+      !props.open().includes(props.diff.file) ||
+      props.diff.summarized ||
+      props.diff.kind === "image"
+    )
+      return []
+    return reviewHunks(props.diff, active() && props.viewport.visible())
+  })
+  let handle: DiffHandle | undefined
+  let pending = false
+  const reveal = () => {
+    const target = hunks().at(hunk())
+    if (!pending || hunk() < 0 || !target) return
+    pending = !handle?.scrollToLine(target.line, target.side)
+  }
+  const navigate = (index: number) => {
+    if (index < 0 || index >= hunks().length) return
+    setHunk(index)
+    pending = true
+    reveal()
+  }
+  const markdown = () => !props.sessionReview && props.markdownRender() && isMarkdownFile(props.diff.file)
+  const navigation = () => !props.sessionReview && hunks().length > 0 && !markdown()
+  createEffect(() => {
+    hunks()
+    setHunk(-1)
+    pending = false
+  })
 
   createEffect(() => {
     if (!props.viewport.visible() || !props.open().includes(props.diff.file) || !active()) return
@@ -67,122 +119,173 @@ export const ReviewDiffItem: Component<Props> = (props) => {
       data-slot={props.sessionReviewSlot ? "session-review-accordion-item" : undefined}
       data-file-path={props.diff.file}
     >
-      <StickyAccordionHeader>
-        <Accordion.Trigger>
-          <div data-slot="session-review-trigger-content">
-            <div
-              data-slot="session-review-file-info"
-              draggable={true}
-              onDragStart={(event: DragEvent) => {
-                event.dataTransfer?.setData(KILO_FILE_PATH_MIME, props.diff.file)
-                event.dataTransfer?.setData("text/plain", props.diff.file)
-                event.stopPropagation()
-              }}
-            >
-              <FileIcon node={{ path: props.diff.file, type: "file" }} />
-              <div data-slot="session-review-file-name-container">
-                <Show when={props.diff.file.includes("/")}>
-                  <span data-slot="session-review-directory">{`\u2066${getDirectory(props.diff.file)}\u2069`}</span>
-                </Show>
-                <span data-slot="session-review-filename">{getFilename(props.diff.file)}</span>
-                <Show when={props.comments() > 0}>
-                  <span class="am-diff-file-badge">{props.comments()}</span>
-                </Show>
+      <Show
+        when={props.sessionReview}
+        fallback={
+          <StickyAccordionHeader>
+            <Accordion.Trigger>
+              <div data-slot="session-review-trigger-content">
+                <div
+                  data-slot="session-review-file-info"
+                  draggable={true}
+                  onDragStart={(event: DragEvent) => {
+                    event.dataTransfer?.setData(KILO_FILE_PATH_MIME, props.diff.file)
+                    event.dataTransfer?.setData("text/plain", props.diff.file)
+                    event.stopPropagation()
+                  }}
+                >
+                  <FileIcon node={{ path: props.diff.file, type: "file" }} />
+                  <div data-slot="session-review-file-name-container">
+                    <Show when={props.diff.file.includes("/")}>
+                      <span data-slot="session-review-directory">{`\u2066${getDirectory(props.diff.file)}\u2069`}</span>
+                    </Show>
+                    <span data-slot="session-review-filename">{getFilename(props.diff.file)}</span>
+                    <Show when={props.comments() > 0}>
+                      <span class="am-diff-file-badge">{props.comments()}</span>
+                    </Show>
+                  </div>
+                </div>
+                <div data-slot="session-review-trigger-actions">
+                  <Show when={isAdded()}>
+                    <span data-slot="session-review-change" data-type="added">
+                      {t("ui.sessionReview.change.added")}
+                    </span>
+                  </Show>
+                  <Show when={isDeleted()}>
+                    <span data-slot="session-review-change" data-type="removed">
+                      {t("ui.sessionReview.change.removed")}
+                    </span>
+                  </Show>
+                  <DiffChanges changes={props.diff} />
+                  <Show when={props.diff.kind === "image"}>
+                    <span class="am-diff-summary-pill">{t("agentManager.review.image")}</span>
+                  </Show>
+                  <Show when={isLargeCollapsed()}>
+                    <span class="am-diff-large-pill">{t("agentManager.review.largeFileCollapsed")}</span>
+                  </Show>
+                  <Show when={props.diff.tracked === false}>
+                    <span class="am-diff-summary-pill">untracked</span>
+                  </Show>
+                  <Show when={props.diff.generatedLike === true}>
+                    <span class="am-diff-summary-pill">generated</span>
+                  </Show>
+                  <Show when={props.onReviewStatusChange}>
+                    <Button
+                      size="small"
+                      variant={props.reviewStatus?.() === "accepted" ? "secondary" : "ghost"}
+                      onClick={(event: MouseEvent) => {
+                        event.stopPropagation()
+                        props.onReviewStatusChange?.(props.reviewStatus?.() === "accepted" ? "pending" : "accepted")
+                      }}
+                    >
+                      {props.reviewStatus?.() === "accepted" ? t("review.accepted") : t("review.accept")}
+                    </Button>
+                  </Show>
+                  <Show when={props.onOpenFile && !isDeleted()}>
+                    <Tooltip value={t("agentManager.diff.openFile")} placement="top">
+                      <IconButton
+                        icon="go-to-file"
+                        size="small"
+                        variant="ghost"
+                        label={t("agentManager.diff.openFile")}
+                        onClick={(event: MouseEvent) => {
+                          event.stopPropagation()
+                          props.onOpenFile?.(props.diff.file)
+                        }}
+                      />
+                    </Tooltip>
+                  </Show>
+                  <Show when={isMarkdownFile(props.diff.file) && props.onOpenDocument && !isDeleted()}>
+                    <Tooltip value={t("agentManager.documents.preview")} placement="top">
+                      <IconButton
+                        icon="book-open-check"
+                        size="small"
+                        variant="ghost"
+                        label={t("agentManager.documents.preview")}
+                        onClick={(event: MouseEvent) => {
+                          event.stopPropagation()
+                          props.onOpenDocument?.(props.diff.file)
+                        }}
+                      />
+                    </Tooltip>
+                  </Show>
+                  <Show when={props.onRevertFile}>
+                    <Tooltip value={t("agentManager.diff.revertFile")} placement="top">
+                      <IconButton
+                        icon="discard"
+                        size="small"
+                        variant="ghost"
+                        class="am-diff-revert-btn"
+                        label={t("agentManager.diff.revertFile")}
+                        disabled={props.reverting()}
+                        onClick={(event: MouseEvent) => {
+                          event.stopPropagation()
+                          props.onRevertFile?.(props.diff.file)
+                        }}
+                      />
+                    </Tooltip>
+                  </Show>
+                  <Show when={isMarkdownFile(props.diff.file) && props.onMarkdownRenderChange}>
+                    <Tooltip value={props.markdownRender() ? "Show raw Markdown" : "Render Markdown"} placement="top">
+                      <IconButton
+                        icon={props.markdownRender() ? "code" : "eye"}
+                        size="small"
+                        variant="ghost"
+                        label={props.markdownRender() ? "Show raw Markdown" : "Render Markdown"}
+                        onClick={(event: MouseEvent) => {
+                          event.stopPropagation()
+                          props.onMarkdownRenderChange?.(!props.markdownRender())
+                        }}
+                      />
+                    </Tooltip>
+                  </Show>
+                  <Show when={isDiffExpandable(props.diff)}>
+                    <span data-slot="session-review-diff-chevron">
+                      <Icon name="chevron-down" size="small" />
+                    </span>
+                  </Show>
+                </div>
               </div>
-            </div>
-            <div data-slot="session-review-trigger-actions">
-              <Show when={isAdded()}>
-                <span data-slot="session-review-change" data-type="added">
-                  {t("ui.sessionReview.change.added")}
-                </span>
-              </Show>
-              <Show when={isDeleted()}>
-                <span data-slot="session-review-change" data-type="removed">
-                  {t("ui.sessionReview.change.removed")}
-                </span>
-              </Show>
-              <DiffChanges changes={props.diff} />
-              <Show when={props.diff.kind === "image"}>
-                <span class="am-diff-summary-pill">{t("agentManager.review.image")}</span>
-              </Show>
-              <Show when={isLargeCollapsed()}>
-                <span class="am-diff-large-pill">{t("agentManager.review.largeFileCollapsed")}</span>
-              </Show>
-              <Show when={props.diff.tracked === false}>
-                <span class="am-diff-summary-pill">untracked</span>
-              </Show>
-              <Show when={props.diff.generatedLike === true}>
-                <span class="am-diff-summary-pill">generated</span>
-              </Show>
-              <Show when={props.onOpenFile && !isDeleted()}>
-                <Tooltip value={t("agentManager.diff.openFile")} placement="top">
-                  <IconButton
-                    icon="go-to-file"
-                    size="small"
-                    variant="ghost"
-                    label={t("agentManager.diff.openFile")}
-                    onClick={(event: MouseEvent) => {
-                      event.stopPropagation()
-                      props.onOpenFile?.(props.diff.file)
-                    }}
-                  />
-                </Tooltip>
-              </Show>
-              <Show when={isMarkdownFile(props.diff.file) && props.onOpenDocument && !isDeleted()}>
-                <Tooltip value={t("agentManager.documents.preview")} placement="top">
-                  <IconButton
-                    icon="book-open-check"
-                    size="small"
-                    variant="ghost"
-                    label={t("agentManager.documents.preview")}
-                    onClick={(event: MouseEvent) => {
-                      event.stopPropagation()
-                      props.onOpenDocument?.(props.diff.file)
-                    }}
-                  />
-                </Tooltip>
-              </Show>
-              <Show when={props.onRevertFile}>
-                <Tooltip value={t("agentManager.diff.revertFile")} placement="top">
-                  <IconButton
-                    icon="discard"
-                    size="small"
-                    variant="ghost"
-                    class="am-diff-revert-btn"
-                    label={t("agentManager.diff.revertFile")}
-                    disabled={props.reverting()}
-                    onClick={(event: MouseEvent) => {
-                      event.stopPropagation()
-                      props.onRevertFile?.(props.diff.file)
-                    }}
-                  />
-                </Tooltip>
-              </Show>
-              <Show when={isMarkdownFile(props.diff.file) && props.onMarkdownRenderChange}>
-                <Tooltip value={props.markdownRender() ? "Show raw Markdown" : "Render Markdown"} placement="top">
-                  <IconButton
-                    icon={props.markdownRender() ? "code" : "eye"}
-                    size="small"
-                    variant="ghost"
-                    label={props.markdownRender() ? "Show raw Markdown" : "Render Markdown"}
-                    onClick={(event: MouseEvent) => {
-                      event.stopPropagation()
-                      props.onMarkdownRenderChange?.(!props.markdownRender())
-                    }}
-                  />
-                </Tooltip>
-              </Show>
-              <Show when={isDiffExpandable(props.diff)}>
-                <span data-slot="session-review-diff-chevron">
-                  <Icon name="chevron-down" size="small" />
-                </span>
-              </Show>
-            </div>
-          </div>
-        </Accordion.Trigger>
-      </StickyAccordionHeader>
+            </Accordion.Trigger>
+          </StickyAccordionHeader>
+        }
+      >
+        <SessionReviewHeader
+          diff={props.diff}
+          labels={labels()}
+          busy={props.sessionBusy}
+          open={props.open().includes(props.diff.file)}
+          comments={props.comments()}
+          expanded={expanded()}
+          onExpand={() => setExpanded((value) => !value)}
+          onOpenFile={props.onOpenFile ? () => props.onOpenFile?.(props.diff.file) : undefined}
+          onAddFileToChat={props.onAddFileToChat}
+          onDecision={props.onSessionDecision}
+        />
+      </Show>
       <Accordion.Content>
         <Show when={props.open().includes(props.diff.file)}>
+          <Show when={navigation()}>
+            <div class="am-review-hunks" role="group" aria-label={t("review.changes")}>
+              <IconButton
+                icon="arrow-up"
+                size="small"
+                variant="ghost"
+                label={t("review.previousChange")}
+                disabled={hunk() <= 0}
+                onClick={() => navigate(hunk() - 1)}
+              />
+              <span>{t("review.changeCount", { current: Math.max(0, hunk() + 1), total: hunks().length })}</span>
+              <IconButton
+                icon="arrow-down"
+                size="small"
+                variant="ghost"
+                label={t("review.nextChange")}
+                disabled={hunk() >= hunks().length - 1}
+                onClick={() => navigate(hunk() + 1)}
+              />
+            </div>
+          </Show>
           <Show
             when={props.diff.summarized !== true}
             fallback={
@@ -215,27 +318,66 @@ export const ReviewDiffItem: Component<Props> = (props) => {
               when={props.diff.kind === "image"}
               fallback={
                 <Show
-                  when={props.markdownRender() && isMarkdownFile(props.diff.file)}
+                  when={markdown()}
                   fallback={
-                    <Diff<DiffAnnotationMeta>
-                      before={{ name: props.diff.file, contents: props.diff.before }}
-                      after={{ name: props.diff.file, contents: props.diff.after }}
-                      patch={props.diff.patch}
-                      diffStyle={props.diffStyle()}
-                      sizeKey={diffSizeKey(props.sessionKey, props.diff, props.diffStyle())}
-                      virtualized={shouldVirtualizeDiff(props.diff)}
-                      visible={props.viewport.visible() && active()}
-                      handle={props.handle}
-                      scrollTo={props.scrollTo}
-                      annotations={props.annotations()}
-                      renderAnnotation={props.renderAnnotation}
-                      enableGutterUtility={props.canComment()}
-                      onGutterUtilityClick={props.onGutterUtilityClick}
-                      onLineNumberClick={(event) => {
-                        if (event.annotationSide === "deletions") return
-                        props.onOpenFile?.(props.diff.file, event.lineNumber)
-                      }}
-                    />
+                    <Show
+                      when={props.sessionReview}
+                      fallback={
+                        <Diff<DiffAnnotationMeta>
+                          before={{ name: props.diff.file, contents: props.diff.before }}
+                          after={{ name: props.diff.file, contents: props.diff.after }}
+                          patch={props.diff.patch}
+                          diffStyle={props.diffStyle()}
+                          sizeKey={diffSizeKey(props.sessionKey, props.diff, props.diffStyle())}
+                          virtualized={shouldVirtualizeDiff(props.diff)}
+                          visible={props.viewport.visible() && active()}
+                          handle={(value) => {
+                            handle = value
+                            props.handle?.(value)
+                          }}
+                          onRendered={reveal}
+                          scrollTo={props.scrollTo}
+                          annotations={props.annotations()}
+                          renderAnnotation={props.renderAnnotation}
+                          enableGutterUtility={props.canComment()}
+                          onGutterUtilityClick={props.onGutterUtilityClick}
+                          onLineNumberClick={(event) => {
+                            if (event.annotationSide === "deletions") return
+                            props.onOpenFile?.(props.diff.file, event.lineNumber)
+                          }}
+                        />
+                      }
+                    >
+                      <ReviewSessionDiff<DiffAnnotationMeta>
+                        diff={props.diff}
+                        labels={labels()}
+                        busy={props.sessionBusy}
+                        expanded={expanded()}
+                        visible={props.viewport.visible() && active()}
+                        onDecision={props.onSessionDecision}
+                        options={{
+                          before: { name: props.diff.file, contents: props.diff.before },
+                          after: { name: props.diff.file, contents: props.diff.after },
+                          diffStyle: props.diffStyle(),
+                          sizeKey: diffSizeKey(props.sessionKey, props.diff, props.diffStyle()),
+                          virtualized: shouldVirtualizeDiff(props.diff),
+                          handle: (value) => {
+                            handle = value
+                            props.handle?.(value)
+                          },
+                          onRendered: reveal,
+                          scrollTo: props.scrollTo,
+                          annotations: props.annotations(),
+                          renderAnnotation: props.renderAnnotation,
+                          enableGutterUtility: props.canComment(),
+                          onGutterUtilityClick: props.onGutterUtilityClick,
+                          onLineNumberClick: (event) => {
+                            if (event.annotationSide === "deletions") return
+                            props.onOpenFile?.(props.diff.file, event.lineNumber)
+                          },
+                        }}
+                      />
+                    </Show>
                   }
                 >
                   <MarkdownDiffView

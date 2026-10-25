@@ -39,6 +39,7 @@ interface Props {
   composer: (key: string) => ReviewComposer
   lead: () => JSX.Element
   canRevert: boolean
+  revision?: string
   diffStyle: "unified" | "split"
   onDiffStyleChange: (style: "unified" | "split") => void
   markdownRender: boolean
@@ -114,7 +115,8 @@ export const DiffPanelCache: Component<Props> = (props) => {
               worktreeId={entry.ctx}
               notice={props.notice(entry.key)}
               lead={active() ? props.lead() : undefined}
-              canRevert={props.canRevert}
+              canRevert={active() && props.canRevert && !!props.revision}
+              revision={props.revision}
               diffStyle={props.diffStyle}
               onDiffStyleChange={props.onDiffStyleChange}
               markdownRender={props.markdownRender}

@@ -55,6 +55,40 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "review.changes": "変更箇所",
+  "review.sessionFiles": "{{count}} 個の変更されたファイル",
+  "review.undoAll": "すべて元に戻す",
+  "review.keep": "保持",
+  "review.keepAll": "すべて保持",
+  "review.undo": "元に戻す",
+  "review.addFileToChat": "ファイルをチャットに追加",
+  "review.showEntireFile": "ファイル全体を表示",
+  "review.showDiffOnly": "差分のみを表示",
+  "review.hiddenLines": "{{count}} 行が非表示",
+  "review.expandAll": "すべて展開",
+  "review.expandTwenty": "さらに20行表示",
+  "review.reject": "却下",
+  "review.pending": "保留中",
+  "review.rejected": "却下済み",
+  "review.sessionWarning":
+    "このチャットの保留中の変更のみを元に戻します。保持した変更は次のレビューの基準となり、元には戻されません。競合する後続の編集は上書きされません。チャット履歴と Git のステージング状態は保持されます。",
+  "review.sessionTimeout": "セッションのレビューがタイムアウトしました。再試行して変更を更新してください。",
+  "review.sessionScope":
+    "このチャットのファイル編集ツールが記録した変更のみが表示されます。シェルや外部ツールによる変更はこのチャットに関連付けられません。",
+  "review.previousChange": "前の変更",
+  "review.nextChange": "次の変更",
+  "review.changeCount": "{{current}} / {{total}} 件の変更",
+  "review.accept": "承認",
+  "review.accepted": "承認済み",
+  "review.acceptAll": "すべて承認",
+  "review.previousFile": "前のファイル",
+  "review.nextFile": "次のファイル",
+  "review.progress": "{{accepted}} / {{total}} 件承認済み",
+  "review.guidance":
+    "承認はディスク上にある変更を保持するだけで、ステージングやコミットは行いません。元に戻す操作はファイル全体を比較元の状態に戻します。",
+  "review.revertTitle": "ファイルの変更を却下しますか？",
+  "review.revertWarning":
+    "{{file}} を比較元の状態に戻しますか？手動の編集やブランチでコミット済みの編集を含む、このファイルのすべての変更が破棄されます。追加されたファイルは削除されます。この操作はここでは取り消せません。",
   "session.goal.complete": "完了（モデルによる報告）",
   "session.goal.blocked": "ブロック中",
   "session.goal.restart": "目標を再開",
@@ -377,7 +411,6 @@ export const dict = {
     "この会話と1つの変更されたファイルを、分離されたフォローアップ作業用の専用 worktree に移動します。",
   "sidebar.session.moveToWorktree.tooltip.other":
     "この会話と{{files}}個の変更されたファイルを、分離されたフォローアップ作業用の専用 worktree に移動します。",
-  "sidebar.session.showChanges.tooltip.empty": "変更ビューを開いて、現在の作業ツリーを検査します。",
   "sidebar.session.progress.capturing": "変更をキャプチャ中...",
   "sidebar.session.progress.creating": "worktree を作成中...",
   "sidebar.session.progress.setup": "セットアップを実行中...",

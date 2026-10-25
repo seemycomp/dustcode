@@ -16,6 +16,8 @@ type Opts = {
   git?: GitOps
   trees?: Record<string, { id: string; path: string; parentBranch: string; remote: string }>
   diffs?: (id: string, ctx: PanelContext) => DiffFile[]
+  revert?: (file: string) => Promise<{ ok: boolean; message: string }>
+  project?: () => string | undefined
 }
 
 function make(opts: Opts = {}) {
@@ -35,6 +37,7 @@ function make(opts: Opts = {}) {
           await opts.fetch?.(++fetches)
           return { diffs: opts.diffs?.(id, ctx) ?? [] }
         },
+        revert: opts.revert,
       }
     },
   } as unknown as DiffSourceCatalog
@@ -53,6 +56,7 @@ function make(opts: Opts = {}) {
     localDiffFile: async () => null,
     post: (message) => posted.push(message),
     log: () => {},
+    projectId: opts.project,
   })
   return { controller, builds, posted }
 }
@@ -72,6 +76,140 @@ function byType(items: unknown[], type: string) {
     return typeof item === "object" && item !== null && (item as { type?: unknown }).type === type
   })
 }
+
+describe("WorktreeDiffController.revert", () => {
+  it.each(["w1#staged", "w1#unstaged", "w1#session:s1", "w2#branch"])(
+    "rejects inactive %s without falling back to a branch revert",
+    async (id) => {
+      const calls: string[] = []
+      const { controller, posted } = make({
+        git: {
+          revertFile: async () => {
+            calls.push("fallback")
+            return { ok: true, message: "mutated" }
+          },
+        } as unknown as GitOps,
+        revert: async () => {
+          calls.push("active")
+          return { ok: true, message: "mutated" }
+        },
+      })
+      await controller.request("w1#branch")
+      await controller.revert(id, "a.ts")
+
+      expect(calls).toEqual([])
+      expect(byType(posted, "agentManager.revertWorktreeFileResult")).toEqual([
+        expect.objectContaining({ sessionId: id, file: "a.ts", status: "error" }),
+      ])
+    },
+  )
+
+  it.each(["w1#staged", "w1#unstaged", "w1#session:s1"])("rejects active read-only %s", async (id) => {
+    const calls: string[] = []
+    const { controller, posted } = make({
+      revert: async (file) => {
+        calls.push(file)
+        return { ok: true, message: "mutated" }
+      },
+    })
+    await controller.request(id)
+    await controller.revert(id, "a.ts")
+
+    expect(calls).toEqual([])
+    expect(byType(posted, "agentManager.revertWorktreeFileResult")).toEqual([
+      expect.objectContaining({ sessionId: id, status: "error" }),
+    ])
+  })
+
+  it("uses the existing per-file revert and refresh for the active branch in the current project", async () => {
+    const calls: string[] = []
+    const { controller, posted, builds } = make({
+      project: () => "project-a",
+      revert: async (file) => {
+        calls.push(file)
+        return { ok: true, message: "reverted" }
+      },
+    })
+    await controller.request("w1#branch")
+    await controller.setBase("w1#branch", "feature-base")
+    const before = byType(posted, "agentManager.worktreeDiff").length
+    await controller.revert("w1#branch", "a.ts")
+
+    expect(calls).toEqual(["a.ts"])
+    expect(builds.at(-1)?.ctx.baseBranch).toBe("feature-base")
+    expect(byType(posted, "agentManager.worktreeDiff")).toHaveLength(before + 1)
+    expect(byType(posted, "agentManager.revertWorktreeFileResult")).toEqual([
+      expect.objectContaining({ projectId: "project-a", sessionId: "w1#branch", file: "a.ts", status: "success" }),
+    ])
+  })
+
+  it("rejects a matching active id after the current project changes", async () => {
+    let project = "project-a"
+    const calls: string[] = []
+    const { controller, posted } = make({
+      project: () => project,
+      revert: async (file) => {
+        calls.push(file)
+        return { ok: true, message: "mutated" }
+      },
+    })
+    await controller.request("w1#branch")
+    project = "project-b"
+    await controller.revert("w1#branch", "a.ts")
+
+    expect(calls).toEqual([])
+    expect(byType(posted, "agentManager.revertWorktreeFileResult")).toEqual([
+      expect.objectContaining({ status: "error" }),
+    ])
+  })
+
+  it("rejects reverts before activation and after stop", async () => {
+    const calls: string[] = []
+    const { controller, posted } = make({
+      git: {
+        revertFile: async () => {
+          calls.push("fallback")
+          return { ok: true, message: "mutated" }
+        },
+      } as unknown as GitOps,
+    })
+    await controller.revert("w1#branch", "a.ts")
+    await controller.request("w1#branch")
+    controller.stop()
+    await controller.revert("w1#branch", "a.ts")
+
+    expect(calls).toEqual([])
+    expect(byType(posted, "agentManager.revertWorktreeFileResult")).toEqual([
+      expect.objectContaining({ status: "error" }),
+      expect.objectContaining({ status: "error" }),
+    ])
+  })
+
+  it("does not reuse the previous project's source while a matching id is activating", async () => {
+    let project = "project-a"
+    const ready = Promise.withResolvers<void>()
+    const calls: string[] = []
+    const { controller, posted } = make({
+      project: () => project,
+      ready: () => (project === "project-b" ? ready.promise : undefined),
+      revert: async (file) => {
+        calls.push(file)
+        return { ok: true, message: "mutated" }
+      },
+    })
+    await controller.request("w1#branch")
+    project = "project-b"
+    const pending = controller.request("w1#branch")
+    await controller.revert("w1#branch", "a.ts")
+    ready.resolve()
+    await pending
+
+    expect(calls).toEqual([])
+    expect(byType(posted, "agentManager.revertWorktreeFileResult")).toEqual([
+      expect.objectContaining({ status: "error" }),
+    ])
+  })
+})
 
 describe("WorktreeDiffController.setVisible", () => {
   it("defers hidden watches and resumes the latest base when shown", async () => {

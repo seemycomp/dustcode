@@ -58,6 +58,40 @@ export const anacondaDesktopDict = {
 type Keys = keyof typeof en
 
 export const dict = {
+  "review.changes": "변경된 영역",
+  "review.sessionFiles": "변경된 파일 {{count}}개",
+  "review.undoAll": "모두 실행 취소",
+  "review.keep": "유지",
+  "review.keepAll": "모두 유지",
+  "review.undo": "실행 취소",
+  "review.addFileToChat": "채팅에 파일 추가",
+  "review.showEntireFile": "전체 파일 표시",
+  "review.showDiffOnly": "차이점만 표시",
+  "review.hiddenLines": "숨겨진 줄 {{count}}개",
+  "review.expandAll": "모두 펼치기",
+  "review.expandTwenty": "20줄 더 표시",
+  "review.reject": "거부",
+  "review.pending": "대기 중",
+  "review.rejected": "거부됨",
+  "review.sessionWarning":
+    "이 채팅의 대기 중인 변경 사항만 실행 취소합니다. 유지한 변경 사항은 다음 검토의 기준이 되며 실행 취소되지 않습니다. 이후 충돌하는 편집 내용은 덮어쓰지 않습니다. 채팅 기록과 Git 스테이징 상태는 유지됩니다.",
+  "review.sessionTimeout": "세션 검토 시간이 초과되었습니다. 다시 시도하여 변경 사항을 새로 고치세요.",
+  "review.sessionScope":
+    "이 채팅에서 파일 편집 도구가 기록한 변경 사항만 표시됩니다. 셸 및 외부 도구의 변경 사항은 이 채팅에 귀속되지 않습니다.",
+  "review.previousChange": "이전 변경 사항",
+  "review.nextChange": "다음 변경 사항",
+  "review.changeCount": "{{current}} / {{total}}개 변경 사항",
+  "review.accept": "수락",
+  "review.accepted": "수락됨",
+  "review.acceptAll": "모두 수락",
+  "review.previousFile": "이전 파일",
+  "review.nextFile": "다음 파일",
+  "review.progress": "{{accepted}} / {{total}}개 수락됨",
+  "review.guidance":
+    "수락은 이미 디스크에 있는 변경 사항을 유지하며, 스테이징하거나 커밋하지 않습니다. 되돌리기는 파일 전체를 비교 기준 상태로 복원합니다.",
+  "review.revertTitle": "파일 변경 사항을 거부하시겠습니까?",
+  "review.revertWarning":
+    "{{file}}을(를) 비교 기준 상태로 복원하시겠습니까? 수동 편집과 브랜치에서 이미 커밋한 편집을 포함하여 이 파일의 모든 변경 사항이 삭제됩니다. 추가된 파일은 삭제됩니다. 이 작업은 여기서 취소할 수 없습니다.",
   "session.goal.complete": "완료 (모델 보고)",
   "session.goal.blocked": "차단됨",
   "session.goal.restart": "목표 다시 시작",
@@ -376,7 +410,6 @@ export const dict = {
     "이 대화와 변경된 파일 1개를 격리된 후속 작업을 위해 전용 worktree로 이동합니다.",
   "sidebar.session.moveToWorktree.tooltip.other":
     "이 대화와 변경된 파일 {{files}}개를 격리된 후속 작업을 위해 전용 worktree로 이동합니다.",
-  "sidebar.session.showChanges.tooltip.empty": "변경 사항 뷰를 열어 현재 작업 트리를 검사합니다.",
   "sidebar.session.progress.capturing": "변경 사항 캡처 중...",
   "sidebar.session.progress.creating": "worktree 생성 중...",
   "sidebar.session.progress.setup": "설정 실행 중...",

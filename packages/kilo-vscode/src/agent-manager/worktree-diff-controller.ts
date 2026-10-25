@@ -1,6 +1,5 @@
 import { SourceController } from "../diff/SourceController"
 import { resolveLocalDiffTarget } from "../diff/shared/target"
-import { WorktreeDiffReverter, type StatusResolver } from "../diff/shared/reverter"
 import type { DiffFile, PanelContext } from "../diff/types"
 import type { DiffSource } from "../diff/sources/types"
 import type { DiffSourceCatalog } from "../diff/sources/catalog"
@@ -40,6 +39,7 @@ export class WorktreeDiffController {
   private poll = false
   private owner: string | undefined
   private generation = 0
+  private readonly owners = new WeakMap<DiffSource, string | undefined>()
   /** Ephemeral per-context base override, keyed by context id. */
   private baseOverrides = new Map<string, string>()
 
@@ -49,12 +49,13 @@ export class WorktreeDiffController {
       () => [],
       (msg) => this.ctx.post(msg as AgentManagerOutMessage),
       {
-        available: (_, sessionId) => ({
+        available: (_, sessionId, revision) => ({
           type: "agentManager.worktreeDiffLoading",
           projectId: this.owner,
           sessionId,
           loading: true,
           reset: true,
+          revision,
         }),
         loading: (source, loading) => ({
           type: "agentManager.worktreeDiffLoading",
@@ -83,11 +84,13 @@ export class WorktreeDiffController {
         }),
         revertFileResult: (source, file, result) => ({
           type: "agentManager.revertWorktreeFileResult",
-          projectId: this.owner,
+          projectId: source ? this.owners.get(source) : this.owner,
           sessionId: source?.descriptor.id ?? "",
           file,
           status: result.ok ? "success" : "error",
           message: result.message,
+          revision: result.revision,
+          revertId: result.requestId,
         }),
         unsupportedRevert: (source, file) => ({
           type: "agentManager.revertWorktreeFileResult",
@@ -96,6 +99,19 @@ export class WorktreeDiffController {
           file,
           status: "error",
           message: "Revert is not supported for the current source",
+        }),
+        error: (source, message) => ({
+          type: "agentManager.worktreeDiffNotice",
+          projectId: this.owner,
+          sessionId: source.descriptor.id,
+          notice: message ? `Review failed: ${message}` : undefined,
+        }),
+        ready: (source, revision) => ({
+          type: "agentManager.worktreeDiffLoading",
+          projectId: this.owner,
+          sessionId: source.descriptor.id,
+          loading: false,
+          revision,
         }),
       },
     )
@@ -171,14 +187,22 @@ export class WorktreeDiffController {
     }
   }
 
-  public async revert(id: string, file: string): Promise<void> {
+  public async revert(id: string, file: string, request?: { revision: string; requestId: string }): Promise<void> {
+    if (request && (typeof request.revision !== "string" || typeof request.requestId !== "string")) return
     if (!file) return
-    if (this.controller.currentId !== id) {
-      const result = await this.revertFile(id, file)
-      this.postRevertResult(id, file, result)
+    if (this.controller.currentId !== id || this.owner !== this.ctx.projectId?.()) {
+      this.postRevertResult(id, file, { ok: false, message: "The diff source is no longer active", ...request })
       return
     }
-    await this.controller.revertFile(file)
+    if (parseDiffId(id).scope !== "branch") {
+      this.postRevertResult(id, file, {
+        ok: false,
+        message: "Revert is not supported for the current source",
+        ...request,
+      })
+      return
+    }
+    await this.controller.revertFile(file, request)
   }
 
   public async request(id: string): Promise<void> {
@@ -288,6 +312,8 @@ export class WorktreeDiffController {
 
   private async activate(id: string, poll: boolean, fetch: boolean): Promise<void> {
     const generation = ++this.generation
+    // Disable the previous source before resolving a potentially different project.
+    this.controller.stop()
     this.target = undefined
     this.poll = poll
     const owner = this.ctx.projectId?.()
@@ -366,33 +392,19 @@ export class WorktreeDiffController {
   private source(id: string, panelCtx: PanelContext): DiffSource {
     const { ctx, scope, sessionId } = parseDiffId(id)
     const built = this.ctx.catalog.build(scopeToSourceId(scope, ctx, sessionId), panelCtx)
-    return {
+    const source = {
       ...built,
       descriptor: { ...built.descriptor, id },
     }
+    this.owners.set(source, this.owner)
+    return source
   }
 
-  private async revertFile(id: string, file: string): Promise<{ ok: boolean; message: string }> {
-    await this.ready("stateReady rejected, continuing revert resolve:")
-    const { ctx } = parseDiffId(id)
-    const target = await this.resolve(ctx)
-    if (!target) return { ok: false, message: "Could not resolve diff target" }
-
-    try {
-      const status: StatusResolver = async (current, item) => {
-        const diff = await this.ctx.localDiffFile(current.directory, current.baseBranch, item)
-        return diff?.status
-      }
-      const diff = new WorktreeDiffReverter(this.ctx.git, status, (...args) => this.ctx.log(...args))
-      return await diff.revertFile(target, file)
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error)
-      this.ctx.log("Failed to revert worktree file:", msg)
-      return { ok: false, message: msg }
-    }
-  }
-
-  private postRevertResult(sessionId: string, file: string, result: { ok: boolean; message: string }): void {
+  private postRevertResult(
+    sessionId: string,
+    file: string,
+    result: { ok: boolean; message: string; revision?: string; requestId?: string },
+  ): void {
     this.ctx.post({
       type: "agentManager.revertWorktreeFileResult",
       projectId: this.owner,
@@ -400,6 +412,8 @@ export class WorktreeDiffController {
       file,
       status: result.ok ? "success" : "error",
       message: result.message,
+      revision: result.revision,
+      revertId: result.requestId,
     })
   }
 

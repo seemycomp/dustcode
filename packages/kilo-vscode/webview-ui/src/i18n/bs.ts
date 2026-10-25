@@ -54,6 +54,40 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "review.changes": "Izmijenjeni dijelovi",
+  "review.sessionFiles": "{{count}} izmijenjenih datoteka",
+  "review.undoAll": "Poništi sve",
+  "review.keep": "Zadrži",
+  "review.keepAll": "Zadrži sve",
+  "review.undo": "Poništi",
+  "review.addFileToChat": "Dodaj datoteku u razgovor",
+  "review.showEntireFile": "Prikaži cijelu datoteku",
+  "review.showDiffOnly": "Prikaži samo razlike",
+  "review.hiddenLines": "{{count}} skrivenih redova",
+  "review.expandAll": "Proširi sve",
+  "review.expandTwenty": "Prikaži još 20 redova",
+  "review.reject": "Odbaci",
+  "review.pending": "Na čekanju",
+  "review.rejected": "Odbačeno",
+  "review.sessionWarning":
+    "Poništite samo izmjene na čekanju iz ovog razgovora. Zadržane izmjene postaju osnova sljedećeg pregleda i ne poništavaju se. Kasnije izmjene koje su u sukobu neće biti prepisane. Historija razgovora i Git staging ostaju sačuvani.",
+  "review.sessionTimeout": "Vrijeme za pregled sesije je isteklo. Pokušajte ponovo da osvježite izmjene.",
+  "review.sessionScope":
+    "Prikazuju se samo izmjene koje su zabilježili alati za uređivanje datoteka u ovom razgovoru. Izmjene iz komandne ljuske i vanjskih alata ne pripisuju se ovom razgovoru.",
+  "review.previousChange": "Prethodna izmjena",
+  "review.nextChange": "Sljedeća izmjena",
+  "review.changeCount": "{{current}} / {{total}} izmjena",
+  "review.accept": "Prihvati",
+  "review.accepted": "Prihvaćeno",
+  "review.acceptAll": "Prihvati sve",
+  "review.previousFile": "Prethodna datoteka",
+  "review.nextFile": "Sljedeća datoteka",
+  "review.progress": "{{accepted}} / {{total}} prihvaćeno",
+  "review.guidance":
+    "Prihvatanje zadržava izmjene koje su već na disku; ne dodaje ih u pripremnu zonu niti kreira commit. Vraćanje vraća cijelu datoteku na osnovu poređenja.",
+  "review.revertTitle": "Odbaciti izmjene datoteke?",
+  "review.revertWarning":
+    "Vratiti {{file}} na osnovu poređenja? Time se odbacuju sve izmjene u ovoj datoteci, uključujući ručne izmjene i izmjene grane koje su već u commitima. Dodane datoteke se brišu. Ova radnja se ovdje ne može poništiti.",
   "session.goal.complete": "Završeno (prema modelu)",
   "session.goal.blocked": "Blokirano",
   "session.goal.restart": "Ponovo pokreni cilj",
@@ -377,7 +411,6 @@ export const dict = {
     "Premjesti ovaj razgovor i 1 izmijenjen fajl u namjenski worktree za izolovani naknadni rad.",
   "sidebar.session.moveToWorktree.tooltip.other":
     "Premjesti ovaj razgovor i {{files}} izmijenjenih fajlova u namjenski worktree za izolovani naknadni rad.",
-  "sidebar.session.showChanges.tooltip.empty": "Otvorite prikaz izmjena da pregledate trenutno radno stablo.",
   "sidebar.session.progress.capturing": "Snimanje izmjena...",
   "sidebar.session.progress.creating": "Kreiranje worktree-a...",
   "sidebar.session.progress.setup": "Pokretanje podešavanja...",

@@ -471,10 +471,23 @@ export class GitOps {
     file: string,
     status?: "added" | "deleted" | "modified",
   ): Promise<{ ok: boolean; message: string }> {
-    // Validate path: no absolute paths, no ".." traversal
-    if (nodePath.isAbsolute(file) || file.split(/[\\/]/).includes("..")) {
+    const parts = file.split(/[\\/]/)
+    if (
+      !file ||
+      file.includes("\0") ||
+      nodePath.isAbsolute(file) ||
+      nodePath.win32.isAbsolute(file) ||
+      parts.some((part) => !part || part === "." || part === ".." || part.toLowerCase() === ".git")
+    ) {
       return { ok: false, message: "Invalid file path" }
     }
+    file = parts.join("/")
+    const full = nodePath.resolve(cwd, file)
+    const stat = await fs.lstat(full).catch(() => undefined)
+    if (stat && !stat.isFile() && !stat.isSymbolicLink()) {
+      return { ok: false, message: "Path is not a file" }
+    }
+    const literal = `:(literal)${file}`
 
     const base = (await this.raw(["merge-base", "HEAD", baseBranch], cwd).catch(() => "")).trim()
     if (!base) {
@@ -482,8 +495,8 @@ export class GitOps {
     }
 
     if (status === "added") {
+      if (!stat) return { ok: false, message: "File not found" }
       // New file — remove it from disk and unstage
-      const full = nodePath.resolve(cwd, file)
       const root = await fs.realpath(cwd)
       const resolved = await fs.realpath(full).catch(() => full)
       if (resolved !== root && !resolved.startsWith(root + nodePath.sep)) {
@@ -491,12 +504,21 @@ export class GitOps {
       }
       await fs.rm(full, { force: true })
       // Also remove from git index in case it was staged
-      await this.raw(["rm", "--cached", "--force", "--ignore-unmatch", "--", file], cwd).catch(() => "")
+      await this.raw(["rm", "--cached", "--force", "--ignore-unmatch", "--", literal], cwd).catch(() => "")
       return { ok: true, message: "Removed added file" }
     }
 
     // Modified or deleted file — restore from merge-base
-    const result = await this.exec(["checkout", base, "--", file], cwd)
+    // Literal pathspecs still match directories. Require an exact blob before checkout.
+    const entry = await this.exec(["ls-tree", "-z", base, "--", literal], cwd)
+    if (
+      entry.code !== 0 ||
+      !/^(100644|100755|120000) blob /.test(entry.stdout) ||
+      entry.stdout.slice(entry.stdout.indexOf("\t") + 1) !== `${file}\0`
+    ) {
+      return { ok: false, message: "File not found in base" }
+    }
+    const result = await this.exec(["checkout", base, "--", literal], cwd)
     if (result.code !== 0) {
       return { ok: false, message: result.stderr.trim() || "Failed to revert file" }
     }
@@ -504,7 +526,7 @@ export class GitOps {
     // restored the file into the index correctly — resetting to HEAD would drop
     // it from the index and make it appear as a new untracked file.
     if (status === "modified") {
-      await this.raw(["reset", "HEAD", "--", file], cwd).catch(() => "")
+      await this.raw(["reset", "HEAD", "--", literal], cwd).catch(() => "")
     }
     return { ok: true, message: "Reverted file to base" }
   }

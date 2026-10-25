@@ -856,7 +856,7 @@ export class AgentManagerProvider implements Disposable {
       return null
     }
     if (m.type === "agentManager.revertWorktreeFile") {
-      void this.diffs.revert(composeDiffId(m.sessionId, normalizeScope(m.scope)), m.file)
+      void this.diffs.revert(composeDiffId(m.sessionId, normalizeScope(m.scope)), m.file, m)
       return null
     }
     if (m.type === "agentManager.startDiffWatch") {

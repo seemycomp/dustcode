@@ -2,7 +2,7 @@ import { createHash } from "crypto"
 
 import { LRUCache } from "lru-cache"
 import type Parser from "web-tree-sitter"
-type SyntaxNode = Parser.SyntaxNode
+type SyntaxNode = Parser.Tree["rootNode"]
 type Query = Parser.Query
 type Point = Parser.Point
 

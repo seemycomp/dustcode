@@ -23,11 +23,12 @@ import { ConfigValidation } from "../kilocode/config-validation" // kilocode_cha
 import * as EncodedIO from "../kilocode/tool/encoded-io" // kilocode_change
 import * as Encoding from "../kilocode/encoding" // kilocode_change
 import { assertMutablePath } from "../kilocode/agent-manager/protection" // kilocode_change
+import { reviewPatch } from "../kilocode/tool/review-patch" // kilocode_change
 
 const MAX_DIFF_CONTENT = 500_000 // kilocode_change
 
 // kilocode_change start
-export function buildFileDiff(file: string, before: string, after: string): Snapshot.FileDiff {
+export function buildFileDiff(file: string, before: string, after: string): Snapshot.FileDiff & { rawPatch: string } {
   const tooLarge = before.length > MAX_DIFF_CONTENT || after.length > MAX_DIFF_CONTENT
   let additions = 0
   let deletions = 0
@@ -40,6 +41,7 @@ export function buildFileDiff(file: string, before: string, after: string): Snap
   return {
     file,
     patch: tooLarge ? "" : createTwoFilesPatch(file, file, before, after),
+    rawPatch: reviewPatch(file, before, after),
     additions,
     deletions,
   }
@@ -209,7 +211,12 @@ export const EditTool = Tool.define(
             }).pipe(Effect.orDie),
           )
 
-          const filediff: Snapshot.FileDiff = cachedFilediff ?? buildFileDiff(filePath, contentOld, contentNew) // kilocode_change
+          // kilocode_change start - review the exact final content, including formatter changes
+          const filediff = {
+            ...(cachedFilediff ?? buildFileDiff(filePath, contentOld, contentNew)),
+            rawPatch: reviewPatch(filePath, contentOld, contentNew),
+          }
+          // kilocode_change end
 
           yield* ctx.metadata({
             metadata: {
