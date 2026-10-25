@@ -55,6 +55,7 @@ export const ripgrepLayer = Layer.effect(
         .find({
           cwd: real,
           pattern: "*",
+          hidden: true, // kilocode_change - include dotfiles and their parent folders in mention search.
           limit: location.vcs ? Number.MAX_SAFE_INTEGER : 100_000,
           onEntry: (entry) =>
             Effect.sync(() => {

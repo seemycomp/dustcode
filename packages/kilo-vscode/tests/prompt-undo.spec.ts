@@ -26,6 +26,108 @@ async function observe(page: Page, block = false) {
     }))
 }
 
+async function transcript(page: Page) {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"])
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "acquireVsCodeApi", {
+      value: () => ({
+        getState: () => undefined,
+        setState: () => undefined,
+        postMessage: async (message: { type: string; id?: string; text?: string }) => {
+          if (message.type !== "copyToClipboard") return
+          await navigator.clipboard.writeText(message.text ?? "")
+          window.postMessage({ type: "clipboardWriteResult", id: message.id, ok: true }, window.origin)
+        },
+      }),
+    })
+  })
+  await page.goto("/iframe.html?id=chat--chat-view-readable-1280&viewMode=story")
+  const input = page.locator("textarea.prompt-input")
+  await expect(input).toBeVisible()
+  await page.evaluate(() => window.postMessage({ type: "connectionState", state: "connected" }, window.origin))
+  await expect(input).toBeEnabled()
+  await input.fill("Draft text")
+  const message = page.locator(".chat-messages p").filter({ hasText: "The conversation stays" }).first()
+  await message.click()
+  const text = await message.evaluate((node) => {
+    const range = document.createRange()
+    range.selectNodeContents(node)
+    document.getSelection()!.removeAllRanges()
+    document.getSelection()!.addRange(range)
+    return document.getSelection()!.toString()
+  })
+  await expect(input).not.toBeFocused()
+  return { input, text }
+}
+
+for (const modifier of ["Control", "Meta"]) {
+  test(`${modifier}+C copies selected chat text without the host refocusing the prompt`, async ({ page }) => {
+    const { input, text } = await transcript(page)
+    await page.evaluate(() => {
+      // VS Code restores the last focused input before forwarding native Copy.
+      window.addEventListener("keydown", (event) => {
+        if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "c") return
+        event.preventDefault()
+        ;(document.querySelector("textarea.prompt-input") as HTMLTextAreaElement).focus()
+        document.execCommand("copy")
+      })
+      return navigator.clipboard.writeText("Old clipboard text")
+    })
+    const read = await observe(page)
+    await page.keyboard.press(`${modifier}+c`)
+    await expect(input).not.toBeFocused()
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(text)
+    expect(await page.evaluate(() => document.getSelection()?.toString())).toBe(text)
+    expect(await read()).toEqual({ prevented: [true], forwarded: [] })
+    await expect(input).toHaveValue("Draft text")
+    await input.fill("")
+    await input.press("ControlOrMeta+v")
+    await expect(input).toHaveValue(text)
+  })
+}
+
+for (const action of ["window focus", "restoreInput"]) {
+  test(`${action} preserves selected transcript text`, async ({ page }) => {
+    const { input, text } = await transcript(page)
+    await page.evaluate((action) => {
+      if (action === "window focus") {
+        window.dispatchEvent(new Event("focus"))
+        return
+      }
+      window.postMessage({ type: "action", action: "restoreInput" }, window.origin)
+    }, action)
+    // Drain host-message delivery before asserting that focus and selection survived.
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())))
+    await expect(input).not.toBeFocused()
+    expect(await page.evaluate(() => document.getSelection()?.toString())).toBe(text)
+  })
+}
+
+test("copies a triple-click selection extending past the final transcript paragraph", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  const { input } = await transcript(page)
+  await page.locator('.chat-messages [data-part-type="tool"]').evaluate((node) => node.remove())
+  const message = page.locator(".chat-messages p").filter({ hasText: "The conversation stays" }).first()
+  await message.click({ clickCount: 3 })
+  const text = await page.evaluate(() => {
+    const selection = document.getSelection()!
+    if (document.querySelector(".chat-messages")!.contains(selection.focusNode)) {
+      throw new Error("Expected a real mouse selection extending outside the transcript")
+    }
+    return selection.toString()
+  })
+  expect(text).toContain("The conversation stays")
+  const read = await observe(page, true)
+  await page.evaluate(() => navigator.clipboard.writeText("Old clipboard text"))
+  await page.keyboard.press("ControlOrMeta+c")
+  expect(await read()).toEqual({ prevented: [true], forwarded: [] })
+  // Windows normalizes multiline clipboard text to CRLF.
+  await expect
+    .poll(() => page.evaluate(async () => (await navigator.clipboard.readText()).replace(/\r\n/g, "\n")))
+    .toBe(text)
+  await expect(input).not.toBeFocused()
+})
+
 test("undo and redo are applied locally and never reach the host", async ({ page }) => {
   const input = await open(page)
   await input.pressSequentially("Draft text")

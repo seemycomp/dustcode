@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import path from "node:path"
 
 const root = path.resolve(import.meta.dir, "../..")
@@ -49,11 +51,50 @@ describe("VS Code fork CI", () => {
 
   test("scopes typechecking to extension, backend and embedded console", async () => {
     const pkg = await Bun.file(path.join(root, "package.json")).json()
+    expect(pkg.scripts.typecheck).toBe("bun run script/kilocode/typecheck.ts")
+    expect(pkg.scripts["typecheck:vscode"]).toStartWith("bun run script/kilocode/typecheck.ts ")
     expect(pkg.scripts["typecheck:vscode"]).toContain("--filter=dustcode...")
     expect(pkg.scripts["typecheck:vscode"]).toContain("--filter=@kilocode/cli...")
     expect(pkg.scripts["typecheck:vscode"]).toContain("--filter=@kilocode/kilo-console...")
     expect(pkg.scripts["build:vscode"]).toBe("bun run script/kilocode/build-vscode.ts")
+    const hook = await Bun.file(path.join(root, ".husky/pre-push")).text()
+    expect(hook).toContain("bun run typecheck:vscode")
+    expect(hook).not.toContain("@kilocode/kilo-jetbrains")
   })
+
+  test.skipIf(process.platform !== "win32")(
+    "typechecks with native Bun ahead of Windows command shims",
+    async () => {
+      const dir = await mkdtemp(path.join(tmpdir(), "dustcode-typecheck-"))
+      try {
+        await Bun.write(path.join(dir, "bun.cmd"), "@exit /b 73\r\n")
+        const child = Bun.spawn(
+          [
+            process.execPath,
+            path.join(root, "script/kilocode/typecheck.ts"),
+            "--filter=@kilocode/kilo-docs",
+            "--only",
+            "--force",
+          ],
+          {
+            cwd: root,
+            env: { ...process.env, PATH: `${dir}${path.delimiter}${process.env.PATH ?? ""}` },
+            stdout: "pipe",
+            stderr: "pipe",
+          },
+        )
+        const [stdout, stderr, code] = await Promise.all([
+          new Response(child.stdout).text(),
+          new Response(child.stderr).text(),
+          child.exited,
+        ])
+        expect({ code, output: code === 0 ? "" : stdout + stderr }).toEqual({ code: 0, output: "" })
+      } finally {
+        await rm(dir, { recursive: true, force: true })
+      }
+    },
+    60_000,
+  )
 
   test("keeps the fork identity and defaults independent of Kilo", async () => {
     const pkg = await Bun.file(path.join(root, "packages/kilo-vscode/package.json")).json()

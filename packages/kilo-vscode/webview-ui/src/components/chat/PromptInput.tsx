@@ -747,7 +747,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const hold = createHold({
     target: () => textareaRef,
-    busy: () => hasPopup(),
+    busy: () => hasPopup() || hasTextSelection(),
   })
   window.addEventListener("focus", hold.reclaim)
   onCleanup(() => window.removeEventListener("focus", hold.reclaim))
@@ -1270,7 +1270,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     if (message.type === "action" && message.action === "restoreInput") {
-      if (hasPopup()) return
+      if (hasPopup() || hasTextSelection()) return
       const active = document.activeElement
       if (ownsFocusRegion(active)) return
       if (active && active !== textareaRef && isTextControl(active)) return

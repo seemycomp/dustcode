@@ -8,6 +8,7 @@
 import { type Component, type JSX, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { AgentAvatarPalette } from "@kilocode/kilo-ui/agent-avatar"
 import { useData } from "@kilocode/kilo-ui/context/data"
+import { useClipboard } from "@kilocode/kilo-ui/context/clipboard"
 import { Button } from "@kilocode/kilo-ui/button"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { Spinner } from "@kilocode/kilo-ui/spinner"
@@ -34,6 +35,7 @@ import { taskChildren } from "./background-agents"
 import { pollBackgroundJobs } from "./background-jobs"
 import { showTabStrip } from "../../utils/local-tabs"
 import { forcesExternalBrowser } from "../../utils/link-modifier"
+import { isTextControl } from "../../utils/focus"
 import type { WorktreeReference } from "../../hooks/file-mention-utils"
 
 interface ChatViewProps {
@@ -67,6 +69,7 @@ interface ChatViewProps {
 export const ChatView: Component<ChatViewProps> = (props) => {
   const session = useSession()
   const data = useData()
+  const clipboard = useClipboard()
   const vscode = useVSCode()
   const language = useLanguage()
   const worktreeMode = useWorktreeMode()
@@ -115,6 +118,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const [transferDetail, setTransferDetail] = createSignal("")
   const [repoBranch, setRepoBranch] = createSignal<string>()
   let worktreeRef: HTMLDivElement | undefined
+  let view: HTMLDivElement | undefined
   let scroll: (() => void) | undefined
   const setScroll = (handler: (() => void) | undefined) => {
     scroll = handler
@@ -148,6 +152,45 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   // a permission card, a pending question or suggestion, or agent requirements.
   // A spinner there would claim the agent is working while it waits on the user.
   const dockBlocked = () => blocked() || familyQuestions().length > 0 || familySuggestions().length > 0
+
+  onMount(() => {
+    const copy = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        !(event.ctrlKey || event.metaKey) ||
+        event.altKey ||
+        event.shiftKey ||
+        (event.key.toLowerCase() !== "c" && event.keyCode !== 67) ||
+        isTextControl(document.activeElement)
+      )
+        return
+      const selection = document.getSelection()
+      const region = view?.querySelector(".chat-messages")
+      if (
+        !selection ||
+        selection.isCollapsed ||
+        !view?.contains(selection.anchorNode) ||
+        !view.contains(selection.focusNode) ||
+        (!region?.contains(selection.anchorNode) && !region?.contains(selection.focusNode))
+      )
+        return
+      const text = selection.toString()
+      if (!text) return
+      // Stop VS Code's native-copy round trip from refocusing the prompt first.
+      event.preventDefault()
+      event.stopPropagation()
+      void Promise.resolve(clipboard.write(text)).catch((err: unknown) => {
+        console.error("[Dustcode] Failed to copy selected chat text", err)
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        })
+      })
+    }
+    document.addEventListener("keydown", copy, true)
+    onCleanup(() => document.removeEventListener("keydown", copy, true))
+  })
 
   onMount(() => {
     if (props.readonly || !ownsPrompts()) return
@@ -414,6 +457,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           class="chat-view"
           data-browser-links={data.browserLinks ? "true" : undefined}
           ref={(node) => {
+            view = node
             node.addEventListener("click", openLink, true)
             onCleanup(() => node.removeEventListener("click", openLink, true))
           }}
