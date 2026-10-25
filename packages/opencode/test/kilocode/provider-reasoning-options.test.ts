@@ -156,17 +156,20 @@ describe("custom provider fallback reasoning efforts", () => {
     const provider = createOpenAICompatible({
       name: model.providerID,
       baseURL: model.api.url,
-      fetch: async (_url, init) => {
-        bodies.push(JSON.parse(String(init?.body)))
-        return Response.json({
-          id: "test",
-          object: "chat.completion",
-          created: 0,
-          model: model.id,
-          choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
-          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-        })
-      },
+      fetch: Object.assign(
+        async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+          bodies.push(JSON.parse(String(init?.body)))
+          return Response.json({
+            id: "test",
+            object: "chat.completion",
+            created: 0,
+            model: model.id,
+            choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          })
+        },
+        { preconnect: fetch.preconnect.bind(fetch) },
+      ),
     })
     await generateText({
       model: provider(model.id),
