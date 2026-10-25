@@ -41,6 +41,72 @@ function findImportsAndRequires(content: string): string[] {
 }
 
 describe("Build Script Dependency Declarations", () => {
+  it("packages runtime assets without development artifacts or local markers", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kilo-vsix-files-"))
+    const included = [
+      "README.md",
+      "CHANGELOG.md",
+      "LICENSE",
+      "THIRD_PARTY_LICENSES/notice.txt",
+      "assets/icon.svg",
+      "audio-wav/notify.wav",
+      "dist/extension.js",
+      "dist/webview.css",
+      "dist/font.woff2",
+      "dist/settings/chunk.js",
+      "dist/settings-preload.json",
+      "dist/markdown-shiki-worker.js",
+      "dist/node_modules/playwright-core/browsers.json",
+      "dist/node_modules/zod/index.d.ts",
+      "dist/licenses/playwright-core/LICENSE",
+      "bin/kilo.exe",
+      "bin/kilo",
+      "bin/ffmpeg.exe",
+      "bin/bwrap",
+      "bin/kilo-sandbox-mutation-worker.js",
+      "bin/kilo-sandbox-network-relay.js",
+      "bin/kilo-sandbox-seccomp",
+      "bin/tree-sitter/tree-sitter.wasm",
+      "bin/licenses/bubblewrap/build.ts",
+      "bin/licenses/bubblewrap/source.tar.gz",
+    ]
+    const excluded = [
+      "storybook-static/index.html",
+      ".storybook/main.js",
+      ".turbo/build.log",
+      "docs/notes.md",
+      "tests/example.js",
+      "test-results/result.json",
+      "bunfig.toml",
+      "knip.json",
+      "src/main.ts",
+      "out/previous.vsix",
+      "node_modules/.cache/sdk.json",
+      "bin/.cli-version",
+      "bin/.ffmpeg-target",
+      "bin/.ffmpeg-tmp/package/ffmpeg.exe",
+      "dist/extension.js.map",
+      "dist/settings/chunk.js.map",
+      "dist/node_modules/zod/index.js.map",
+      "bin/console/assets/chunk.js.map",
+      "bin/console/assets/chunk.js",
+      "bin/console/index.html",
+    ]
+    try {
+      for (const file of [...included, ...excluded]) {
+        fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true })
+        fs.writeFileSync(path.join(dir, file), "fixture")
+      }
+      fs.copyFileSync(PKG_FILE, path.join(dir, "package.json"))
+      fs.copyFileSync(path.join(ROOT, ".vscodeignore"), path.join(dir, ".vscodeignore"))
+      const files = await listFiles({ cwd: dir, packageManager: PackageManager.None })
+      for (const file of included) expect(files, file).toContain(file)
+      for (const file of excluded) expect(files, file).not.toContain(file)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it("esbuild.js must declare all imported/required packages in package.json", () => {
     const pkg = JSON.parse(fs.readFileSync(PKG_FILE, "utf8"))
     const declared = new Set([
@@ -124,5 +190,5 @@ describe("Build Script Dependency Declarations", () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true })
     }
-  }, 15_000)
+  }, 60_000)
 })

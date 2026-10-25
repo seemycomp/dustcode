@@ -266,7 +266,7 @@ const targets = singleFlag
 // kilocode_change start
 await $`rm -rf dist`
 const [kiloConsoleDist, kiloSandboxWorker, kiloSandboxNetwork] = await Promise.all([
-  buildKiloConsole(),
+  process.argv.includes("--without-console") ? Promise.resolve(undefined) : buildKiloConsole(),
   KiloSandboxWorker.bundle(),
   KiloSandboxNetwork.bundle(),
 ])
@@ -378,7 +378,7 @@ for (const item of targets) {
 
   // kilocode_change start
   await copyTreeSitterWasms(path.resolve(dir, `dist/${name}/bin`))
-  await copyKiloConsole(kiloConsoleDist, path.resolve(dir, `dist/${name}/bin`))
+  if (kiloConsoleDist) await copyKiloConsole(kiloConsoleDist, path.resolve(dir, `dist/${name}/bin`))
   await KiloSandboxWorker.copy(kiloSandboxWorker, path.resolve(dir, `dist/${name}/bin`))
   if (item.os === "linux") {
     await KiloSandboxNetwork.copy(kiloSandboxNetwork, path.resolve(dir, `dist/${name}/bin`), item.arch)
