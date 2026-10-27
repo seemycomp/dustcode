@@ -99,6 +99,7 @@ import { type ReviewMessageData } from "../../../src/shared/review-comments"
 import { REVERT_ERROR_CODE } from "../../../src/shared/revert-error"
 import type { BrowserFeedbackData } from "../../../src/shared/browser-feedback"
 import { activeUserMessageID, removeQueuedMessage, visibleMessages as filterVisibleMessages } from "./session-queue"
+import { sessionResubmitter } from "./session-resubmit"
 import { clearSessionDraftDiscarded, deleteDraftsForSession } from "../utils/draft-store"
 import { createAbortState } from "./abort-state"
 import { goalControl } from "../../../src/kilo-provider/command-completion"
@@ -886,6 +887,8 @@ export const SessionProvider: ParentComponent = (props) => {
     if (message.type === "extensionDataReady") queueModelUsageRefresh()
   }
 
+  const resubmitter = sessionResubmitter(vscode, currentSessionID, server.isConnected)
+
   function handleExtensionMessage(message: ExtensionMessage): void {
     // Route suggestion messages (extracted to stay within complexity limit)
     routeSuggestionMessage(message)
@@ -1071,7 +1074,6 @@ export const SessionProvider: ParentComponent = (props) => {
       frames.cancel()
     })
   })
-
   // Event handlers
   function handleSessionCreated(session: SessionInfo, draftID?: string) {
     removedSessions.delete(session.id)
@@ -3041,6 +3043,7 @@ export const SessionProvider: ParentComponent = (props) => {
     revertSession,
     unrevertSession,
     deleteQueuedMessage,
+    resubmitMessage: resubmitter.send,
     submit,
     sendMessage,
     sendCommand,

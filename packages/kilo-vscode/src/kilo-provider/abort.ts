@@ -33,6 +33,7 @@ export class SessionAbort {
     fallback: string,
     run?: (dir: string, action: () => Promise<void>) => Promise<void>,
     scope?: "session" | "tree",
+    strict = false,
   ) {
     const known = this.active.has(sessionID)
     const dirs = [...(this.active.get(sessionID) ?? [])]
@@ -48,6 +49,7 @@ export class SessionAbort {
     )
     if (failures.length > 0) {
       console.error("[Dustcode] KiloProvider: Failed to abort session in one or more directories:", failures)
+      if (strict) throw failures[0]?.error
       return false
     }
     if (known) this.active.delete(sessionID)

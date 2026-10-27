@@ -68,6 +68,11 @@ export const TranscriptRowView: Component<TranscriptRowViewProps> = (props) => {
               isSessionOpen={props.isSessionOpen}
               interrupted={row().interrupted}
               queued={row().queued}
+              onResubmit={
+                !props.readonly && server.isConnected()
+                  ? (text) => session.resubmitMessage(row().message.id, text)
+                  : undefined
+              }
               onEdit={
                 row().queued && !props.readonly && props.onEditMessage
                   ? () => props.onEditMessage?.(row().message.sessionID, row().message.id)

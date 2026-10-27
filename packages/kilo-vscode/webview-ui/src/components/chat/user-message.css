@@ -1,0 +1,98 @@
+.vscode-user-message {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  text-align: start;
+}
+
+.vscode-user-message [data-component="user-message"] {
+  align-items: stretch;
+}
+
+.vscode-user-message [data-slot="user-message-body"],
+.vscode-user-message [data-slot="user-message-attachments"] {
+  width: 100%;
+  max-width: 100%;
+  margin-inline: 0;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.vscode-user-message [data-slot="user-message-text"] {
+  display: block;
+  width: 100%;
+  border-color: var(--border-weak-base);
+  border-radius: 12px;
+  text-align: start;
+}
+
+.vscode-user-message[data-editable] [data-slot="user-message-text"] {
+  cursor: text;
+}
+
+.chat-view .vscode-session-turn-user {
+  max-width: none;
+}
+
+.user-message-edit-trigger {
+  position: absolute;
+  inset-inline-start: 0;
+  bottom: 0;
+  opacity: 0;
+}
+
+.vscode-user-message:hover .user-message-edit-trigger,
+.vscode-user-message:focus-within .user-message-edit-trigger {
+  opacity: 1;
+}
+
+.user-message-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--vscode-focusBorder);
+  border-radius: 12px;
+  background: var(--vscode-input-background);
+}
+
+.user-message-editor [data-component="input"],
+.user-message-editor [data-slot="input-wrapper"] {
+  width: 100%;
+}
+
+.user-message-editor textarea {
+  width: 100%;
+  min-height: 60px;
+  max-height: 40vh;
+  overflow-y: auto;
+  resize: none;
+}
+
+.user-message-editor-images,
+.user-message-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-message-editor-images:empty {
+  display: none;
+}
+
+.user-message-editor-actions {
+  justify-content: flex-end;
+}
+
+.user-message-editor-model {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-weak);
+  font-size: var(--font-size-small);
+}

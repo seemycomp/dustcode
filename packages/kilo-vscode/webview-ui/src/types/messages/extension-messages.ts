@@ -270,6 +270,15 @@ export interface DeleteMessageResultMessage {
   success: boolean
 }
 
+export interface ResubmitMessageResultMessage {
+  type: "resubmitMessageResult"
+  sessionID: string
+  messageID: string
+  requestID: string
+  success: boolean
+  error?: string
+}
+
 export interface MessagesLoadedMessage {
   type: "messagesLoaded"
   sessionID: string
@@ -1863,6 +1872,7 @@ export type ExtensionMessage =
   | SessionDeletedMessage
   | MessageRemovedMessage
   | DeleteMessageResultMessage
+  | ResubmitMessageResultMessage
   | MessagesLoadedMessage
   | SessionModelUsageLoadedMessage
   | SessionModelUsageChangedMessage

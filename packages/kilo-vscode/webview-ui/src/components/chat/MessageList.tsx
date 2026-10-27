@@ -27,6 +27,7 @@ import { useVSCode } from "../../context/vscode"
 import { useLanguage } from "../../context/language"
 import { WelcomeEmptyState } from "./WelcomeEmptyState"
 import { TranscriptRowView } from "./TranscriptRow"
+import { VscodeUserMessage } from "./VscodeUserMessage"
 import { createRowHandoff } from "./transcript-row-handoff"
 import { RevertBanner } from "./RevertBanner"
 import { AccountSwitcher } from "../shared/AccountSwitcher"
@@ -152,6 +153,7 @@ export const MessageList: Component<MessageListProps> = (props) => {
   const [scrollEl, setScrollEl] = createSignal<HTMLElement>()
   const [virtualizer, setVirtualizer] = createSignal<VirtualizerHandle>()
   const [layout, setLayout] = createSignal("")
+  const [pendingRestore, setPendingRestore] = createSignal<string>()
   // Transcript height, kept reactive so the prompt rail re-caps on resize.
   const [height, setHeight] = createSignal(0)
 
@@ -594,8 +596,19 @@ export const MessageList: Component<MessageListProps> = (props) => {
   // Until the transcript is measured there is no height to cap against, and
   // rendering every prompt would spill ticks past the rail on long sessions.
   const entries = createMemo(() => railEntries(items(), capacity(height()), session.hasOlderMessages()))
-  const [activeTurn, setActiveTurn] = createSignal<string>()
+  const [visible, setVisible] = createSignal<{ sid: string; turn: string; sticky?: string }>()
+  const activeTurn = () => (visible()?.sid === session.currentSessionID() ? visible()?.turn : undefined)
   const railActiveKey = createMemo(() => items().find((item) => item.turn === activeTurn())?.key)
+  const sticky = createMemo(() => {
+    const state = visible()
+    if (!state?.sticky || state.sid !== session.currentSessionID() || session.loading() || pendingRestore()) return
+    const row = lookup().get(state.sticky)
+    return row?.type === "user" && !row.queued && !row.partial ? row : undefined
+  })
+  createEffect(() => {
+    const row = sticky()
+    if (row) session.hydrateParts([row.message.id])
+  })
 
   const [seek, setSeek] = createSignal<{ sid: string; count: number }>()
   let paging = false
@@ -653,20 +666,37 @@ export const MessageList: Component<MessageListProps> = (props) => {
   })
 
   const trackActive = () => {
-    const list = items()
-    if (list.length === 0) return setActiveTurn(undefined)
-    const handle = virtualizer()
-    const offset = handle?.scrollOffset
-    if (handle && offset !== undefined && offset > 1) {
-      const row = partition().virtual[handle.findItemIndex(offset)]
-      if (row) return setActiveTurn(row.turn)
-    }
     const el = scrollEl()
-    if (handle && el && el.scrollHeight > el.clientHeight + 1) {
-      const row = partition().virtual[0]
-      if (row) return setActiveTurn(row.turn)
-    }
-    setActiveTurn(list.at(-1)?.turn)
+    const sid = session.currentSessionID()
+    if (!el || !sid || session.loading() || pendingRestore() || items().length === 0) return setVisible(undefined)
+    const top = el.getBoundingClientRect().top + el.clientTop
+    const bottom = top + el.clientHeight
+    // Mounted rows include the direct live tail. Virtua's offset alone clamps
+    // to its last history row once the viewport has moved beyond that list.
+    const mounted = Array.from(el.querySelectorAll<HTMLElement>("[data-row-key]"))
+    const node = mounted.find((node) => {
+      if (node.closest(".message-list") !== el) return false
+      const rect = node.getBoundingClientRect()
+      return rect.height > 0 && rect.bottom > top + 1 && rect.top < bottom
+    })
+    const handle = virtualizer()
+    const box = el.querySelector<HTMLElement>('[data-slot="message-list-virtual"]')?.getBoundingClientRect()
+    const offset = box ? top - box.top : -1
+    // During a fast virtual jump the target may not be mounted yet. Account
+    // for padding and the older-history loader before consulting row offsets.
+    const row = node
+      ? lookup().get(node.dataset.rowKey ?? "")
+      : handle && box && offset >= 0 && offset < box.height
+        ? partition().virtual.at(handle.findItemIndex(offset))
+        : undefined
+    if (!row || row.message.sessionID !== sid) return setVisible(undefined)
+    const item = items().find((item) => item.turn === row.turn && !item.queued)
+    const original = item && mounted.find((node) => node.dataset.rowKey === item.key)
+    const hidden = original ? original.getBoundingClientRect().bottom <= top + 1 : row.type !== "user"
+    const key = hidden ? item?.key : undefined
+    setVisible((prev) =>
+      prev?.sid === sid && prev.turn === row.turn && prev.sticky === key ? prev : { sid, turn: row.turn, sticky: key },
+    )
   }
   let activeFrame: number | undefined
   const scheduleActive = () => {
@@ -684,7 +714,20 @@ export const MessageList: Component<MessageListProps> = (props) => {
   createEffect(() => {
     items()
     partition()
+    session.currentSessionID()
+    session.loading()
+    pendingRestore()
+    virtualizer()
+    height()
     scheduleActive()
+  })
+  createEffect(() => {
+    const el = scrollEl()
+    const content = el?.querySelector('[data-slot="message-list-content"]')
+    if (!content) return
+    const observer = new ResizeObserver(scheduleActive)
+    observer.observe(content)
+    onCleanup(() => observer.disconnect())
   })
 
   // Highlights the part behind the currently hovered/focused timeline bar
@@ -757,6 +800,7 @@ export const MessageList: Component<MessageListProps> = (props) => {
         line: style.lineHeight,
       }),
     )
+    scheduleActive()
   }
   const setScrollRef = (el: HTMLElement | undefined) => {
     resize?.disconnect()
@@ -779,8 +823,6 @@ export const MessageList: Component<MessageListProps> = (props) => {
     autoScroll.scrollRef(introduction() ? undefined : el)
     if (introduction() && el) el.scrollTop = 0
   })
-
-  const [pendingRestore, setPendingRestore] = createSignal<string>()
 
   createEffect(
     on(session.currentSessionID, (id, prev) => {
@@ -991,6 +1033,38 @@ export const MessageList: Component<MessageListProps> = (props) => {
           </Show>
         </div>
       </div>
+
+      <Show when={sticky()} keyed>
+        {(row) => (
+          <div
+            class="message-list-sticky-prompt"
+            data-sticky-prompt={sticky()?.message.id}
+            onWheel={(event) => {
+              if (event.currentTarget.scrollHeight > event.currentTarget.clientHeight) return
+              const el = scrollEl()
+              if (!el) return
+              event.preventDefault()
+              if (event.deltaY < 0) autoScroll.pause()
+              el.scrollTop += event.deltaY
+            }}
+          >
+            <div class="vscode-session-turn-user">
+              <VscodeUserMessage
+                message={row.message}
+                parts={row.parts}
+                interrupted={row.interrupted}
+                onSelectSession={props.onSelectSession}
+                isSessionOpen={props.isSessionOpen}
+                editDisabled={props.editDisabled || !server.isConnected()}
+                onResubmit={!props.readonly ? (text) => session.resubmitMessage(row.message.id, text) : undefined}
+                onFork={
+                  props.onForkMessage ? () => props.onForkMessage?.(row.message.sessionID, row.message.id) : undefined
+                }
+              />
+            </div>
+          </div>
+        )}
+      </Show>
 
       <PromptRail
         // Editor tabs and Agent Manager have no sidebar edge signal. Keep their rail on the physical right in RTL too.

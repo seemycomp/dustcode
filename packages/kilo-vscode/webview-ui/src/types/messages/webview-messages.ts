@@ -81,6 +81,18 @@ export interface RevertSessionRequest {
   partID?: string
 }
 
+export interface ResubmitMessageRequest {
+  type: "resubmitMessage"
+  sessionID: string
+  messageID: string
+  text: string
+  requestID: string
+  providerID?: string
+  modelID?: string
+  agent?: string
+  variant?: string
+}
+
 export interface UnrevertSessionRequest {
   type: "unrevertSession"
   sessionID: string
@@ -1785,6 +1797,7 @@ export type WebviewMessage =
   | CancelBackgroundJobMessage
   | PromoteBackgroundJobMessage
   | RevertSessionRequest
+  | ResubmitMessageRequest
   | UnrevertSessionRequest
   | DeleteMessageRequest
   | PermissionResponseRequest

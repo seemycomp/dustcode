@@ -81,6 +81,7 @@ function createClient(options?: {
   sandboxDeferred?: Deferred<{ data: unknown }>
   sandboxStarted?: Deferred<void>
   createSession?: (params: Record<string, unknown>, index: number) => Promise<{ data: unknown }>
+  prompt?: (params: Record<string, unknown>) => Promise<{ error?: unknown; response?: Response }>
 }) {
   const calls: { before?: string; limit?: number }[] = []
   const stopped: { sessionID: string; directory?: string }[] = []
@@ -111,6 +112,18 @@ function createClient(options?: {
     sandboxSupport,
     configReads,
     session: {
+      message: async (params: { sessionID: string; messageID: string }) => ({
+        data: {
+          info: {
+            id: params.messageID,
+            sessionID: params.sessionID,
+            role: "user",
+            agent: "code",
+            model: { providerID: "p", modelID: "m" },
+          },
+          parts: [{ type: "text", text: "original" }],
+        },
+      }),
       list: async () => ({ data: [] }),
       create: async (params: Record<string, unknown>) => {
         created.push(params)
@@ -130,6 +143,7 @@ function createClient(options?: {
       unrevert: async () => options?.unrevertResult ?? { data: mkSession() },
       promptAsync: async (params: Record<string, unknown>) => {
         prompted.push(params)
+        if (options?.prompt) return options.prompt(params)
         return { data: undefined }
       },
       abort: async (params: { sessionID: string; directory?: string; scope?: "session" | "tree" }) => {
@@ -270,6 +284,12 @@ type ProviderInternals = {
   handleRevertSession: (sid: string, messageID: string) => Promise<void>
   handleUnrevertSession: (sid: string) => Promise<void>
   handleSendMessage: (text: string, messageID?: string, sessionID?: string, draftID?: string) => Promise<void>
+  handleResubmitMessage: (input: {
+    sessionID: string
+    messageID: string
+    text: string
+    requestID: string
+  }) => Promise<void>
   trackOpenSessions: (ids: string[]) => void
   fetchAndSendSandboxDefault: (directory?: string, requestID?: string) => Promise<void>
   handleSetSandboxDefault: (enabled: boolean, requestID: string, directory?: string) => Promise<void>
@@ -865,6 +885,80 @@ describe("KiloProvider sidebar tabs", () => {
 })
 
 describe("KiloProvider revert ordering", () => {
+  it("holds the shared session barrier through edited prompt admission across panels", async () => {
+    const preparing = Promise.withResolvers<void>()
+    const ready = Promise.withResolvers<void>()
+    const client = createClient()
+    const { provider, internal, connection } = makeProvider(client)
+    internal.currentSession = mkSession()
+    internal.gatherEditorContext = async () => {
+      ready.resolve()
+      await preparing.promise
+      return {}
+    }
+    const other = new KiloProvider({} as never, connection as never)
+    const peer = other as unknown as ProviderInternals
+    peer.currentSession = mkSession()
+    peer.gatherEditorContext = async () => ({})
+    const first = internal.handleResubmitMessage({ sessionID: "s1", messageID: "m1", text: "first", requestID: "r1" })
+    await ready.promise
+    const second = peer.handleResubmitMessage({ sessionID: "s1", messageID: "m2", text: "second", requestID: "r2" })
+    const normal = peer.handleSendMessage("normal", "m3", "s1")
+    await Bun.sleep(0)
+    expect(client.reverted.map((item) => item.messageID)).toEqual(["m1"])
+    expect(client.aborted).toHaveLength(1)
+    expect(client.prompted).toHaveLength(0)
+    preparing.resolve()
+    await Promise.all([first, second, normal])
+    expect(client.reverted.map((item) => item.messageID)).toEqual(["m1", "m2"])
+    expect(client.prompted.map((item) => (item.parts as Array<{ text: string }>).at(0)?.text)).toEqual([
+      "first",
+      "second",
+      "normal",
+    ])
+    provider.dispose()
+    other.dispose()
+  })
+
+  it("does not retry an edited prompt acknowledged by SSE before an HTTP error", async () => {
+    const client = createClient({
+      prompt: async (params) => {
+        internal.handleEvent(
+          {
+            type: "message.updated",
+            properties: {
+              sessionID: "s1",
+              info: { id: params.messageID, sessionID: "s1", role: "user", time: { created: 1 } },
+            },
+          },
+          "/repo",
+        )
+        return { error: new Error("gateway timeout"), response: new Response(null, { status: 504 }) }
+      },
+    })
+    const { provider, internal, sent } = makeProvider(client)
+    internal.currentSession = mkSession()
+    internal.gatherEditorContext = async () => ({})
+    await internal.handleResubmitMessage({ sessionID: "s1", messageID: "historical", text: "edited", requestID: "r1" })
+    expect(client.prompted).toHaveLength(1)
+    expect(client.prompted.at(0)?.messageID).toMatch(/^msg_/)
+    expect(client.prompted.at(0)?.messageID).not.toBe("historical")
+    expect(sent).toContainEqual(expect.objectContaining({ type: "resubmitMessageResult", success: true }))
+    provider.dispose()
+  })
+
+  it("does not submit when revert returns a different historical boundary", async () => {
+    const reverted = Promise.withResolvers<{ data?: unknown; error?: unknown }>()
+    reverted.resolve({ data: mkSession({ messageID: "other" }) })
+    const client = createClient({ revertDeferred: reverted })
+    const { provider, internal, sent } = makeProvider(client)
+    internal.currentSession = mkSession()
+    await internal.handleResubmitMessage({ sessionID: "s1", messageID: "historical", text: "edited", requestID: "r1" })
+    expect(client.prompted).toHaveLength(0)
+    expect(sent).toContainEqual(expect.objectContaining({ type: "resubmitMessageResult", success: false }))
+    provider.dispose()
+  })
+
   it("unwraps the nested sync payload emitted by the live SSE endpoint", () => {
     const event = unwrapSyncEvent({
       type: "sync",

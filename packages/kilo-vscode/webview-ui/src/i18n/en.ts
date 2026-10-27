@@ -53,6 +53,14 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "chat.image.alt": "Image attachment",
+  "chat.image.preview": "Preview {{name}}",
+  "chat.image.copy": "Copy Image",
+  "chat.image.download": "Download",
+  "chat.image.open": "Open In New Tab",
+  "chat.image.copyFailed": "Could not copy image",
+  "chat.image.downloadFailed": "Could not download image",
+  "chat.image.openFailed": "Could not open image in a new tab",
   "review.changes": "Changed regions",
   "review.sessionFiles": "{{count}} changed files",
   "review.undoAll": "Undo All",

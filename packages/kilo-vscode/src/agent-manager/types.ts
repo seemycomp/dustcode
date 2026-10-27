@@ -1104,6 +1104,21 @@ interface SendCommandIn {
   contextDirectory?: string
 }
 
+interface ResubmitMessageIn {
+  type: "resubmitMessage"
+  projectId?: string
+  sessionID: string
+  messageID: string
+  text: string
+  requestID: string
+  providerID?: string
+  modelID?: string
+  agent?: string
+  variant?: string
+  agentManagerContext?: string
+  contextDirectory?: string
+}
+
 interface QuestionReplyIn {
   type: "questionReply"
   requestID: string
@@ -1374,6 +1389,7 @@ export type AgentManagerInMessage =
   | SaveImageIn
   | LoadMessagesIn
   | SendMessageIn
+  | ResubmitMessageIn
   | SendCommandIn
   | QuestionReplyIn
   | RequestSandboxDefaultIn

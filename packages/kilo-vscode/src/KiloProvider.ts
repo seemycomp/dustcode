@@ -155,6 +155,8 @@ import { feedbackMetadata, parseFeedback, type BrowserFeedbackData } from "./sha
 import { mergeInjected } from "./shared/injected-prompt"
 import { completesWithoutStatus, goalControl } from "./kilo-provider/command-completion"
 import { KiloProviderMemory } from "./kilo-provider/memory"
+import { resubmitMessage } from "./kilo-provider/resubmit-message"
+import { sessionCheckpoints } from "./kilo-provider/session-checkpoints"
 
 import {
   buildActionContext,
@@ -494,7 +496,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private modelUsageSessionIds: Set<string> = new Set()
   private syncedChildSessions: Set<string> = new Set()
   private readonly inspectorSessionIds = new Set<string>()
-  private readonly checkpoints = new Map<string, Promise<void>>()
+  private get checkpoints() {
+    return sessionCheckpoints(this.connectionService)
+  }
   private readonly sessionCreations = new Map<string, Promise<{ sid: string; dir: string } | undefined>>()
   private readonly draftSessions = new Map<string, { sid: string; dir: string; expires: number }>()
   private readonly sandboxTransitions = new Map<string, Promise<void>>()
@@ -676,7 +680,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.opts.tabTitle(title)
   }
 
-  private checkpoint(sid: string, run: () => Promise<void>): void {
+  private checkpoint(sid: string, run: () => Promise<void>): Promise<void> {
     const prior = this.checkpoints.get(sid) ?? Promise.resolve()
     const pending = prior.catch(() => undefined).then(run)
     const cleanup = () => {
@@ -687,6 +691,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       console.error("[Dustcode] checkpoint mutation failed:", error)
       cleanup()
     })
+    return pending
   }
 
   private stopCurrentSessionProcesses(next?: string): void {
@@ -1386,6 +1391,20 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           await this.sendWebviewMessage(message as SendWebviewMessage)
           break
         }
+        case "resubmitMessage":
+          await this.handleResubmitMessage(
+            message as {
+              sessionID: string
+              messageID: string
+              text: string
+              requestID: string
+              providerID?: string
+              modelID?: string
+              agent?: string
+              variant?: string
+            },
+          )
+          break
         case "sendCommand": {
           const msg = message as typeof message & ContextMessage
           await this.handleSendCommand(
@@ -1809,6 +1828,76 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       feedback?.browserFeedback,
       typeof message.injectedTitle === "string" ? message.injectedTitle : undefined,
     )
+    return
+  }
+
+  private async handleResubmitMessage(input: {
+    sessionID: string
+    messageID: string
+    text: string
+    requestID: string
+    providerID?: string
+    modelID?: string
+    agent?: string
+    variant?: string
+  }): Promise<void> {
+    try {
+      const dir = this.getWorkspaceDirectory(input.sessionID)
+      const ok = await resubmitMessage(input, {
+        client:
+          this.client ??
+          (() => {
+            throw new Error("Not connected to CLI backend")
+          })(),
+        directory: dir,
+        checkpoint: (run) => this.checkpoint(input.sessionID, run),
+        stop: async () => {
+          await this.stopSession(input.sessionID, "tree", true)
+        },
+        revert: () => this.handleRevertSession(input.sessionID, input.messageID, undefined, true),
+        send: async (prompt) => {
+          const editorContext = await this.gatherEditorContext(dir)
+          await this.connectionService.prepareTools(dir)
+          const messageID = prompt.messageID
+          this.connectionService.recordMessageSessionId(messageID, input.sessionID)
+          await runWithMessageConfirmation(this.confirmations, messageID, "KiloProvider: Resubmit request", () =>
+            this.withRetry(
+              () =>
+                this.client!.session.promptAsync({
+                  sessionID: input.sessionID,
+                  directory: dir,
+                  messageID,
+                  parts: prompt.parts as Array<TextPartInput | FilePartInput>,
+                  model: prompt.model,
+                  agent: prompt.agent,
+                  variant: prompt.variant,
+                  editorContext,
+                  snapshotInitialization: this.opts.snapshotInitialization,
+                }),
+              input.sessionID,
+              messageID,
+            ),
+          )
+          return true
+        },
+      })
+      this.postMessage({
+        type: "resubmitMessageResult",
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        requestID: input.requestID,
+        success: ok,
+      })
+    } catch (error) {
+      this.postMessage({
+        type: "resubmitMessageResult",
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        requestID: input.requestID,
+        success: false,
+        error: getErrorMessage(error) || "Failed to resend message",
+      })
+    }
   }
 
   private async handleProfileDataMessage(message: TypedWebviewMessage): Promise<boolean> {
@@ -4739,7 +4828,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     contextDirectory?: string,
     browserFeedback?: BrowserFeedbackData,
     injectedTitle?: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (!this.client) {
       this.postMessage({
         type: "sendMessageFailed",
@@ -4752,7 +4841,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         review,
         browserFeedback,
       })
-      return
+      return false
     }
 
     let resolved: { sid: string; dir: string } | undefined
@@ -4761,7 +4850,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         this.sandboxKey({ sessionID, draftID, agentManagerContext: context, contextDirectory }),
       )
       resolved = await this.resolveSession(sessionID, draftID, context, contextDirectory)
-      if (!resolved) return
+      if (!resolved) return false
       if (sandbox) await sandbox
       const sid = resolved.sid
       const dir = resolved.dir
@@ -4781,7 +4870,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       const editorContext = await this.gatherEditorContext(dir)
       if (draftID && this.closedDrafts.delete(draftID)) {
         for (const [k, v] of this.draftSessions) if (v.sid === sid) this.draftSessions.delete(k)
-        return
+        return false
       }
 
       if (messageID) {
@@ -4793,24 +4882,27 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       // Kept outside withRetry so retryable prompt errors keep their backoff.
       // The Integrated Browser does not use Playwright and is not affected.
       await this.connectionService.prepareTools(dir)
-      await runWithMessageConfirmation(this.confirmations, messageID, "KiloProvider: Message request", () =>
-        this.withRetry(
-          () =>
-            this.client!.session.promptAsync({
-              sessionID: sid,
-              directory: dir,
-              messageID,
-              parts,
-              model: providerID && modelID ? { providerID, modelID } : undefined,
-              agent,
-              variant,
-              editorContext,
-              snapshotInitialization: this.opts.snapshotInitialization,
-            }),
-          sid,
-          messageID,
-        ),
-      )
+      await this.checkpoint(sid, async () => {
+        await runWithMessageConfirmation(this.confirmations, messageID, "KiloProvider: Message request", () =>
+          this.withRetry(
+            () =>
+              this.client!.session.promptAsync({
+                sessionID: sid,
+                directory: dir,
+                messageID,
+                parts,
+                model: providerID && modelID ? { providerID, modelID } : undefined,
+                agent,
+                variant,
+                editorContext,
+                snapshotInitialization: this.opts.snapshotInitialization,
+              }),
+            sid,
+            messageID,
+          ),
+        )
+      })
+      return true
     } catch (error) {
       console.error("[Dustcode] KiloProvider: Failed to send message:", error)
       this.postMessage({
@@ -4824,6 +4916,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         review,
         browserFeedback,
       })
+      return false
     }
   }
 
@@ -4896,17 +4989,23 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           parts,
           snapshotInitialization: this.opts.snapshotInitialization,
         })
-      await runWithMessageConfirmation(this.confirmations, messageID, "KiloProvider: Command request", async () => {
-        if (command !== "goal") return this.withRetry(send, sid, messageID)
-        const result = await send()
-        if (result.error) throw result.error
-        if (args.trim()) return
-        const message = result.data?.parts
-          .filter((part) => part.type === "text")
-          .map((part) => part.text)
-          .join("\n")
-        if (message) void vscode.window.showInformationMessage(message)
-      })
+      const dispatch = () =>
+        runWithMessageConfirmation(this.confirmations, messageID, "KiloProvider: Command request", async () => {
+          if (command !== "goal") return this.withRetry(send, sid, messageID)
+          const result = await send()
+          if (result.error) throw result.error
+          if (args.trim()) return
+          const message = result.data?.parts
+            .filter((part) => part.type === "text")
+            .map((part) => part.text)
+            .join("\n")
+          if (message) void vscode.window.showInformationMessage(message)
+        })
+      if (control) await dispatch()
+      if (!control)
+        await this.checkpoint(sid, async () => {
+          await dispatch()
+        })
       if (messageID && completesWithoutStatus(command)) {
         this.postMessage({ type: "sessionCommandCompleted", messageID })
       }
@@ -4952,7 +5051,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     await Promise.all([...targets].map((sid) => this.stopSession(sid)))
   }
 
-  private stopSession(sid: string, scope?: "session" | "tree"): Promise<boolean> {
+  private stopSession(sid: string, scope?: "session" | "tree", strict = false): Promise<boolean> {
     this.cancelRetry(sid)
     const client = this.client
     if (!client) return Promise.resolve(false)
@@ -4964,6 +5063,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       dir,
       (dir, action) => this.connectionService.runExplicitAbort(sid, dir, action),
       scope,
+      strict,
     )
   }
 
@@ -4995,8 +5095,13 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.publish(sid, { type: "idle" })
   }
 
-  private async handleRevertSession(sessionID: string, messageID: string, partID?: string): Promise<void> {
-    if (!this.client) return
+  private async handleRevertSession(
+    sessionID: string,
+    messageID: string,
+    partID?: string,
+    strict = false,
+  ): Promise<void> {
+    if (!this.client) throw new Error("Not connected to CLI backend")
     const dir = this.getWorkspaceDirectory(sessionID)
     const { data, error } = await this.client.session.revert({ sessionID, messageID, partID, directory: dir })
     if (error) {
@@ -5010,6 +5115,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       throw error
     }
     if (!data) throw new Error("Revert returned no session")
+    if (strict && (data.revert?.messageID !== messageID || data.revert.partID !== partID)) {
+      throw new Error("The historical prompt is no longer available to revert")
+    }
     this.refreshes.set(sessionID, (this.refreshes.get(sessionID) ?? 0) + 1)
     if (this.currentSession?.id === sessionID) this.setCurrentSession(data)
     this.postMessage({ type: "sessionUpdated", session: sessionToWebview(data) })

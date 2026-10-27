@@ -451,3 +451,72 @@ test("re-pins after a programmatic scroll correction while idle", async ({ page 
   await expect.poll(() => distance(page)).toBeLessThanOrEqual(2)
   await expect(scrollButton(page)).toBeHidden()
 })
+
+test("sticky prompt follows visible virtual history and the direct live tail without reflow", async ({ page }) => {
+  await open(page)
+  const list = page.locator(".message-list")
+  const sticky = page.locator("[data-sticky-prompt]")
+  // Leave enough direct output to read with its original user row offscreen.
+  for (const _ of [1, 2, 3]) await page.getByTestId("append-stream").click()
+  await expect.poll(() => distance(page)).toBeLessThanOrEqual(2)
+  await expect(sticky).toHaveAttribute("data-sticky-prompt", "rail-user-400")
+  await expect(sticky).toContainText("Continue streaming")
+  expect(await sticky.evaluate((el) => el.closest(".message-list"))).toBeNull()
+
+  await list.hover()
+  await page.mouse.wheel(0, -240)
+  await expect(scrollButton(page)).toBeVisible()
+  const before = await state(page)
+  await page.getByTestId("append-stream").click()
+  await settle(page, 10)
+  expect((await state(page)).top).toBeCloseTo(before.top, 0)
+  await expect(sticky).toHaveAttribute("data-sticky-prompt", "rail-user-400")
+
+  // Timeline navigation mounts the requested virtual row; a second jump avoids
+  // depending on estimated heights while its real size is being measured.
+  for (const id of [315, 316, 315]) {
+    await page.evaluate((id) => {
+      window.dispatchEvent(new CustomEvent("scrollToMessage", { detail: { id: `rail-asst-${id}` } }))
+    }, id)
+    const row = list.locator(`[data-message="rail-asst-${id}"]`).first()
+    await expect(row).toBeAttached()
+    await settle(page, 4)
+    await row.evaluate((row) => {
+      const list = row.closest(".message-list")!
+      list.scrollTop += row.getBoundingClientRect().top - list.getBoundingClientRect().top - list.clientTop + 16
+    })
+    await expect(sticky).toHaveAttribute("data-sticky-prompt", `rail-user-${id}`)
+    await expect(sticky).toContainText(`Virtualized prompt ${id - 299}`)
+  }
+
+  // Returning to the original prompt removes the overlay, without changing the
+  // transcript's scroll height or reserving a new header row.
+  const prompt = list.locator('[data-message="rail-user-315"]').first()
+  await expect(prompt).toBeAttached()
+  await prompt.evaluate((row) => {
+    const list = row.closest(".message-list")!
+    list.scrollTop += row.getBoundingClientRect().top - list.getBoundingClientRect().top - list.clientTop
+  })
+  await expect(sticky).toBeHidden()
+  const height = (await state(page)).height
+  await list.locator('[data-message="rail-asst-315"]').first().evaluate((row) => {
+    const list = row.closest(".message-list")!
+    list.scrollTop += row.getBoundingClientRect().top - list.getBoundingClientRect().top - list.clientTop + 16
+  })
+  await expect(sticky).toHaveAttribute("data-sticky-prompt", "rail-user-315")
+  expect((await state(page)).height).toBe(height)
+
+  await scrollButton(page).click()
+  await expect.poll(() => distance(page)).toBeLessThanOrEqual(2)
+  await expect(sticky).toHaveAttribute("data-sticky-prompt", "rail-user-400")
+  await expect(scrollButton(page)).toBeHidden()
+})
+
+test("sticky prompt stays absent in an empty transcript", async ({ page }) => {
+  await page.goto(`/iframe.html?id=chat--welcome-with-switcher-and-notification&viewMode=story&globals=${GLOBALS}`, {
+    waitUntil: "load",
+  })
+  await expect(page.locator(".message-list")).toBeVisible()
+  await settle(page, 10)
+  await expect(page.locator("[data-sticky-prompt]")).toBeHidden()
+})

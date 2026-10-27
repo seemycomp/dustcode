@@ -804,6 +804,7 @@ export function UserMessageDisplay(props: {
   onRevert?: () => void
   revertDisabled?: boolean
   onImageClick?: (url: string, filename?: string) => boolean
+  renderAttachment?: (file: FilePart) => JSX.Element
 }) {
   const data = useData()
   const dialog = useDialog()
@@ -922,31 +923,38 @@ export function UserMessageDisplay(props: {
           <div data-slot="user-message-attachments">
             <For each={attachments()}>
               {(file) => (
-                <div
-                  data-slot="user-message-attachment"
-                  data-type={file.mime.startsWith("image/") ? "image" : "file"}
-                  data-queued={props.queued ? "" : undefined}
-                  onClick={() => {
-                    if (file.mime.startsWith("image/") && file.url) {
-                      openImagePreview(file.url, file.filename)
-                    }
-                  }}
+                <Show
+                  when={file.mime.startsWith("image/") && !!file.url && !!props.renderAttachment}
+                  fallback={
+                    <div
+                      data-slot="user-message-attachment"
+                      data-type={file.mime.startsWith("image/") ? "image" : "file"}
+                      data-queued={props.queued ? "" : undefined}
+                      onClick={() => {
+                        if (file.mime.startsWith("image/") && file.url) {
+                          openImagePreview(file.url, file.filename)
+                        }
+                      }}
+                    >
+                      <Show
+                        when={file.mime.startsWith("image/") && file.url}
+                        fallback={
+                          <div data-slot="user-message-attachment-icon">
+                            <Icon name="folder" />
+                          </div>
+                        }
+                      >
+                        <img
+                          data-slot="user-message-attachment-image"
+                          src={file.url}
+                          alt={file.filename ?? i18n.t("ui.message.attachment.alt")}
+                        />
+                      </Show>
+                    </div>
+                  }
                 >
-                  <Show
-                    when={file.mime.startsWith("image/") && file.url}
-                    fallback={
-                      <div data-slot="user-message-attachment-icon">
-                        <Icon name="folder" />
-                      </div>
-                    }
-                  >
-                    <img
-                      data-slot="user-message-attachment-image"
-                      src={file.url}
-                      alt={file.filename ?? i18n.t("ui.message.attachment.alt")}
-                    />
-                  </Show>
-                </div>
+                  {props.renderAttachment?.(file)}
+                </Show>
               )}
             </For>
           </div>
@@ -1914,7 +1922,9 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props: MessagePartProp
   }
 
   // Throttle markdown re-renders during streaming
-  const display = createThrottledValue(text, () => (done() ? TEXT_RENDER_THROTTLE_MS : STREAMING_TEXT_RENDER_THROTTLE_MS))
+  const display = createThrottledValue(text, () =>
+    done() ? TEXT_RENDER_THROTTLE_MS : STREAMING_TEXT_RENDER_THROTTLE_MS,
+  )
   const view = createMemo(() => reasoningHeading(display(), !done()))
 
   const id = (props.part as any).id as string
