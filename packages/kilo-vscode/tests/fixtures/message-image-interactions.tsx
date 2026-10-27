@@ -68,7 +68,7 @@ const menu = async (target: Element) => {
   await flush()
   assert.deepEqual(
     [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent),
-    ["Copy Image", "Download", "Open In New Tab"],
+    ["Copy image", "Download", "Open Image"],
   )
 }
 const select = async (label: string) => {
@@ -95,7 +95,7 @@ try {
   assert.ok(document.querySelector('[role="dialog"]'))
 
   await menu(popup)
-  await select("Copy Image")
+  await select("Copy image")
   assert.equal(copies.length, 1)
   assert.equal(copies.at(-1)?.type, "image/png")
   assert.ok((await copies.at(-1)!.arrayBuffer()).byteLength > 0, "copy must contain actual image bytes")
@@ -104,20 +104,20 @@ try {
   await select("Download")
   assert.deepEqual(messages.at(-1), { type: "saveImage", dataUrl: png, filename: "pixel.png" })
   await menu(popup)
-  await select("Open In New Tab")
+  await select("Open Image")
   assert.deepEqual(messages.at(-1), { type: "previewImage", dataUrl: png, filename: "pixel.png" })
 
   node<HTMLButtonElement>('[data-slot="dialog-close-button"]', document).click()
   await Bun.sleep(120)
   assert.equal(document.querySelector('[role="dialog"]'), null)
   await menu(thumbnail.querySelector("img")!)
-  await select("Copy Image")
+  await select("Copy image")
   assert.equal(copies.length, 2, "thumbnail should expose the same image actions")
 
   const remote = "https://images.test/pixel.png"
   update(remote)
   await menu(thumbnail)
-  await select("Open In New Tab")
+  await select("Open Image")
   assert.deepEqual(messages.at(-1), { type: "openExternal", url: remote })
 
   Object.defineProperty(navigator, "clipboard", {
@@ -126,7 +126,7 @@ try {
   })
   update(png)
   await menu(thumbnail)
-  await select("Copy Image")
+  await select("Copy image")
   assert.match(document.body.textContent ?? "", /Could not copy image/)
   assert.equal(
     messages.some((message) => message.type === "copyToClipboard"),

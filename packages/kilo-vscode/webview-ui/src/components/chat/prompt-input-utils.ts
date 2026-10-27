@@ -95,6 +95,47 @@ export function buildHighlightSegments(val: string, paths: Set<string>): { text:
   return segments
 }
 
+export type PromptSkill = {
+  name: string
+  location: string
+}
+
+function skillBoundary(text: string, start: number, end: number): boolean {
+  const before = text[start - 1]
+  const after = text[end]
+  return (start === 0 || /\s/.test(before ?? "")) && (end === text.length || /[\s.,!?;:)\]}]/.test(after ?? ""))
+}
+
+/** Split a plain prompt run into file-backed slash skill tokens and plain text. */
+export function buildSkillSegments(
+  val: string,
+  skills: readonly PromptSkill[],
+  commands: ReadonlySet<string> = new Set(),
+): PromptSegment[] {
+  const tokens = skills
+    .map((skill) => ({
+      skill,
+      token: `/${commands.has(skill.name) ? `${skill.name}:skill` : skill.name}`,
+    }))
+    .sort((a, b) => b.token.length - a.token.length)
+  if (tokens.length === 0) return [{ text: val, kind: "plain" }]
+
+  const segments: PromptSegment[] = []
+  let cursor = 0
+  while (cursor < val.length) {
+    const match = tokens
+      .map((item) => ({ ...item, start: val.indexOf(item.token, cursor) }))
+      .filter((item) => item.start !== -1 && skillBoundary(val, item.start, item.start + item.token.length))
+      .sort((a, b) => a.start - b.start || b.token.length - a.token.length)[0]
+    if (!match) break
+    if (match.start > cursor) segments.push({ text: val.slice(cursor, match.start), kind: "plain" })
+    segments.push({ text: match.token, kind: "skill", skill: match.skill })
+    cursor = match.start + match.token.length
+  }
+  if (cursor < val.length) segments.push({ text: val.slice(cursor), kind: "plain" })
+  return segments.length > 0 ? segments : [{ text: val, kind: "plain" }]
+}
+
 export function atEnd(start: number, end: number, len: number): boolean {
   return start === end && end === len
 }
@@ -109,9 +150,10 @@ export type PasteRange = {
 
 export type PromptSegment = {
   text: string
-  kind: "plain" | "mention" | "paste"
+  kind: "plain" | "mention" | "skill" | "paste"
   /** Paste id for a collapsed block, so a click can find its backing text. */
   paste?: number
+  skill?: PromptSkill
 }
 
 /** Number of lines a pasted block occupies, matching the CLI's newline count plus one. */
@@ -292,7 +334,13 @@ export function expandPastes(text: string, pastes: readonly PasteRange[]): strin
  * Split prompt text into plain runs, mention tokens, and collapsed paste chips.
  * Paste ranges win over mention detection because their text is never a mention.
  */
-export function buildPromptSegments(text: string, paths: Set<string>, pastes: readonly PasteRange[]): PromptSegment[] {
+export function buildPromptSegments(
+  text: string,
+  paths: Set<string>,
+  pastes: readonly PasteRange[],
+  skills: readonly PromptSkill[] = [],
+  commands: ReadonlySet<string> = new Set(),
+): PromptSegment[] {
   const segments: PromptSegment[] = []
   const ordered = [...pastes].filter(validPaste.bind(null, text)).sort((a, b) => a.start - b.start)
   let cursor = 0
@@ -300,7 +348,11 @@ export function buildPromptSegments(text: string, paths: Set<string>, pastes: re
     if (paste.start < cursor) continue
     if (paste.start > cursor) {
       for (const part of buildHighlightSegments(text.slice(cursor, paste.start), paths)) {
-        segments.push({ text: part.text, kind: part.highlight ? "mention" : "plain" })
+        if (part.highlight) {
+          segments.push({ text: part.text, kind: "mention" })
+          continue
+        }
+        segments.push(...buildSkillSegments(part.text, skills, commands))
       }
     }
     segments.push({ text: text.slice(paste.start, paste.end), kind: "paste", paste: paste.id })
@@ -308,7 +360,11 @@ export function buildPromptSegments(text: string, paths: Set<string>, pastes: re
   }
   if (cursor < text.length) {
     for (const part of buildHighlightSegments(text.slice(cursor), paths)) {
-      segments.push({ text: part.text, kind: part.highlight ? "mention" : "plain" })
+      if (part.highlight) {
+        segments.push({ text: part.text, kind: "mention" })
+        continue
+      }
+      segments.push(...buildSkillSegments(part.text, skills, commands))
     }
   }
   return segments

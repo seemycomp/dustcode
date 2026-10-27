@@ -5,6 +5,7 @@ import { openRelativeFile } from "./review-utils"
 import { resolveInside } from "./diff/shared/path"
 import { buildWebviewHtml } from "./utils"
 import type { KiloConnectionService } from "./services/cli-backend"
+import { resolveDocumentDirectory } from "./documents/document-context"
 
 interface Context {
   sessionId?: string
@@ -39,7 +40,8 @@ export class DocumentViewerProvider implements vscode.Disposable {
     column?: number
   }): void {
     const contextKey = this.contextKey(input.sessionId, input.directory)
-    this.contexts.set(contextKey, { sessionId: input.sessionId, directory: input.directory })
+    const directory = resolveDocumentDirectory(this.contexts, this.currentKey, input.sessionId, input.directory)
+    this.contexts.set(contextKey, { sessionId: input.sessionId, directory })
     this.currentKey = contextKey
     const next = { ...input, contextKey }
     if (this.panel) {

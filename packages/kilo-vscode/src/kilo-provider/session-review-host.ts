@@ -63,6 +63,14 @@ export function sessionReview(connection: KiloConnectionService) {
   return service
 }
 
+export async function rewindSessionReview(
+  connection: KiloConnectionService,
+  sessionID: string,
+  directory: string,
+): Promise<void> {
+  await sessionReview(connection).rewind(sessionID, directory)
+}
+
 export async function handleSessionReview(
   message: Record<string, unknown>,
   ctx: {

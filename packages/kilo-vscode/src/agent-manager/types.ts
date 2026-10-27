@@ -22,6 +22,7 @@ import type { SidebarTarget } from "./project/route"
 import type { TerminalDestination } from "./terminal-destination"
 import type { ScriptTerminalView } from "./ScriptTerminalManager"
 import type { BrowserFeedbackData } from "../shared/browser-feedback"
+import type { ImageAttachment } from "../../webview-ui/src/hooks/useImageAttachments"
 import type {
   BrowserCursor,
   BrowserFrame,
@@ -1110,6 +1111,7 @@ interface ResubmitMessageIn {
   sessionID: string
   messageID: string
   text: string
+  images?: ImageAttachment[]
   requestID: string
   providerID?: string
   modelID?: string

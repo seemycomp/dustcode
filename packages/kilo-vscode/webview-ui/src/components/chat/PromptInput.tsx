@@ -86,6 +86,7 @@ import {
   memoryRest,
   type SandboxDefaultState,
   type SandboxState,
+  type PromptSkill,
   undoKey,
 } from "./prompt-input-utils"
 import { sandboxMessages } from "./prompt-sandbox-messages"
@@ -881,6 +882,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (hasGit() && hasGitChangesMention(text())) paths.add("git-changes")
     return paths
   }
+  const skillLinks = (): PromptSkill[] =>
+    session
+      .skills()
+      .filter(
+        (skill) =>
+          skill.location !== "builtin" &&
+          skill.location !== "<built-in>" &&
+          /(?:^|[\\/])SKILL\.md$/i.test(skill.location),
+      )
+      .map((skill) => ({ name: skill.name, location: skill.location }))
+  const skillCommands = () =>
+    new Set(
+      slash
+        .commands()
+        .filter((cmd) => !isSkill(cmd))
+        .map((cmd) => cmd.name),
+    )
   // Model references are inline text tokens, not files, so they must not be
   // styled as or behave like clickable path mentions.
   const isModelMention = (text: string) => mention.mentionedModels().has(text.replace(/^@/, ""))
@@ -1940,6 +1958,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   onMount(() => {
+    vscode.postMessage({ type: "requestSkills" })
     registerPromptMentionDrop(containerRef, (drop) => {
       const ref = textareaRef
       if (!ref || !ref.isConnected || readonly()) return false
@@ -2257,7 +2276,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             {(caps) => <PromptHint before={caps.before} binding={caps.binding} after={caps.after} />}
           </Show>
           <div class="prompt-input-highlight-overlay" ref={highlightRef} aria-hidden="true" dir="auto">
-            <Index each={paste.segments(text(), highlightMentions())}>
+            <Index each={paste.segments(text(), highlightMentions(), skillLinks(), skillCommands())}>
               {(seg) => (
                 <Show
                   when={seg().kind !== "paste"}
@@ -2289,19 +2308,41 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     </span>
                   }
                 >
-                  <Show when={seg().kind === "mention"} fallback={<span>{seg().text}</span>}>
+                  <Show
+                    when={seg().kind === "skill"}
+                    fallback={
+                      <Show when={seg().kind === "mention"} fallback={<span>{seg().text}</span>}>
+                        <span
+                          class="prompt-input-file-mention"
+                          classList={{
+                            "prompt-input-file-mention--file": isPathMention(seg().text) && !isModelMention(seg().text),
+                          }}
+                          onClick={(e) => {
+                            if (!isPathMention(seg().text)) return
+                            if (isModelMention(seg().text)) return
+                            if (mention.mentionedSessions().has(seg().text.replace(/^@/, ""))) return
+                            e.preventDefault()
+                            e.stopPropagation()
+                            vscode.postMessage({ type: "openFile", filePath: seg().text.replace(/^@/, "") })
+                          }}
+                        >
+                          {seg().text}
+                        </span>
+                      </Show>
+                    }
+                  >
                     <span
-                      class="prompt-input-file-mention"
-                      classList={{
-                        "prompt-input-file-mention--file": isPathMention(seg().text) && !isModelMention(seg().text),
-                      }}
-                      onClick={(e) => {
-                        if (!isPathMention(seg().text)) return
-                        if (isModelMention(seg().text)) return
-                        if (mention.mentionedSessions().has(seg().text.replace(/^@/, ""))) return
+                      class="prompt-input-skill-link"
+                      title={seg().skill?.location}
+                      onMouseDown={(e) => {
                         e.preventDefault()
                         e.stopPropagation()
-                        vscode.postMessage({ type: "openFile", filePath: seg().text.replace(/^@/, "") })
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        const skill = seg().skill
+                        if (skill) vscode.postMessage({ type: "openFile", filePath: skill.location, sessionID: sid() })
                       }}
                     >
                       {seg().text}

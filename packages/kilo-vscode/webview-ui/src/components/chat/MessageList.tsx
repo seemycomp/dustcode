@@ -112,6 +112,9 @@ const VirtualBox: Component<{
   </div>
 )
 
+// The transcript coordinator intentionally owns virtualization, scroll restoration,
+// live-tail tracking, and prompt overlay lifecycle in one reactive boundary.
+// eslint-disable-next-line complexity
 export const MessageList: Component<MessageListProps> = (props) => {
   const session = useSession()
   const server = useServer()
@@ -671,11 +674,10 @@ export const MessageList: Component<MessageListProps> = (props) => {
     if (!el || !sid || session.loading() || pendingRestore() || items().length === 0) return setVisible(undefined)
     const top = el.getBoundingClientRect().top + el.clientTop
     const bottom = top + el.clientHeight
-    // Mounted rows include the direct live tail. Virtua's offset alone clamps
-    // to its last history row once the viewport has moved beyond that list.
-    const mounted = Array.from(el.querySelectorAll<HTMLElement>("[data-row-key]"))
-    const node = mounted.find((node) => {
-      if (node.closest(".message-list") !== el) return false
+    // Direct rows are the only rows outside Virtua. Query those stable keys
+    // rather than walking every mounted descendant of a streaming turn.
+    const node = Array.from(el.querySelectorAll<HTMLElement>("[data-turn]")).find((node) => {
+      if (!direct().has(node.dataset.turn ?? "")) return false
       const rect = node.getBoundingClientRect()
       return rect.height > 0 && rect.bottom > top + 1 && rect.top < bottom
     })
@@ -691,7 +693,7 @@ export const MessageList: Component<MessageListProps> = (props) => {
         : undefined
     if (!row || row.message.sessionID !== sid) return setVisible(undefined)
     const item = items().find((item) => item.turn === row.turn && !item.queued)
-    const original = item && mounted.find((node) => node.dataset.rowKey === item.key)
+    const original = item ? el.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(item.key)}"]`) : undefined
     const hidden = original ? original.getBoundingClientRect().bottom <= top + 1 : row.type !== "user"
     const key = hidden ? item?.key : undefined
     setVisible((prev) =>
@@ -1034,36 +1036,40 @@ export const MessageList: Component<MessageListProps> = (props) => {
         </div>
       </div>
 
-      <Show when={sticky()} keyed>
-        {(row) => (
-          <div
-            class="message-list-sticky-prompt"
-            data-sticky-prompt={sticky()?.message.id}
-            onWheel={(event) => {
-              if (event.currentTarget.scrollHeight > event.currentTarget.clientHeight) return
-              const el = scrollEl()
-              if (!el) return
-              event.preventDefault()
-              if (event.deltaY < 0) autoScroll.pause()
-              el.scrollTop += event.deltaY
-            }}
-          >
-            <div class="vscode-session-turn-user">
-              <VscodeUserMessage
-                message={row.message}
-                parts={row.parts}
-                interrupted={row.interrupted}
-                onSelectSession={props.onSelectSession}
-                isSessionOpen={props.isSessionOpen}
-                editDisabled={props.editDisabled || !server.isConnected()}
-                onResubmit={!props.readonly ? (text) => session.resubmitMessage(row.message.id, text) : undefined}
-                onFork={
-                  props.onForkMessage ? () => props.onForkMessage?.(row.message.sessionID, row.message.id) : undefined
-                }
-              />
-            </div>
+      <Show when={sticky()}>
+        <div
+          class="message-list-sticky-prompt"
+          data-sticky-prompt={sticky()?.message.id}
+          onWheel={(event) => {
+            if (event.currentTarget.scrollHeight > event.currentTarget.clientHeight) return
+            const el = scrollEl()
+            if (!el) return
+            event.preventDefault()
+            if (event.deltaY < 0) autoScroll.pause()
+            el.scrollTop += event.deltaY
+          }}
+        >
+          <div class="vscode-session-turn-user">
+            <VscodeUserMessage
+              message={sticky()!.message}
+              parts={sticky()!.parts}
+              interrupted={sticky()!.interrupted}
+              onSelectSession={props.onSelectSession}
+              isSessionOpen={props.isSessionOpen}
+              editDisabled={props.editDisabled || !server.isConnected()}
+              onResubmit={
+                !props.readonly
+                  ? (text, images) => session.resubmitMessage(sticky()!.message.id, text, images)
+                  : undefined
+              }
+              onFork={
+                props.onForkMessage
+                  ? () => props.onForkMessage?.(sticky()!.message.sessionID, sticky()!.message.id)
+                  : undefined
+              }
+            />
           </div>
-        )}
+        </div>
       </Show>
 
       <PromptRail

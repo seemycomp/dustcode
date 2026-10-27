@@ -1,4 +1,7 @@
 import { describe, it, expect } from "bun:test"
+import * as fs from "node:fs"
+import * as os from "node:os"
+import * as path from "node:path"
 import { WorktreeDiffController } from "../../src/agent-manager/worktree-diff-controller"
 import type { DiffSourceCatalog } from "../../src/diff/sources/catalog"
 import type { DiffSource } from "../../src/diff/sources/types"
@@ -76,6 +79,29 @@ function byType(items: unknown[], type: string) {
     return typeof item === "object" && item !== null && (item as { type?: unknown }).type === type
   })
 }
+
+describe("WorktreeDiffController.document", () => {
+  it("uses the retained worktree context when a replayed session id is stale", async () => {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "worktree-document-")))
+    fs.writeFileSync(path.join(root, "plan.md"), "# Replayed plan\n")
+    try {
+      const { controller, posted } = make({
+        project: () => "project",
+        trees: { w1: { id: "w1", path: root, parentBranch: "main", remote: "origin" } },
+      })
+
+      controller.document("stale-session", "plan.md", "project:w1")
+      await waitFor(() => byType(posted, "agentManager.document").length === 1)
+
+      expect(byType(posted, "agentManager.document")[0]).toMatchObject({
+        file: "plan.md",
+        content: "# Replayed plan\n",
+      })
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
 
 describe("WorktreeDiffController.revert", () => {
   it.each(["w1#staged", "w1#unstaged", "w1#session:s1", "w2#branch"])(

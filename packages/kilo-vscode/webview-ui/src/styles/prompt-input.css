@@ -635,6 +635,19 @@
   text-decoration: underline;
 }
 
+.prompt-input-skill-link {
+  pointer-events: auto;
+  cursor: pointer;
+  color: var(--vscode-textLink-foreground, #3794ff);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+
+.prompt-input-skill-link:hover {
+  color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground, #3794ff));
+}
+
 /* Collapsed large paste. The text is identical to the textarea's placeholder, so
    the overlay stays aligned; only the chip decoration is added here. */
 .prompt-input-paste {

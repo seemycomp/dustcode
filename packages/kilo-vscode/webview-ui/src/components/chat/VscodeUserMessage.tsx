@@ -1,14 +1,13 @@
-import { createMemo, createSignal, For, Show, type Component } from "solid-js"
+import { createMemo, createSignal, Show, type Component } from "solid-js"
 import { UserMessageDisplay } from "@kilocode/kilo-ui/message-part"
-import { Button } from "@kilocode/kilo-ui/button"
 import { IconButton } from "@kilocode/kilo-ui/icon-button"
-import { TextField } from "@kilocode/kilo-ui/text-field"
 import { Tooltip } from "@kilocode/kilo-ui/tooltip"
 import { partFeedback } from "../../../../src/shared/browser-feedback"
 import { injectedView } from "../../../../src/shared/injected-prompt"
 import type { Message, Part, TextPart } from "../../types/messages"
-import { revertPromptState } from "../../context/session-utils"
+import type { ImageAttachment } from "../../hooks/useImageAttachments"
 import { MessageImage } from "./MessageImage"
+import { UserMessageEditor } from "./UserMessageEditor"
 import { BrowserReferences } from "./BrowserReferences"
 import { ReviewComments } from "./ReviewComments"
 import { useLanguage } from "../../context/language"
@@ -20,7 +19,7 @@ interface VscodeUserMessageProps {
   interrupted?: boolean
   queued?: boolean
   onEdit?: () => void
-  onResubmit?: (text: string) => Promise<boolean>
+  onResubmit?: (text: string, images: ImageAttachment[]) => Promise<boolean>
   queuedDisabled?: boolean
   editDisabled?: boolean
   onDelete?: () => void
@@ -58,22 +57,10 @@ export const VscodeUserMessage: Component<VscodeUserMessageProps> = (props) => {
   })
   const [open, setOpen] = createSignal(false)
   const [editing, setEditing] = createSignal(false)
-  const [draft, setDraft] = createSignal("")
-  const [pending, setPending] = createSignal(false)
   const editable = () => !!props.onResubmit && !view() && !props.queuedDisabled
   const edit = () => {
-    if (!editable() || pending()) return
-    setDraft(revertPromptState(props.parts).text)
+    if (!editable()) return
     setEditing(true)
-  }
-  const submit = async () => {
-    if (pending() || !props.onResubmit || (!draft().trim() && !props.parts.some((part) => part.type === "file"))) return
-    setPending(true)
-    try {
-      if (await props.onResubmit(draft())) setEditing(false)
-    } finally {
-      setPending(false)
-    }
   }
   const collapsed = createMemo(() => !!view()?.preview && !open())
   const body = createMemo(() => (collapsed() ? view()?.preview : full()))
@@ -190,52 +177,12 @@ export const VscodeUserMessage: Component<VscodeUserMessageProps> = (props) => {
           </>
         }
       >
-        <div class="user-message-editor" aria-busy={pending()}>
-          <div class="user-message-editor-images">
-            <For each={props.parts.filter((part) => part.type === "file" && part.mime.startsWith("image/"))}>
-              {(part) => part.type === "file" && <MessageImage url={part.url} filename={part.filename} />}
-            </For>
-          </div>
-          <TextField
-            multiline
-            autofocus
-            label={language.t("common.edit")}
-            hideLabel
-            value={draft()}
-            onChange={setDraft}
-            disabled={pending()}
-            onKeyDown={(event: KeyboardEvent) => {
-              if (event.key === "Escape" && !pending()) {
-                event.preventDefault()
-                setEditing(false)
-              }
-              if (event.key !== "Enter" || event.shiftKey || event.isComposing) return
-              event.preventDefault()
-              void submit()
-            }}
-          />
-          <div class="user-message-editor-actions">
-            <span class="user-message-editor-model">{props.message.model?.modelID}</span>
-            <Button
-              variant="ghost"
-              size="small"
-              data-action="cancel-edit"
-              disabled={pending()}
-              onClick={() => setEditing(false)}
-            >
-              {language.t("common.cancel")}
-            </Button>
-            <Button
-              variant="primary"
-              size="small"
-              data-action="resubmit-message"
-              disabled={pending() || (!draft().trim() && !props.parts.some((part) => part.type === "file"))}
-              onClick={() => void submit()}
-            >
-              {language.t("prompt.action.send")}
-            </Button>
-          </div>
-        </div>
+        <UserMessageEditor
+          message={props.message}
+          parts={props.parts}
+          onSubmit={(text, images) => props.onResubmit?.(text, images) ?? Promise.resolve(false)}
+          onCancel={() => setEditing(false)}
+        />
       </Show>
     </div>
   )

@@ -627,6 +627,34 @@ export class SessionReview {
     return latest
   }
 
+  /**
+   * Reconcile durable Keep cursors after the backend rewinds a historical turn.
+   * Revert removes a suffix of tool history by design; only that consumed suffix
+   * may be retired. Arbitrary gaps remain a conflict and are still fail-closed.
+   */
+  async rewind(sessionID: string, directory: string): Promise<void> {
+    const root = fs.realpathSync(directory)
+    if (this.busy.has(root)) throw new Error("Session review busy")
+    this.busy.add(root)
+    try {
+      const state = this.state(root, sessionID)
+      const messages = await this.deps.messages(sessionID, root)
+      const active = operations(messages, sessionID, root)
+      const byFile = new Map<string, Operation[]>()
+      for (const op of active) byFile.set(op.file, [...(byFile.get(op.file) ?? []), op])
+      const checkpoints = new Map<string, Checkpoint>()
+      for (const [file, checkpoint] of state.checkpoints) {
+        const ops = byFile.get(file) ?? []
+        let count = 0
+        while (count < checkpoint.cursor.length && ops.at(count)?.id === checkpoint.cursor.at(count)) count++
+        if (count > 0) checkpoints.set(file, { cursor: checkpoint.cursor.slice(0, count) })
+      }
+      this.save(state, checkpoints)
+    } finally {
+      this.busy.delete(root)
+    }
+  }
+
   async decide(
     sessionID: string,
     directory: string,

@@ -16,6 +16,23 @@ type Target = { sessionId: string; directory: string; baseBranch: string }
 
 type AgentManagerDiffFile = DiffFile & WorktreeDiffEntry
 
+function documentRoot(
+  state: WorktreeStateManager | undefined,
+  root: string | undefined,
+  sessionId: string,
+  contextKey: string | undefined,
+  project: string | undefined,
+): string | undefined {
+  if (sessionId === LOCAL_DIFF_ID) return root
+  const owner = project ?? "single"
+  const context = contextKey?.startsWith(`${owner}:`) ? contextKey.slice(owner.length + 1) : undefined
+  const worktree = state?.getWorktree(sessionId) ?? (context ? state?.getWorktree(context) : undefined)
+  if (worktree) return worktree.path
+  const session = state?.getSession(sessionId)
+  if (!session) return undefined
+  return session.worktreeId ? (state?.getWorktree(session.worktreeId)?.path ?? root) : root
+}
+
 export interface WorktreeDiffControllerContext {
   getState: () => WorktreeStateManager | undefined
   getRoot: () => string | undefined
@@ -246,17 +263,8 @@ export class WorktreeDiffController {
   public document(sessionId: string, file: string, contextKey?: string): null {
     void this.ready("stateReady rejected, continuing document resolve:").then(() => {
       const state = this.ctx.getState()
-      const worktree = sessionId === LOCAL_DIFF_ID ? undefined : state?.getWorktree(sessionId)
-      const session = worktree || sessionId === LOCAL_DIFF_ID ? undefined : state?.getSession(sessionId)
-      const root =
-        sessionId === LOCAL_DIFF_ID
-          ? this.ctx.getRoot()
-          : (worktree?.path ??
-            (session?.worktreeId
-              ? state?.getWorktree(session.worktreeId)?.path
-              : session
-                ? this.ctx.getRoot()
-                : undefined))
+      const project = this.ctx.projectId?.()
+      const root = documentRoot(state, this.ctx.getRoot(), sessionId, contextKey, project)
       const result = root ? readDocument(root, file) : { error: "The document context is no longer available." }
       this.ctx.post({ type: "agentManager.document", sessionId, file, requestedFile: file, contextKey, ...result })
     })

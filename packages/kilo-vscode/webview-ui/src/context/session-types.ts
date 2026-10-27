@@ -28,6 +28,7 @@ import type {
 import type { Activity } from "../utils/session-activity"
 import type { Timing } from "./session-timing"
 import type { MessageMutation } from "./session-utils"
+import type { ImageAttachment } from "../hooks/useImageAttachments"
 
 export interface SessionContextValue {
   // Current session
@@ -184,7 +185,7 @@ export interface SessionContextValue {
   revertSession: (messageID: string, partID?: string) => void
   unrevertSession: () => void
   deleteQueuedMessage: (sessionID: string, messageID: string) => Promise<boolean>
-  resubmitMessage: (messageID: string, text: string) => Promise<boolean>
+  resubmitMessage: (messageID: string, text: string, images?: ImageAttachment[]) => Promise<boolean>
   submit: (input: SendMessageRequest) => void
   sendMessage: (
     text: string,

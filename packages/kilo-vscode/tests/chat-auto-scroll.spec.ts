@@ -499,10 +499,13 @@ test("sticky prompt follows visible virtual history and the direct live tail wit
   })
   await expect(sticky).toBeHidden()
   const height = (await state(page)).height
-  await list.locator('[data-message="rail-asst-315"]').first().evaluate((row) => {
-    const list = row.closest(".message-list")!
-    list.scrollTop += row.getBoundingClientRect().top - list.getBoundingClientRect().top - list.clientTop + 16
-  })
+  await list
+    .locator('[data-message="rail-asst-315"]')
+    .first()
+    .evaluate((row) => {
+      const list = row.closest(".message-list")!
+      list.scrollTop += row.getBoundingClientRect().top - list.getBoundingClientRect().top - list.clientTop + 16
+    })
   await expect(sticky).toHaveAttribute("data-sticky-prompt", "rail-user-315")
   expect((await state(page)).height).toBe(height)
 

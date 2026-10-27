@@ -631,6 +631,23 @@ describe("SessionReview", () => {
     }
   })
 
+  it("retires consumed history after an explicit historical rewind", async () => {
+    const f = fixture()
+    f.write("a", "B\n")
+    f.state.messages = [edit("m1", "a", "A\n", "B\n")]
+    const initial = await f.service.load("s", f.root)
+    await f.service.decide("s", f.root, initial.revision, "accept", "a")
+
+    f.write("a", "C\n")
+    f.state.messages = [edit("m2", "a", "B\n", "C\n")]
+    await f.service.rewind("s", f.root)
+
+    const pending = await f.service.load("s", f.root)
+    expect(pending.files[0]?.before).toBe("B\n")
+    await f.service.decide("s", f.root, pending.revision, "reject-all")
+    expect(f.read("a")).toBe("B\n")
+  })
+
   it("applies hunk decisions with exact added, deleted, and empty-file existence semantics", async () => {
     for (const action of ["accept", "reject"] as const) {
       const f = fixture()

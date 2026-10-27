@@ -26,4 +26,24 @@ describe("PromptInput bidirectional text support", () => {
 
     expect(input).toContain('dir="auto"')
   })
+
+  it("renders file-backed skill tokens as host-open links without changing the textarea", () => {
+    expect(src).toContain('seg().kind === "skill"')
+    expect(src).toContain('type: "openFile", filePath: skill.location')
+    expect(src).toContain("sessionID: sid()")
+    expect(src).toContain('class="prompt-input-skill-link"')
+    expect(src).toContain("onMouseDown={(e) => {")
+    expect(src).toContain("e.preventDefault()")
+    expect(src).toContain("e.stopPropagation()")
+    expect(src).toContain('location !== "builtin"')
+    expect(src).toContain('location !== "<built-in>"')
+    expect(src).toContain('{ type: "requestSkills" }')
+  })
+
+  it("keeps the editable textarea above a pointer-transparent overlay", () => {
+    const overlayCss = css.match(/\.prompt-input-highlight-overlay\s*{[^}]*}/)?.[0]
+    const skillCss = css.match(/\.prompt-input-skill-link\s*{[^}]*}/)?.[0]
+    expect(overlayCss).toContain("pointer-events: none")
+    expect(skillCss).toContain("pointer-events: auto")
+  })
 })

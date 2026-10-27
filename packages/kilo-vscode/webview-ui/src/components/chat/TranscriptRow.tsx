@@ -70,7 +70,7 @@ export const TranscriptRowView: Component<TranscriptRowViewProps> = (props) => {
               queued={row().queued}
               onResubmit={
                 !props.readonly && server.isConnected()
-                  ? (text) => session.resubmitMessage(row().message.id, text)
+                  ? (text, images) => session.resubmitMessage(row().message.id, text, images)
                   : undefined
               }
               onEdit={

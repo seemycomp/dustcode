@@ -13,13 +13,19 @@ import {
   spanEdit,
   type PasteRange,
   type PromptSegment,
+  type PromptSkill,
 } from "../components/chat/prompt-input-utils"
 
 export interface PasteCollapse {
   /** Collapsed blocks in the current text, in text order. */
   pastes: Accessor<PasteRange[]>
   /** Split the current text for the highlight overlay, chips included. */
-  segments: (text: string, paths: Set<string>) => PromptSegment[]
+  segments: (
+    text: string,
+    paths: Set<string>,
+    skills?: readonly PromptSkill[],
+    commands?: ReadonlySet<string>,
+  ) => PromptSegment[]
   /** The text with every collapsed block restored to its full content. */
   plainText: (text: string) => string
   /** Restore collapsed blocks for arbitrary text paired with stored backing. */
@@ -286,17 +292,17 @@ export function usePasteCollapse(opts: { enabled: Accessor<boolean>; text: Acces
 
   return {
     pastes,
-    segments: (text, paths) => {
+    segments: (text, paths, skills = [], commands = new Set()) => {
       const list = pastes()
       // Fast path with no collapsed blocks: keep the original segment build so
       // typing stays on the same code path it had before this feature.
-      if (list.length === 0) {
+      if (list.length === 0 && skills.length === 0) {
         return buildHighlightSegments(text, paths).map((part) => ({
           text: part.text,
           kind: part.highlight ? ("mention" as const) : ("plain" as const),
         }))
       }
-      return buildPromptSegments(text, paths, list)
+      return buildPromptSegments(text, paths, list, skills, commands)
     },
     plainText: (text) => expandPastes(text, pastes()),
     plainTextFor,

@@ -9,11 +9,13 @@ import type {
 import { formatBrowserFeedback, partFeedback } from "../shared/browser-feedback"
 import { formatReviewCommentsMarkdown } from "../shared/review-comments"
 import { Identifier } from "../../webview-ui/src/utils/id"
+import type { ImageAttachment } from "../../webview-ui/src/hooks/useImageAttachments"
 
 type Input = {
   sessionID: string
   messageID: string
   text: string
+  images?: ImageAttachment[]
   providerID?: string
   modelID?: string
   agent?: string
@@ -71,6 +73,37 @@ async function run(input: Input, ctx: ResubmitContext): Promise<boolean> {
     throw new Error("Historical user message was not found in this session")
   }
 
+  const attachments = message.parts.filter(
+    (part): part is Extract<Part, { type: "file" }> =>
+      part.type === "file" && part.mime.startsWith("image/") && part.source?.type !== "file",
+  )
+  if (input.images !== undefined && !Array.isArray(input.images)) throw new Error("Invalid image attachments")
+  const images = input.images?.map((image) => {
+    if (
+      !image ||
+      typeof image.id !== "string" ||
+      typeof image.filename !== "string" ||
+      typeof image.mime !== "string" ||
+      typeof image.dataUrl !== "string"
+    ) {
+      throw new Error("Invalid image attachment")
+    }
+    const original = attachments.find((part) => part.url === image.dataUrl && part.mime === image.mime)
+    const inline = image.dataUrl.match(/^data:(image\/(?:png|jpeg|gif|webp));base64,([A-Za-z0-9+/]+={0,2})$/)
+    if (
+      !original &&
+      (!inline || inline[2].length % 4 !== 0 || inline[1] !== image.mime || inline[0] !== image.dataUrl)
+    ) {
+      throw new Error("Invalid image attachment")
+    }
+    return {
+      type: "file" as const,
+      mime: image.mime,
+      url: image.dataUrl,
+      filename: image.filename,
+      ...(original?.source ? { source: original.source } : {}),
+    }
+  })
   const text = message.parts.find(
     (part): part is Extract<Part, { type: "text" }> => part.type === "text" && !part.synthetic && !part.ignored,
   )
@@ -86,6 +119,7 @@ async function run(input: Input, ctx: ResubmitContext): Promise<boolean> {
     { type: "text" as const, text: body, ...(text?.metadata ? { metadata: text.metadata } : {}) },
     ...message.parts
       .filter((part) => part.type !== "text" && !("synthetic" in part && part.synthetic === true))
+      .filter((part) => images === undefined || part.type !== "file" || !attachments.includes(part))
       .map((part) =>
         part.type === "file"
           ? {
@@ -110,6 +144,7 @@ async function run(input: Input, ctx: ResubmitContext): Promise<boolean> {
               : undefined,
       )
       .filter((part): part is NonNullable<typeof part> => part !== undefined),
+    ...(images ?? []),
   ] satisfies Prompt["parts"]
   const prompt = {
     messageID: Identifier.ascending("message"),

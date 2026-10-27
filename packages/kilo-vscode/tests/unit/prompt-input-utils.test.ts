@@ -4,6 +4,7 @@ import {
   dirName,
   buildHighlightSegments,
   buildPromptSegments,
+  type PromptSkill,
   atEnd,
   insertSpacedText,
   isPromptBlocked,
@@ -701,6 +702,30 @@ describe("buildPromptSegments", () => {
 
   it("returns an empty list for empty text", () => {
     expect(buildPromptSegments("", new Set(), [])).toEqual([])
+  })
+
+  it("marks only file-backed skill invocations as skill links", () => {
+    const skills: PromptSkill[] = [{ name: "kilo-config", location: "C:/skills/kilo-config/SKILL.md" }]
+    expect(buildPromptSegments("Use /kilo-config now", new Set(), [], skills)).toEqual([
+      { text: "Use ", kind: "plain" },
+      { text: "/kilo-config", kind: "skill", skill: skills[0] },
+      { text: " now", kind: "plain" },
+    ])
+  })
+
+  it("uses the disambiguated skill token when a command has the same name", () => {
+    const skills: PromptSkill[] = [{ name: "review", location: "/tmp/review/SKILL.md" }]
+    expect(buildPromptSegments("/review /review:skill", new Set(), [], skills, new Set(["review"]))).toEqual([
+      { text: "/review ", kind: "plain" },
+      { text: "/review:skill", kind: "skill", skill: skills[0] },
+    ])
+  })
+
+  it("does not link a skill token embedded in another word", () => {
+    const skills: PromptSkill[] = [{ name: "kilo-config", location: "/tmp/kilo-config/SKILL.md" }]
+    expect(buildPromptSegments("prefix/kilo-config", new Set(), [], skills)).toEqual([
+      { text: "prefix/kilo-config", kind: "plain" },
+    ])
   })
 })
 

@@ -737,6 +737,7 @@ export const SessionProvider: ParentComponent = (props) => {
 
   const retryMcp = () => {
     if (agents().length === 0) vscode.postMessage({ type: "requestAgents" })
+    if (skills().length === 0) vscode.postMessage({ type: "requestSkills" })
     if (Object.keys(mcp.status()).length === 0) mcp.requestStatus()
     if (mcp.state().needsAuth.length === 0) mcp.request()
   }

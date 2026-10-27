@@ -68,7 +68,7 @@ import { normalize, type SSEPayload, type SyncPayload, type WirePayload } from "
 import { slimInfo, slimPart, slimParts } from "./kilo-provider/slim-metadata"
 import { ToolInputStream } from "./kilo-provider/tool-input-stream"
 import { handleSidebarWorktreeMessage } from "./kilo-provider/sidebar-worktree"
-import { handleSessionReview } from "./kilo-provider/session-review-host"
+import { handleSessionReview, rewindSessionReview } from "./kilo-provider/session-review-host"
 import { sessionSourceId } from "./diff/sources/session"
 import { parseMessageFiles, type MessageFile } from "./kilo-provider/message-files"
 import { renameSession } from "./kilo-provider/rename-session"
@@ -156,6 +156,7 @@ import { mergeInjected } from "./shared/injected-prompt"
 import { completesWithoutStatus, goalControl } from "./kilo-provider/command-completion"
 import { KiloProviderMemory } from "./kilo-provider/memory"
 import { resubmitMessage } from "./kilo-provider/resubmit-message"
+import type { ImageAttachment } from "../webview-ui/src/hooks/useImageAttachments"
 import { sessionCheckpoints } from "./kilo-provider/session-checkpoints"
 
 import {
@@ -1397,6 +1398,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
               sessionID: string
               messageID: string
               text: string
+              images?: ImageAttachment[]
               requestID: string
               providerID?: string
               modelID?: string
@@ -1835,6 +1837,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     sessionID: string
     messageID: string
     text: string
+    images?: ImageAttachment[]
     requestID: string
     providerID?: string
     modelID?: string
@@ -1878,6 +1881,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
               messageID,
             ),
           )
+          await rewindSessionReview(this.connectionService, input.sessionID, dir)
           return true
         },
       })

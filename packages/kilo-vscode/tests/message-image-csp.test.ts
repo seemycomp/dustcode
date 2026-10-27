@@ -44,7 +44,7 @@ it("copies PNG and GIF attachments under the production CSP in Chromium", async 
         await page.goto(`${server.url}?${format}`)
         await page.evaluate(() => navigator.clipboard.writeText(""))
         await page.locator("button.message-image-thumbnail").click({ button: "right" })
-        await page.getByRole("menuitem", { name: "Copy Image", exact: true }).click()
+        await page.getByRole("menuitem", { name: "Copy image", exact: true }).click()
         await browserExpect
           .poll(async () =>
             page.evaluate(async () => {

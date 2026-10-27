@@ -1,0 +1,18 @@
+.user-message-editor-picker {
+  display: none;
+}
+
+.user-message-editor[data-dragging] {
+  outline: 2px dashed var(--vscode-focusBorder);
+  outline-offset: -6px;
+}
+
+.user-message-editor-attachment {
+  position: relative;
+}
+
+.user-message-editor-attachment > [data-component="icon-button"] {
+  position: absolute;
+  inset: 0 0 auto auto;
+  background: var(--vscode-editor-background);
+}

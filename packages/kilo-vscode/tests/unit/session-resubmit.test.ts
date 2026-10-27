@@ -2,6 +2,7 @@ import { createRoot } from "solid-js"
 import { describe, expect, it } from "bun:test"
 import { createResubmitter } from "../../webview-ui/src/context/session-resubmit"
 import type { ExtensionMessage } from "../../webview-ui/src/types/messages"
+import type { ImageAttachment } from "../../webview-ui/src/hooks/useImageAttachments"
 
 function setup() {
   const sent: Array<{
@@ -9,6 +10,7 @@ function setup() {
     sessionID: string
     messageID: string
     text: string
+    images?: ImageAttachment[]
     requestID: string
   }> = []
   const failed: Array<string | undefined> = []
@@ -50,6 +52,27 @@ function setup() {
 }
 
 describe("session resubmitter", () => {
+  it.each([
+    { images: [] },
+    { images: [{ id: "image", filename: "new.png", mime: "image/png", dataUrl: "data:image/png;base64,AA==" }] },
+  ])("transports image replacement %j and correlates replies by request and message", async ({ images }) => {
+    const state = setup()
+    const pending = state.resubmitter.send("message-1", "edited", images)
+    const request = state.sent.at(0)!
+    expect(request.images).toEqual(images)
+    let settled = false
+    void pending.then(() => {
+      settled = true
+    })
+    state.dispatch({ ...request, type: "resubmitMessageResult", requestID: "unrelated", success: true })
+    state.dispatch({ ...request, type: "resubmitMessageResult", messageID: "other", success: true })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    state.dispatch({ ...request, type: "resubmitMessageResult", success: true })
+    expect(await pending).toBe(true)
+    state.dispose()
+  })
+
   it("routes a result to the original session after switching drafts", async () => {
     const state = setup()
     const pending = state.resubmitter.send("message-1", "edited")
@@ -66,6 +89,7 @@ describe("session resubmitter", () => {
 
     expect(await pending).toBe(true)
     expect(state.sent[0]).toMatchObject({ sessionID: "session-original", messageID: "message-1", text: "edited" })
+    expect(state.sent[0]).not.toHaveProperty("images")
     expect(state.failed).toEqual([])
     state.dispose()
   })

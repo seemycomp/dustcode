@@ -2,6 +2,7 @@ import type { ExtensionMessage } from "../types/messages"
 import { onCleanup } from "solid-js"
 import { showToast } from "@kilocode/kilo-ui/toast"
 import { useLanguage } from "./language"
+import type { ImageAttachment } from "../hooks/useImageAttachments"
 
 type Input = {
   post: (message: {
@@ -9,6 +10,7 @@ type Input = {
     sessionID: string
     messageID: string
     text: string
+    images?: ImageAttachment[]
     requestID: string
   }) => void
   current: () => string | undefined
@@ -46,13 +48,20 @@ export function createResubmitter(input: Input) {
     result.resolve(message.success)
     return true
   }
-  const send = async (messageID: string, text: string): Promise<boolean> => {
+  const send = async (messageID: string, text: string, images?: ImageAttachment[]): Promise<boolean> => {
     const sessionID = input.current()
     if (!sessionID || !input.connected()) return false
     const requestID = crypto.randomUUID()
     const result = Promise.withResolvers<boolean>()
     pending.set(requestID, { sessionID, messageID, resolve: result.resolve })
-    input.post({ type: "resubmitMessage", sessionID, messageID, text, requestID })
+    input.post({
+      type: "resubmitMessage",
+      sessionID,
+      messageID,
+      text,
+      requestID,
+      ...(images !== undefined ? { images } : {}),
+    })
     return result.promise
   }
   const unsubscribe = input.listen?.(handle)
