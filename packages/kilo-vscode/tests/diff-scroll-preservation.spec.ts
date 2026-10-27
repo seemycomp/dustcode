@@ -152,6 +152,38 @@ for (const width of [420, 200]) {
   })
 }
 
+for (const mode of ["Unified", "Split"]) {
+  test(`keeps session review block actions visible and reachable at EOF in ${mode}`, async ({ page }) => {
+    await page.setViewportSize({ width: 1000, height: 720 })
+    await page.goto(`/iframe.html?id=agentmanager--full-screen-session-review&viewMode=story&globals=${GLOBALS}`)
+    await disableAnimations(page)
+    await page.getByText(mode, { exact: true }).click()
+    const diff = page.locator(".session-review-diff")
+    const row = diff.locator('[data-code] [data-line][data-line-type="change-addition"]').first()
+    await row.hover()
+    const toolbar = diff.locator(".session-review-hunk-actions")
+    await expect(toolbar).toBeVisible()
+    await expect
+      .poll(() =>
+        toolbar.evaluate((el) => {
+          const bounds = el.getBoundingClientRect()
+          const content = el.closest('[data-slot="accordion-content"]')!.getBoundingClientRect()
+          return bounds.bottom <= content.bottom && bounds.top >= content.top
+        }),
+      )
+      .toBe(true)
+    const keep = toolbar.getByRole("button", { name: "Keep", exact: true })
+    const bounds = await keep.boundingBox()
+    expect(bounds).not.toBeNull()
+    await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2, { steps: 12 })
+    await keep.click({ timeout: 3000 })
+    await expect(page.getByTestId("session-decision")).toHaveText("accept:.dustcode/plans/create-test-files.md:added")
+    await row.hover()
+    await toolbar.getByRole("button", { name: "Undo", exact: true }).click({ timeout: 3000 })
+    await expect(page.getByTestId("session-decision")).toHaveText("reject:.dustcode/plans/create-test-files.md:added")
+  })
+}
+
 test("preserves diff scroll position while an agent edit refreshes a file", async ({ page }) => {
   const first = await openStory(page)
   const scroller = page.locator(".am-review-diff")

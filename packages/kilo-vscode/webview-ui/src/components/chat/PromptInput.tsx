@@ -161,6 +161,8 @@ function readTerminalContext(read: (() => string | undefined) | undefined): stri
 }
 
 interface PromptInputProps {
+  contextUsage?: boolean
+  onContextUsage?: () => void
   blocked?: () => boolean
   edit?: { sessionID: string; messageID: string }
   onEditReady?: (ready: boolean) => void
@@ -2401,6 +2403,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </Tooltip>
             </div>
           </Show>
+          <div class="prompt-action">
+            <Tooltip value={language.t("prompt.action.contextUsage")} placement="top" openDelay={0}>
+              <IconButton
+                icon="gauge"
+                size="small"
+                variant="ghost"
+                aria-label={language.t("prompt.action.contextUsage")}
+                aria-expanded={props.contextUsage ?? false}
+                onClick={() => props.onContextUsage?.()}
+              />
+            </Tooltip>
+          </div>
           <Show when={sandboxVisible()}>
             <div class="prompt-action" data-folded={folded("sandbox") ? "" : undefined}>
               <SandboxButtonBase

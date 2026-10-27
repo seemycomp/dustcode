@@ -736,6 +736,46 @@ export const FullScreenDiffWithChanges: Story = {
   ),
 }
 
+export const FullScreenSessionReview: Story = {
+  name: "FullScreenDiffView - session review block actions",
+  render: () => {
+    const [style, setStyle] = createSignal<"unified" | "split">("unified")
+    const [decision, setDecision] = createSignal("")
+    const file: WorktreeFileDiff = {
+      file: ".dustcode/plans/create-test-files.md",
+      status: "added",
+      additions: 3,
+      deletions: 0,
+      before: "",
+      after: "# Create Test Files\n\nCreate three test files.\n",
+      patch:
+        "--- /dev/null\n+++ b/.dustcode/plans/create-test-files.md\n@@ -0,0 +1,3 @@\n+# Create Test Files\n+\n+Create three test files.\n",
+      rejectable: true,
+      hunks: [{ id: "added" }],
+    }
+    return (
+      <StoryProviders noPadding>
+        <div style={{ height: "600px", display: "flex", "flex-direction": "column" }}>
+          <span data-testid="session-decision">{decision()}</span>
+          <div style={{ display: "flex", "min-height": "0", flex: "1" }}>
+            <FullScreenDiffView
+              sessionReview
+              diffs={[file]}
+              loading={false}
+              diffStyle={style()}
+              onDiffStyleChange={setStyle}
+              onSessionDecision={(action, file, hunk) => setDecision(`${action}:${file}:${hunk}`)}
+              comments={[]}
+              onCommentsChange={() => {}}
+              onClose={() => {}}
+            />
+          </div>
+        </div>
+      </StoryProviders>
+    )
+  },
+}
+
 export const FullScreenDiffWithCollapsedContext: Story = {
   name: "FullScreenDiffView - collapsed unchanged context",
   render: () => (

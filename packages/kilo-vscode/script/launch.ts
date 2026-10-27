@@ -367,7 +367,13 @@ async function launch() {
 
   settings(preserve, accessible)
 
-  const args = [workspace, `--extensions-dir=${extDir}`, `--user-data-dir=${userDir}`, "--skip-release-notes"]
+  const args = [
+    "--new-window",
+    workspace,
+    `--extensions-dir=${extDir}`,
+    `--user-data-dir=${userDir}`,
+    "--skip-release-notes",
+  ]
 
   if (mode === "dev") {
     args.push(`--extensionDevelopmentPath=${root}`)
@@ -418,10 +424,12 @@ async function launch() {
 
   const child = spawn(app, args, {
     cwd: workspace,
-    detached: !win,
+    detached: true,
     env,
     stdio: "ignore",
-    ...(win ? { shell: true } : {}),
+    windowsHide: true,
+    // Launch executables directly so Windows paths with spaces are not split by cmd.exe.
+    ...(win && /\.(cmd|bat)$/i.test(app) ? { shell: true } : {}),
   })
   child.unref()
 

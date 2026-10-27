@@ -78,6 +78,8 @@
 .session-review-diff {
   position: relative;
   min-width: 0;
+  /* Keep EOF hunk actions inside the accordion's clipped content. */
+  padding-block-end: 40px;
 }
 
 .session-review-placeholder {

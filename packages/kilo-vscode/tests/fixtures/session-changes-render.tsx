@@ -105,6 +105,8 @@ assert.deepEqual(
 )
 assert.ok(root.querySelector('[data-status="pending"]'), "host owns status updates")
 const toggle = node<HTMLButtonElement>("button[aria-expanded]")
+assert.equal(window.getComputedStyle(toggle).flexGrow, "1", "toggle must fill the available header width")
+assert.equal(toggle.getAttribute("aria-expanded"), "true", "toolbar actions must not collapse the panel")
 toggle.focus()
 assert.equal(window.document.activeElement, toggle)
 assert.equal(toggle.getAttribute("aria-controls"), node(".session-changes-body").id)
