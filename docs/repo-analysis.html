@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phân tích repository Dustcode</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1e293b;
+      --muted: #5b6b82;
+      --line: #d7e0ea;
+      --paper: #f8fafc;
+      --card: #ffffff;
+      --accent: #0f766e;
+      --accent-soft: #ccfbf1;
+      --warm: #b45309;
+      --warm-soft: #ffedd5;
+      --code: #172033;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.6;
+    }
+    main { max-width: 1120px; margin: 0 auto; padding: 48px 24px 72px; }
+    header { border-bottom: 1px solid var(--line); padding-bottom: 28px; margin-bottom: 30px; }
+    h1 { max-width: 800px; margin: 0 0 12px; font-size: clamp(2rem, 5vw, 3.8rem); line-height: 1.05; letter-spacing: -0.04em; }
+    h2 { margin: 42px 0 14px; font-size: 1.65rem; line-height: 1.2; }
+    h3 { margin: 26px 0 8px; font-size: 1.1rem; }
+    p, li { max-width: 70ch; }
+    .dek { color: var(--muted); font-size: 1.12rem; max-width: 72ch; }
+    dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 22px 0 0; font-size: .94rem; }
+    dt { color: var(--muted); font-weight: 700; }
+    dd { margin: 0; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; box-shadow: 0 5px 18px rgba(30, 41, 59, .04); }
+    .card h3 { margin-top: 0; }
+    .tag { display: inline-block; background: var(--accent-soft); color: #115e59; border-radius: 999px; padding: 2px 10px; font-size: .78rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+    .note { border-left: 4px solid var(--warm); background: var(--warm-soft); padding: 12px 16px; margin: 18px 0; }
+    code { background: #e8eef5; border-radius: 4px; padding: 1px 5px; font-size: .9em; overflow-wrap: anywhere; }
+    pre { background: var(--code); color: #dbeafe; border-radius: 12px; padding: 18px; overflow-x: auto; line-height: 1.45; }
+    pre code { background: transparent; padding: 0; color: inherit; }
+    table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); }
+    th, td { text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); padding: 10px 12px; }
+    th { background: #eef4f8; }
+    tr:last-child td { border-bottom: 0; }
+    a { color: #0f5f8c; }
+    .source { color: var(--muted); font-size: .91rem; }
+    .checks { display: grid; gap: 8px; padding-left: 0; list-style: none; }
+    .checks li { background: var(--card); border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; }
+    footer { margin-top: 54px; border-top: 1px solid var(--line); padding-top: 16px; color: var(--muted); font-size: .88rem; }
+    @media (max-width: 680px) { main { padding: 28px 16px 48px; } dl { grid-template-columns: 1fr; gap: 0; } dt { margin-top: 10px; } table { font-size: .9rem; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <span class="tag">Repository briefing</span>
+      <h1>Phân tích repository Dustcode</h1>
+      <p class="dek">Bản đồ kiến trúc dành cho người đọc code: Dustcode là extension VS Code có backend agent local được đóng gói kèm, với Agent Manager cho nhiều session và Git worktree.</p>
+      <dl>
+        <dt>Date</dt><dd>25 tháng 10, 2026</dd>
+        <dt>Input shape</dt><dd>concept</dd>
+        <dt>Subject</dt><dd>Kiến trúc và cách vận hành repository Dustcode</dd>
+      </dl>
+      <p class="source">Snapshot: <code>fa345665f0f250801c2d9b93dec00be3b858b86a</code> trên nhánh <code>main</code>. Bản ngắn cho agent: <a href="repo-analysis.md">repo-analysis.md</a>.</p>
+    </header>
+
+    <section>
+      <h2>Đọc nhanh</h2>
+      <div class="grid">
+        <article class="card"><h3>Sản phẩm thực tế</h3><p>Phạm vi phát hành là VS Code extension và backend local nhúng. Không nên suy luận rằng CLI, JetBrains hay các app upstream khác vẫn là sản phẩm Dustcode chỉ vì chúng còn trong cây mã nguồn.</p></article>
+        <article class="card"><h3>Luồng chính</h3><p>SolidJS webview gửi message tới extension host. Host dùng một connection service chung để gọi backend <code>kilo serve</code> qua HTTP/SSE.</p></article>
+        <article class="card"><h3>Độ phức tạp</h3><p>Phần khó nhất là session orchestration, tool loop, quyền/sandbox, event ordering và định tuyến project/session trong Agent Manager.</p></article>
+        <article class="card"><h3>Ranh giới an toàn</h3><p>Permission prompt và Git worktree không phải security sandbox đầy đủ. MCP, plugin, browser và provider vẫn là các vùng trust cần xem xét.</p></article>
+      </div>
+      <div class="note"><strong>Phạm vi sản phẩm:</strong> <code>README.md:3-24</code> và <code>RELEASING.md:1-33</code> là nguồn chính cho nhận diện Dustcode, namespace <code>dustcode.*</code>, VSIX và CI không publish.</div>
+    </section>
+
+    <section>
+      <!-- System architecture -->
+      <!-- Webview connects to the extension host and shared local backend. -->
+      <!-- HTTP and SSE carry requests and events between the host and backend. -->
+      <h2>Kiến trúc hệ thống</h2>
+      <pre><code>SolidJS webview (chat / settings / Agent Manager)
+        │ vscode.Webview.postMessage()
+        ▼
+VS Code extension host
+  KiloProvider + commands + Agent Manager
+        │ shared KiloConnectionService
+        ▼
+bundled kilo serve --port 0
+  local HTTP API + SSE + agent runtime
+        │
+        ├─ SessionPrompt / SessionProcessor
+        ├─ model providers
+        ├─ tools / permission / sandbox / MCP / plugins
+        ├─ SQLite + Drizzle + Effect
+        └─ durable events → SSE clients</code></pre>
+      <p>Activation tạo một <code>KiloConnectionService</code> cho mỗi extension host. Backend khởi động lazy, dùng binary đi kèm, port do OS cấp và mật khẩu Basic Auth ngẫu nhiên.</p>
+      <p class="source">Nguồn: <code>packages/kilo-vscode/src/extension.ts:90-105</code>; <code>packages/kilo-vscode/src/services/cli-backend/server-manager.ts:59-175</code>; <code>packages/kilo-vscode/src/services/cli-backend/connection-service.ts:959-1024</code>.</p>
+    </section>
+
+    <section>
+      <!-- The SDK sends the prompt to the backend API. -->
+      <!-- The session handler validates the session and attachments. -->
+      <!-- SessionPrompt prepares history, context, instructions, and tools. -->
+      <!-- SessionProcessor streams model output and processes tool calls. -->
+      <!-- Session updates are persisted and delivered to clients through SSE. -->
+      <h2>Quy trình xử lý prompt</h2>
+      <ol>
+        <li>SDK gửi request tới typed Effect HTTP API.</li>
+        <li>Session handler kiểm tra session và attachment.</li>
+        <li><code>SessionPrompt</code> dựng history, context, instructions và tool registry.</li>
+        <li><code>SessionProcessor</code> gọi model provider bằng stream.</li>
+        <li>Tool call đi qua permission, sandbox, plugin hook hoặc MCP.</li>
+        <li>Kết quả được đưa vào lượt model kế tiếp, hoặc session dừng/compaction/abort.</li>
+        <li>Message, parts, events và persistence cập nhật; SSE chuyển dữ liệu tới webview.</li>
+      </ol>
+      <p class="source">Nguồn: <code>packages/opencode/src/server/routes/instance/httpapi/handlers/session.ts:327-393</code>; <code>packages/opencode/src/session/prompt.ts:1766-1872</code>; <code>packages/opencode/src/session/llm.ts:345-405</code>; <code>packages/opencode/src/session/tools.ts:176-221</code>.</p>
+    </section>
+
+    <section>
+      <h2>Persistence và event</h2>
+      <p>Code hiện tại dùng SQLite + Drizzle thông qua Effect. Database layer thiết lập WAL, busy timeout, foreign keys, migrations và channel-specific paths. Event layer cung cấp dữ liệu realtime cho SSE.</p>
+      <div class="grid">
+        <article class="card"><h3>Database</h3><p><code>packages/core/src/database/database.ts:16-75</code> là service layer hiện tại; <code>packages/opencode/src/storage/db.ts:97-120</code> là client/migration path trong CLI.</p></article>
+        <article class="card"><h3>Event stream</h3><p>Handler SSE lọc theo directory/workspace và bridge các event envelope trước khi gửi tới client.</p></article>
+      </div>
+      <div class="note"><strong>Documentation drift:</strong> một phần <code>packages/opencode/AGENTS.md</code> vẫn mô tả JSON filesystem và Hono theo kiến trúc cũ. Với session path đã khảo sát, source hiện tại dùng SQLite và Effect HttpApi. Khi phân tích route khác, hãy kiểm tra source thay vì áp dụng khái quát mù quáng.</div>
+    </section>
+
+    <section>
+      <h2>Agent Manager</h2>
+      <p>Agent Manager quản lý nhiều project, session, Git worktree, terminal, setup script và review/diff trong extension. Worktree được truyền vào backend dưới dạng <code>directory</code> qua shared client.</p>
+      <table>
+        <thead><tr><th>Điều được tách</th><th>Điều không được tách</th></tr></thead>
+        <tbody><tr><td>Checkout, branch, directory-scoped state</td><td>Không tạo một <code>kilo serve</code> process cho mỗi worktree</td></tr><tr><td>Project/session route có generation</td><td>Không phải security sandbox đầy đủ</td></tr></tbody>
+      </table>
+      <p><code>ProjectRouteService</code> ngăn dùng route stale và không tự chọn project khi raw session ID bị trùng. Test route hiện có 13 test pass, 0 fail.</p>
+      <p class="source">Nguồn: <code>packages/kilo-vscode/src/agent-manager/AgentManagerProvider.ts:967-1032</code>; <code>packages/kilo-vscode/src/agent-manager/project/route.ts:45-120</code>; <code>packages/kilo-vscode/tests/unit/agent-project-route.test.ts:4-117</code>.</p>
+    </section>
+
+    <section>
+      <h2>Bản đồ package</h2>
+      <table>
+        <thead><tr><th>Path</th><th>Vai trò</th></tr></thead>
+        <tbody>
+          <tr><td><code>packages/kilo-vscode/</code></td><td>Extension host, webview, Agent Manager, packaging</td></tr>
+          <tr><td><code>packages/opencode/</code></td><td>Bundled CLI/backend, API, sessions, tools, providers</td></tr>
+          <tr><td><code>packages/core/</code></td><td>Effect services, database và domain/runtime foundations</td></tr>
+          <tr><td><code>packages/server/</code></td><td>Shared server package dựa trên core/protocol</td></tr>
+          <tr><td><code>packages/sdk/js/</code></td><td>Generated client và transport boundary</td></tr>
+          <tr><td><code>packages/kilo-ui/</code></td><td>SolidJS/Kilo UI, theme và diff/markdown</td></tr>
+          <tr><td><code>packages/plugin/</code></td><td>Plugin và custom-tool contracts/hooks</td></tr>
+          <tr><td><code>packages/kilo-gateway/</code></td><td>Auth và external Kilo provider routing</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>UI và hiệu năng diff</h2>
+      <p><code>kilo-ui</code> vừa là lớp component riêng vừa là adapter upstream. Button hiện re-export upstream component; CSS import upstream styles trước rồi thêm Kilo overrides và VS Code bridge.</p>
+      <p>Diff renderer dùng một <code>IntersectionObserver</code> dùng chung, deferred rendering và frame budget để tránh nhiều diff offscreen chặn chuyển session hoặc worktree.</p>
+      <p class="source">Nguồn: <code>packages/kilo-ui/src/components/button.tsx:1</code>; <code>packages/kilo-ui/src/styles/index.css:1-52</code>; <code>packages/kilo-ui/src/components/diff.tsx:51-134</code>.</p>
+    </section>
+
+    <section>
+      <h2>Build, test và CI</h2>
+      <pre><code>bun install --frozen-lockfile
+bun run typecheck:vscode
+bun run test:vscode
+bun run build:vscode</code></pre>
+      <ul class="checks">
+        <li><strong>Architecture:</strong> <code>bun run check:architecture</code> pass, 6 classified ratchet sites, 0 violations.</li>
+        <li><strong>Workflow allowlist:</strong> <code>bun run script/check-workflows.ts</code> pass, 2 active workflows.</li>
+        <li><strong>Agent routing:</strong> 13 tests pass, 0 fail.</li>
+        <li><strong>CI:</strong> <code>.github/workflows/test-vscode.yml</code> check → package 4 platform targets → Syft inventory; không có publish job.</li>
+      </ul>
+      <p>Root <code>package.json</code> pin Bun 1.4.4 và cố ý làm root <code>bun test</code> thất bại; test backend nên chạy từ package tương ứng.</p>
+    </section>
+
+    <section>
+      <h2>Rủi ro cần nhớ</h2>
+      <ol>
+        <li>Backend dùng chung: restart hoặc global state có thể ảnh hưởng nhiều UI/session.</li>
+        <li>Routing bất đồng bộ: phải giữ project, generation và directory chính xác.</li>
+        <li>SSE/webview ordering: cache, reconnect, remount và retry dễ gây race.</li>
+        <li>Upstream coupling: component re-export và CSS import khiến dependency upgrade lan truyền.</li>
+        <li>Diff lớn, nhiều worktree và Git polling cần đo hiệu năng trước khi đổi scheduling.</li>
+        <li>Tài liệu kế thừa có thể stale; source và active CI là bằng chứng ưu tiên.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Thứ tự đọc đề xuất</h2>
+      <ol>
+        <li><code>README.md</code>, <code>RELEASING.md</code>, <code>SECURITY.md</code></li>
+        <li><code>packages/kilo-vscode/AGENTS.md</code></li>
+        <li><code>packages/kilo-vscode/src/extension.ts</code> và <code>src/services/cli-backend/</code></li>
+        <li><code>src/KiloProvider.ts</code> và <code>webview-ui/src/context/</code></li>
+        <li><code>src/agent-manager/</code> và route tests</li>
+        <li><code>packages/opencode/src/server/routes/instance/httpapi/</code></li>
+        <li><code>packages/opencode/src/session/</code></li>
+        <li><code>packages/core/src/database/</code> và event services</li>
+      </ol>
+    </section>
+
+    <footer>Composed 2026-10-25 by ce-explain. Bản HTML tự chứa, không dùng script, font ngoài hay tài nguyên mạng. Khảo sát tĩnh; chưa chạy full typecheck, full build, full backend suite hoặc VS Code integration suite.</footer>
+  </main>
+</body>
+</html>

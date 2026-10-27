@@ -106,7 +106,7 @@
       "args": ["run", "compile"],
       "group": "build",
       "presentation": {
-        "reveal": "silent"
+        "reveal": "always"
       },
       "options": {
         "cwd": "${workspaceFolder}/packages/kilo-vscode"

@@ -204,7 +204,7 @@ for (const mode of ["unified", "split"] as const) {
   assert.equal(toolbar.dataset.hunk, "second")
   assert.equal(
     toolbar.style.getPropertyValue("--session-review-action-top"),
-    "226px",
+    "224px",
     "Actions sit directly after the last changed line, not after context",
   )
   toolbar.querySelector<HTMLButtonElement>("button")!.click()

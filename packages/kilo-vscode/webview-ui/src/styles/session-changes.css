@@ -37,6 +37,7 @@
 }
 
 .session-changes-toggle[data-component="button"] {
+  flex: 1;
   min-width: 0;
   justify-content: flex-start;
   gap: 6px;

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs"
+import { watch } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { delimiter, dirname, join, resolve } from "node:path"
 
@@ -11,7 +12,7 @@ afterEach(() => {
 })
 
 async function fixture() {
-  const repo = realpathSync(mkdtempSync(join(tmpdir(), "kilo-launch-")))
+  const repo = realpathSync.native(mkdtempSync(join(tmpdir(), "kilo-launch-")))
   dirs.push(repo)
   for (const path of ["", "packages/kilo-vscode", "packages/opencode", "packages/sdk/js"]) {
     const dir = join(repo, path)
@@ -29,7 +30,7 @@ async function fixture() {
   return {
     root,
     workspace,
-    run: (args: string[] = ["--no-build"]) =>
+    run: (args: string[] = ["--no-build"], app = process.execPath) =>
       Bun.spawnSync(
         [
           process.execPath,
@@ -37,7 +38,7 @@ async function fixture() {
           "--isolated",
           "--wait",
           "--app-path",
-          process.execPath,
+          app,
           "--workspace",
           workspace,
           ...args,
@@ -53,6 +54,27 @@ async function fixture() {
 }
 
 describe("extension launch build", () => {
+  test("keeps the app running after launch exits when the executable path contains spaces", async () => {
+    const item = await fixture()
+    const app = join(item.root, process.platform === "win32" ? "Bun Runtime.exe" : "Bun Runtime")
+    cpSync(process.execPath, app)
+    await Bun.write(join(item.root, "dist/extension.js"), "previous")
+    const controller = new AbortController()
+    const events = watch(item.workspace, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]) })
+    const opened = (async () => {
+      for await (const event of events) {
+        if (event.filename === "opened.json") return
+      }
+    })()
+    try {
+      expect(item.run(["--no-build", "--no-wait"], app).exitCode).toBe(0)
+      await opened
+      expect(await Bun.file(join(item.workspace, "opened.json")).exists()).toBe(true)
+    } finally {
+      controller.abort()
+    }
+  }, 10000)
+
   test("builds a fresh worktree before launching even with --no-build", async () => {
     const item = await fixture()
     const result = item.run()

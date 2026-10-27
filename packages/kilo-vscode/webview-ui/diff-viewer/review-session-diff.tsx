@@ -225,7 +225,7 @@ export function ReviewSessionDiff<T>(
       event.lineElement.getBoundingClientRect().bottom,
       ...changed.map((row) => row.getBoundingClientRect().bottom),
     )
-    const top = Math.max(0, bottom - bounds.top + 2)
+    const top = Math.max(0, bottom - bounds.top)
     setHover({ ...target, top })
   }
   const separators: NonNullable<FileDiffOptions<T>["hunkSeparators"]> = (gap, instance) => {
