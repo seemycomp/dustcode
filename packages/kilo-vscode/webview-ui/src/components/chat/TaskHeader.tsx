@@ -4,27 +4,21 @@
  * cost, context usage, and a compact button.
  * Todo progress lives in the session dock (see TodoChip).
  *
- * When expanded, shows the task timeline (colored bars representing
- * session activity) and a context window progress bar.
+ * Context usage details are available from the composer action near the input.
  */
 
-import { Component, For, Show, createMemo, createSignal, createEffect, on, onMount, onCleanup } from "solid-js"
+import { Component, For, Show, createMemo, createSignal, createEffect, on, onCleanup } from "solid-js"
 import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { Tooltip } from "@kilocode/kilo-ui/tooltip"
 import { useSession } from "../../context/session"
-import { calcTokenUsage, collapseCostBreakdown, sessionCost } from "../../context/session-utils"
+import { collapseCostBreakdown, sessionCost } from "../../context/session-utils"
 import { useLanguage } from "../../context/language"
-import { useVSCode } from "../../context/vscode"
-import { TaskTimeline } from "./TaskTimeline"
-import { ContextProgress } from "./ContextProgress"
-import { TaskUsage } from "./TaskUsage"
 import { TranscriptSearch } from "./TranscriptSearch"
 import { useTranscriptSearch } from "../../context/transcript-search"
-import { hasModelUsage, sessionModel, tokenSummary } from "../../context/model-usage"
+import { sessionModel } from "../../context/model-usage"
 import { useProvider } from "../../context/provider"
 import { buildTriggerLabel, sanitizeName } from "../shared/model-selector-utils"
 import { SessionRenameEditor } from "../shared/SessionRenameEditor"
-import type { ExtensionMessage } from "../../types/messages"
 
 interface TaskHeaderProps {
   readonly?: boolean
@@ -74,11 +68,6 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
     return { tokens, pct }
   })
 
-  const tokens = createMemo(() => {
-    const usage = session.modelUsage()
-    return hasModelUsage(usage) ? tokenSummary(usage) : calcTokenUsage(session.visibleMessages())
-  })
-
   // Subagents run with their own model and reasoning effort, so show them in the header.
   // Subagent viewers are read-only and may not have the child session info loaded.
   const provider = useProvider()
@@ -95,25 +84,6 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
     const variant = sel.variant ? sel.variant.charAt(0).toUpperCase() + sel.variant.slice(1) : undefined
     return { name, variant, id: `${sel.providerID}/${sel.modelID}` }
   })
-
-  const hasTimeline = createMemo(() => {
-    for (const m of session.visibleMessages()) {
-      if (m.role !== "assistant") continue
-      if (session.getParts(m.id).some((p) => p.type !== "step-start")) return true
-    }
-    return false
-  })
-
-  const vscode = useVSCode()
-  const [expanded, setExpanded] = createSignal(true)
-
-  // Read initial value from VS Code settings
-  onMount(() => vscode.postMessage({ type: "requestTimelineSetting" }))
-  const handler = (e: MessageEvent<ExtensionMessage>) => {
-    if (e.data.type === "timelineSettingLoaded") setExpanded(e.data.visible)
-  }
-  window.addEventListener("message", handler)
-  onCleanup(() => window.removeEventListener("message", handler))
 
   // "Dustcode: Toggle Chat Search" (Command Palette) toggles the search
   // bar from here rather than TranscriptSearch.tsx itself: that component
@@ -144,12 +114,6 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
       { defer: true },
     ),
   )
-
-  const toggle = () => {
-    const next = !expanded()
-    setExpanded(next)
-    vscode.postMessage({ type: "updateSetting", key: "showTaskTimeline", value: next })
-  }
 
   const [renaming, setRenaming] = createSignal<{ id: string; title: string }>()
 
@@ -275,15 +239,6 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
                 aria-pressed={search.active()}
               />
             </Tooltip>
-            <IconButton
-              icon="chevron-down"
-              size="small"
-              variant="ghost"
-              data-slot="task-header-expand"
-              onClick={toggle}
-              aria-expanded={expanded()}
-              aria-label="Toggle timeline"
-            />
           </Show>
         </div>
       </div>
@@ -293,47 +248,6 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
       <Show when={search.active()}>
         <div data-component="task-header-search">
           <TranscriptSearch />
-        </div>
-      </Show>
-      {/* Expanded graph section: timeline + context bar + token breakdown.
-          The section always reserves the height of all three rows, so the
-          header keeps one height as a turn streams and the transcript never
-          moves on a turn boundary. A row with no data shows a skeleton only
-          while a turn is running; otherwise it stays empty. */}
-      <Show when={expanded()}>
-        <div data-component="task-header-graph">
-          <Show
-            when={hasTimeline()}
-            fallback={
-              <div class="task-header-skeleton-chart" aria-hidden="true">
-                <Show when={busy()}>
-                  <For each={[14, 22, 10, 18, 8]}>
-                    {(h, i) => (
-                      <div
-                        class="task-header-skeleton"
-                        style={{ height: `${h}px`, "animation-delay": `${i() * 80}ms` }}
-                      />
-                    )}
-                  </For>
-                </Show>
-              </div>
-            }
-          >
-            <TaskTimeline />
-          </Show>
-          <div data-slot="task-header-graph-row">
-            <ContextProgress />
-          </div>
-          <Show when={tokens()}>{(tk) => <TaskUsage tokens={tk()} usage={session.modelUsage()} />}</Show>
-          <Show when={!tokens()}>
-            <div class="task-header-tokens" aria-hidden="true">
-              <Show when={busy()}>
-                <div class="task-header-skeleton" style={{ width: "42px" }} />
-                <div class="task-header-skeleton" style={{ width: "36px" }} />
-                <div class="task-header-skeleton" style={{ width: "28px" }} />
-              </Show>
-            </div>
-          </Show>
         </div>
       </Show>
     </Show>

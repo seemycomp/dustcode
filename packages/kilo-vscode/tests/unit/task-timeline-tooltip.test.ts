@@ -39,10 +39,11 @@ describe("TaskTimeline delegated tooltip contract", () => {
   })
 
   it("only collects parts with matching transcript content", () => {
-    expect(src).toMatch(/const revert = session\.revert\(\) \?\? undefined/)
-    expect(src).toMatch(/visibleParts\(m\.id, session\.getParts\(m\.id\), revert\)/)
-    expect(src).toMatch(/isRenderable\(part as SDKPart, m as SDKAssistantMessage\)/)
-    expect(src).toMatch(/item\.tool\?\.callID === call && item\.tool\?\.messageID === m\.id/)
+    const source = readFileSync(join(__dirname, "../../webview-ui/src/components/chat/useTimeline.ts"), "utf8")
+    expect(source).toMatch(/const revert = session\.revert\(\) \?\? undefined/)
+    expect(source).toMatch(/visibleParts\(m\.id, session\.getParts\(m\.id\), revert\)/)
+    expect(source).toMatch(/isRenderable\(part as SDKPart, m as SDKAssistantMessage\)/)
+    expect(source).toMatch(/item\.tool\?\.callID === call && item\.tool\?\.messageID === m\.id/)
   })
 
   it("keeps selected bars highlighted after click and keyboard activation", () => {
