@@ -18,6 +18,7 @@ import { DropdownMenu } from "@kilocode/kilo-ui/dropdown-menu"
 import { TaskHeader } from "./TaskHeader"
 import { MessageList } from "./MessageList"
 import { PromptInput } from "./PromptInput"
+import { ContextUsagePanel } from "./ContextUsagePanel"
 import type { ManagerContext } from "../../utils/shortcut-hint"
 import { PermissionDock } from "./PermissionDock"
 import { SessionDock } from "./SessionDock"
@@ -68,6 +69,8 @@ interface ChatViewProps {
   resolveEmbeddedTerminal?: (context?: string) => Promise<string | undefined>
   /** Agent Manager state for the prompt shortcut hint. */
   manager?: () => ManagerContext | undefined
+  contextUsage?: () => boolean
+  onContextUsage?: () => void
 }
 
 export const ChatView: Component<ChatViewProps> = (props) => {
@@ -87,6 +90,11 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const ownsPrompts = () => props.interactivePrompts !== false
 
   const id = () => session.currentSessionID()
+  const [usage, setUsage] = createSignal(false)
+  const toggleUsage = () => {
+    if (props.onContextUsage) return props.onContextUsage()
+    setUsage((value) => !value)
+  }
   const review = createSessionReview(
     id,
     () => session.status(),
@@ -520,6 +528,9 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                 projectId={props.projectId}
               />
               <Show when={ownsPrompts() && !props.readonly}>
+                <Show when={!props.onContextUsage && usage()}>
+                  <ContextUsagePanel onClose={() => setUsage(false)} />
+                </Show>
                 <SessionChanges
                   files={review.files().map((file) => ({
                     file: file.file,
@@ -540,6 +551,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                   onRetry={review.refresh}
                 />
                 <PromptInput
+                  contextUsage={props.onContextUsage ? props.contextUsage?.() : usage()}
+                  onContextUsage={toggleUsage}
                   blocked={blocked}
                   edit={editing()}
                   onEditComplete={() => setEditing(undefined)}

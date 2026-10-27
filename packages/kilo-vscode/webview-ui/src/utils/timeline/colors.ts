@@ -26,6 +26,13 @@ export const palette = {
 
 export type TimelineColor = (typeof palette)[keyof typeof palette]
 
+export type TimelineCategory = "text" | "reasoning" | "read" | "write" | "tool" | "error" | "success"
+
+export interface TimelineGroup {
+  key: TimelineCategory
+  count: number
+}
+
 // ── File operation detection ─────────────────────────────────────────
 
 const READ_TOOLS = new Set(["read", "glob", "grep", "find", "ls", "diagnostics"])
@@ -59,6 +66,25 @@ export function color(part: Part): TimelineColor {
     default:
       return palette.fallback
   }
+}
+
+export function category(part: Part): TimelineCategory {
+  if (part.type === "text") return "text"
+  if (part.type === "reasoning") return "reasoning"
+  if (part.type === "step-finish") return "success"
+  if (part.type !== "tool") return "tool"
+  const tp = part as ToolPart
+  if (tp.state.status === "error") return "error"
+  const name = tp.tool.toLowerCase()
+  if (READ_TOOLS.has(name)) return "read"
+  if (WRITE_TOOLS.has(name)) return "write"
+  return "tool"
+}
+
+export function groups(items: { category: TimelineCategory }[]): TimelineGroup[] {
+  const counts = new Map<TimelineCategory, number>()
+  for (const item of items) counts.set(item.category, (counts.get(item.category) ?? 0) + 1)
+  return [...counts].map(([key, count]) => ({ key, count }))
 }
 
 // ── Label for tooltip ────────────────────────────────────────────────

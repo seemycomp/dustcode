@@ -6,52 +6,13 @@
 
 import { Component, For, Show, createMemo, createEffect, createSignal, on, onCleanup } from "solid-js"
 import { Portal } from "solid-js/web"
-import type { AssistantMessage as SDKAssistantMessage, Part as SDKPart } from "@kilocode/sdk/v2"
 import { useSession } from "../../context/session"
-import { visibleParts } from "../../context/session-queue"
-import { color, label } from "../../utils/timeline/colors"
 import { geometry, hit, navigate } from "../../utils/timeline/geometry"
 import { dispatchTimelineHighlight, same, type TimelineHighlight } from "../../utils/timeline/highlight"
-import { sizes, pinned, MAX_HEIGHT } from "../../utils/timeline/sizes"
-import { isRenderable } from "../../utils/transcript-parts"
-import type { Part, Message } from "../../types/messages"
+import { pinned, MAX_HEIGHT } from "../../utils/timeline/sizes"
+import { useTimeline, type TimelineBar } from "./useTimeline"
 
-export interface TimelineBar {
-  bg: string
-  tip: string
-  width: number
-  height: number
-  idx: number
-  msgId: string
-  partId: string
-}
-
-function collect(messages: Message[], parts: Record<string, Part[]>): TimelineBar[] {
-  const result: { msg: Message; part: Part }[] = []
-
-  for (const msg of messages) {
-    if (msg.role === "user") continue
-    const ps = parts[msg.id]
-    if (!ps) continue
-    for (const p of ps) {
-      if (p.type === "step-start") continue
-      result.push({ msg, part: p })
-    }
-  }
-
-  const sz = sizes(result.map((item) => item.part))
-  return result.map((item, i) => ({
-    bg: color(item.part),
-    tip: label(item.part, item.msg),
-    width: sz[i]!.width,
-    height: sz[i]!.height,
-    idx: i,
-    msgId: item.msg.id,
-    partId: item.part.id,
-  }))
-}
-
-export const TaskTimeline: Component = () => {
+export const TaskTimeline: Component<{ bars?: TimelineBar[] }> = (props) => {
   const session = useSession()
   let ref: HTMLDivElement | undefined
   let dragging = false
@@ -62,27 +23,8 @@ export const TaskTimeline: Component = () => {
   const [active, setActive] = createSignal(-1)
   const [tip, setTip] = createSignal<{ text: string; x: number; y: number }>()
 
-  const messages = () => session.visibleMessages()
-  const allParts = () => {
-    const msgs = messages()
-    const revert = session.revert() ?? undefined
-    const qs = session.questions()
-    const result: Record<string, Part[]> = {}
-    for (const m of msgs) {
-      if (m.role === "user") continue
-      const p = visibleParts(m.id, session.getParts(m.id), revert).filter((part) => {
-        if (!isRenderable(part as SDKPart, m as SDKAssistantMessage)) return false
-        if (part.type !== "tool" || part.tool !== "question") return true
-        if (part.state.status !== "pending" && part.state.status !== "running") return true
-        const call = (part as SDKPart & { callID: string }).callID
-        return qs.some((item) => item.tool?.callID === call && item.tool?.messageID === m.id)
-      })
-      if (p.length > 0) result[m.id] = p
-    }
-    return result
-  }
-
-  const bars = createMemo(() => collect(messages(), allParts()))
+  const source = props.bars ? undefined : useTimeline()
+  const bars = createMemo(() => props.bars ?? source?.() ?? [])
   const layout = createMemo(() => geometry(bars(), MAX_HEIGHT))
   const busy = () => session.status() === "busy"
   const selected = () => {
