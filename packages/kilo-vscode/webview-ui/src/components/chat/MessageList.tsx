@@ -1059,7 +1059,7 @@ export const MessageList: Component<MessageListProps> = (props) => {
               editDisabled={props.editDisabled || !server.isConnected()}
               onResubmit={
                 !props.readonly
-                  ? (text, images) => session.resubmitMessage(sticky()!.message.id, text, images)
+                  ? (text, images, model) => session.resubmitMessage(sticky()!.message.id, text, images, model)
                   : undefined
               }
               onFork={

@@ -37,6 +37,7 @@ import { registerCodeActions, registerTerminalActions, KiloCodeActionProvider } 
 import { closeTaskTarget, SurfaceFocus } from "./commands/close-task-target"
 import { registerToggleAutoApprove } from "./commands/toggle-auto-approve"
 import { registerHeapSnapshot } from "./commands/heap-snapshot"
+import { nativeRenameTarget } from "./commands/native-rename-target"
 import { RemoteStatusService } from "./services/RemoteStatusService"
 import { markWorkspace } from "./util/spotlight"
 import { createNotebookBridge } from "./services/notebook"
@@ -176,6 +177,17 @@ export async function activate(context: vscode.ExtensionContext) {
     }
     return undefined
   }
+
+  type TabContext = { groupId?: number; editorIndex?: number }
+  const tabProviderFromContext = (resource?: vscode.Uri, context?: TabContext) =>
+    nativeRenameTarget({
+      resource,
+      context,
+      groups: vscode.window.tabGroups.all,
+      panels: tabPanels,
+      webview: (input) =>
+        input instanceof vscode.TabInputWebview && input.viewType === "mainThreadWebview-dustcode.TabPanel",
+    })
 
   // Tracks the Kilo surface the user last worked in, so commands invoked from
   // the Command Palette still know where to act after it takes focus away.
@@ -705,6 +717,19 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("dustcode.openIndexingSettings", () => {
       settingsEditorProvider.openPanel("settings", "indexing")
     }),
+    vscode.commands.registerCommand(
+      "dustcode.renameSession",
+      async (resource: vscode.Uri | undefined, context?: TabContext) => {
+        const tab = tabProviderFromContext(resource, context)
+        if (!tab) {
+          void vscode.window.showWarningMessage(
+            "Cannot safely identify this session tab. Use the session's Rename control instead.",
+          )
+          return
+        }
+        await tab.renameCurrentSession()
+      },
+    ),
     vscode.commands.registerCommand("dustcode.openMcpSettings", (focus?: string) => {
       settingsEditorProvider.openPanel("settings", "agentBehaviour", undefined, "mcpServers", focus)
     }),

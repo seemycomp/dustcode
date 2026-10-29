@@ -185,7 +185,12 @@ export interface SessionContextValue {
   revertSession: (messageID: string, partID?: string) => void
   unrevertSession: () => void
   deleteQueuedMessage: (sessionID: string, messageID: string) => Promise<boolean>
-  resubmitMessage: (messageID: string, text: string, images?: ImageAttachment[]) => Promise<boolean>
+  resubmitMessage: (
+    messageID: string,
+    text: string,
+    images?: ImageAttachment[],
+    model?: ModelSelection | null,
+  ) => Promise<boolean>
   submit: (input: SendMessageRequest) => void
   sendMessage: (
     text: string,

@@ -7,7 +7,7 @@ const source = fs.readFileSync(path.join(root, "webview-ui/src/components/chat/U
 
 describe("historical user message editing", () => {
   it("keeps edit state local until the resubmit operation succeeds", () => {
-    expect(source).toContain("if (await props.onSubmit(draft(), images.images())) props.onCancel()")
+    expect(source).toContain("if (await props.onSubmit(draft(), images.images(), model())) props.onCancel()")
     expect(source).toContain('data-action="cancel-edit"')
     expect(source).toContain('data-action="resubmit-message"')
   })

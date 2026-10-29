@@ -463,16 +463,6 @@
   flex-shrink: 0;
 }
 
-.image-attachment img {
-  width: 48px;
-  height: 48px;
-  object-fit: cover;
-  border-radius: 4px;
-  border: 1px solid var(--vscode-widget-border, rgba(255, 255, 255, 0.1));
-  display: block;
-  cursor: pointer;
-}
-
 .image-attachment-remove {
   position: absolute;
   top: -6px;
@@ -1140,6 +1130,19 @@ body.vscode-reduce-motion .prompt-action {
 
 .prompt-indexing-button {
   position: relative;
+}
+
+.prompt-context-usage[data-component="button"] {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  font-size: inherit;
+  color: var(--text-weak, var(--vscode-descriptionForeground));
+  font-variant-numeric: tabular-nums;
+}
+
+.prompt-action--usage {
+  max-width: none;
 }
 
 /* Shared status dot for prompt hint controls. Pin it to the icon corner and

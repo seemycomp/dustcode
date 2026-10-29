@@ -1,9 +1,11 @@
-import { createSignal } from "solid-js"
+import { createSignal, Show } from "solid-js"
 import { render } from "solid-js/web"
 import { StoryProviders, defaultMockData, mockSessionValue } from "../../webview-ui/src/stories/StoryProviders"
 import { SessionContext } from "../../webview-ui/src/context/session"
 import type { SessionContextValue } from "../../webview-ui/src/context/session-types"
 import { MessageList } from "../../webview-ui/src/components/chat/MessageList"
+import { PromptInput } from "../../webview-ui/src/components/chat/PromptInput"
+import { TaskHeader } from "../../webview-ui/src/components/chat/TaskHeader"
 import type { Message, Part } from "../../webview-ui/src/types/messages"
 import { applyKiloTheme, applyVscodeTheme } from "../../../kilo-ui/src/stories/theme-decorator"
 import "@kilocode/kilo-ui/styles"
@@ -43,12 +45,27 @@ const parts: Record<string, Part[]> = Object.fromEntries(
     ],
   ]),
 )
+for (const message of messages.filter((message) => message.role === "user")) {
+  parts[message.id]!.push({
+    id: `image-${message.id}`,
+    sessionID: sid,
+    messageID: message.id,
+    type: "file",
+    mime: "image/gif",
+    filename: "pixel.gif",
+    url: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+  })
+}
 
 function App() {
   const [revision, refresh] = createSignal(0)
   const session = {
     ...mockSessionValue({ id: sid, status: "busy" }),
     messages: () => messages,
+    visibleMessages: () => messages,
+    contextUsage: () => ({ tokens: 25533, percentage: 13 }),
+    status: () => (location.search.includes("composer") ? "idle" : "busy"),
+    compact: () => document.body.setAttribute("data-compacted", "true"),
     userMessages: () => messages.filter((message) => message.role === "user"),
     statusInfo: () => ({ type: "busy" as const }),
     getParts: (message: string | Message) => {
@@ -69,7 +86,10 @@ function App() {
           Refresh parts
         </button>
         <div class="chat-view" style={{ height: "100vh" }}>
-          <MessageList />
+          <Show when={location.search.includes("composer")} fallback={<MessageList />}>
+            <TaskHeader />
+            <PromptInput />
+          </Show>
         </div>
       </SessionContext.Provider>
     </StoryProviders>

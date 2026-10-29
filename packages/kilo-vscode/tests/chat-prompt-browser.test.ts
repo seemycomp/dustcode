@@ -95,21 +95,25 @@ it("keeps prompts in the readable lane, clamps display, and pins live and virtua
       const prose = live.locator('[data-component="markdown"]').first()
       const bounds = await bubble.boundingBox()
       const lane = await prose.boundingBox()
+      const thumbnail = await sticky.locator(".message-image-thumbnail").boundingBox()
       expect(bounds).not.toBeNull()
       expect(lane).not.toBeNull()
-      expect(Math.abs(bounds!.width - lane!.width)).toBeLessThanOrEqual(1)
-      expect(Math.abs(bounds!.x - lane!.x)).toBeLessThanOrEqual(5)
+      expect(thumbnail!.width).toBe(20)
+      expect(thumbnail!.height).toBe(20)
+      expect(Math.abs(bounds!.width + 26 - lane!.width)).toBeLessThanOrEqual(1)
+      expect(Math.abs(thumbnail!.x - lane!.x)).toBeLessThanOrEqual(5)
       const clamp = await bubble.evaluate((el) => {
         const style = getComputedStyle(el)
         return {
-          lines: style.webkitLineClamp,
+          whitespace: style.whiteSpace,
           height: el.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom),
           line: parseFloat(style.lineHeight),
           text: el.textContent,
         }
       })
-      expect(clamp.lines).toBe("3")
-      expect(Math.abs(clamp.height - clamp.line * 3)).toBeLessThanOrEqual(1)
+      expect(clamp.whitespace).toBe("nowrap")
+      expect(Math.abs(clamp.height - clamp.line)).toBeLessThanOrEqual(1)
+      expect((await sticky.boundingBox())!.height).toBeLessThan(65)
       expect(clamp.text).toContain("Prompt line 8")
       await bubble.click()
       const editor = sticky.locator("textarea")
@@ -140,10 +144,49 @@ it("keeps prompts in the readable lane, clamps display, and pins live and virtua
       })
       await check(sticky).toBeHidden()
       expect(await list.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+
+      await page.goto(`${server.url}?composer`)
+      const input = page.locator("textarea.prompt-input")
+      await check(input).toBeVisible()
+      await check(page.locator('[data-component="task-header"]')).toHaveCount(0)
+      await check(page.getByRole("button", { name: "Context Usage", exact: true })).toHaveText("25,533")
+      for (const name of ["Compact session", "Search chat"]) {
+        const button = page.getByRole("button", { name, exact: true })
+        if (await button.isVisible()) await button.click()
+        else {
+          await page.getByRole("button", { name: "More actions", exact: true }).click()
+          await page.getByRole("menuitem", { name, exact: true }).click()
+        }
+      }
+      await check(page.locator("body")).toHaveAttribute("data-compacted", "true")
+      await check(page.locator('[data-component="task-header-search"]')).toBeVisible()
+      await page.locator('[data-component="task-header-search"] input').press("Escape")
+      await check(page.locator('[data-component="task-header-search"]')).toHaveCount(0)
+      await check(input).toBeFocused()
+      await page.evaluate(() => window.dispatchEvent(new Event("focusTranscriptSearch")))
+      await check(page.locator('[data-component="task-header-search"]')).toBeVisible()
+      await page.evaluate(() => window.dispatchEvent(new Event("focusTranscriptSearch")))
+      await check(page.locator('[data-component="task-header-search"]')).toHaveCount(0)
+      await input.evaluate((el) => {
+        const canvas = document.createElement("canvas")
+        canvas.width = canvas.height = 1
+        canvas.toBlob((blob) => {
+          const data = new DataTransfer()
+          data.items.add(new File([blob!], "pixel.png", { type: "image/png" }))
+          el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true }))
+        })
+      })
+      const image = page.locator(".image-attachment .message-image-thumbnail")
+      await check(image).toBeVisible()
+      await image.click()
+      await check(page.getByRole("dialog")).toBeVisible()
+      await page.keyboard.press("Escape")
+      await check(page.getByRole("dialog")).toHaveCount(0)
+      expect(await page.locator(".prompt-input-hint").evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
       await page.close()
     }
   } finally {
     await browser.close()
     await server.stop(true)
   }
-}, 120000)
+}, 180000)

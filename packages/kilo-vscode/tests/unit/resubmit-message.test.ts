@@ -53,6 +53,7 @@ function fixture() {
       events.push("revert")
       await reverted.promise
       events.push("reverted")
+      return { revert: { workspace: "restored" as const }, summary: { files: 0 } }
     },
     send: async (prompt: Parameters<Parameters<typeof resubmitMessage>[1]["send"]>[0]) => {
       events.push("send")
@@ -314,6 +315,18 @@ describe("historical prompt resubmission", () => {
     const f = fixture()
     await expect(resubmitMessage({ sessionID: "other", messageID: "m1", text: "edited" }, f.ctx)).rejects.toThrow()
     expect(f.events).toEqual([])
+    expect(f.sent).toEqual([])
+  })
+
+  it("does not send when file changes were not restored", async () => {
+    const f = fixture()
+    f.ctx.revert = async () => ({ revert: { workspace: "snapshots-disabled" as const }, summary: { files: 2 } })
+    f.stopped.resolve()
+    f.reverted.resolve()
+
+    await expect(resubmitMessage({ sessionID: "s1", messageID: "m1", text: "edited" }, f.ctx)).rejects.toThrow(
+      "workspace changes were not restored",
+    )
     expect(f.sent).toEqual([])
   })
 })

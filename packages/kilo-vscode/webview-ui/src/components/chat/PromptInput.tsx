@@ -17,6 +17,7 @@ import {
   type Component,
 } from "solid-js"
 import { IconButton } from "@kilocode/kilo-ui/icon-button"
+import { Button } from "@kilocode/kilo-ui/button"
 import { Tooltip } from "@kilocode/kilo-ui/tooltip"
 import { FileIcon } from "@kilocode/kilo-ui/file-icon"
 import { Icon } from "@kilocode/kilo-ui/icon"
@@ -135,6 +136,8 @@ import { formatCodeContexts, mergeCodeContexts, type CodeContext } from "../../.
 import { isEnterKeyCommitNotIme } from "../../utils/ime-enter"
 import { parseMemoryCommand, type ParsedMemoryCommand } from "../../utils/memory-command"
 import { useMemory } from "../../context/memory"
+import { useTranscriptSearch } from "../../context/transcript-search"
+import { MessageImage } from "./MessageImage"
 
 function mergeReviewComments(current: ReviewCommentEntry[], incoming: ReviewCommentEntry[]): ReviewCommentEntry[] {
   if (incoming.length === 0) return current
@@ -1973,6 +1976,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   // from the DOM, so a larger font scales the fold steps.
   let hintRef: HTMLDivElement | undefined
   let pinnedRef: HTMLDivElement | undefined
+  let usageRef: HTMLDivElement | undefined
+  const search = useTranscriptSearch()
+  const hasMessages = createMemo(() => session.messages().length > 0)
+  const canCompact = createMemo(
+    () => session.status() === "idle" && session.visibleMessages().length > 0 && !!session.selected(),
+  )
+  const tokens = createMemo(() => session.contextUsage()?.tokens.toLocaleString(language.locale()))
+  const toggleSearch = () => (search.active() ? search.closeSearch() : search.setActive(true))
   const [metrics, setMetrics] = createSignal({ width: Number.POSITIVE_INFINITY, pinned: 0, slot: 26, reserve: 210 })
   onMount(() => {
     const measure = () => {
@@ -1989,7 +2000,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           parseFloat(box.paddingLeft) -
           parseFloat(box.paddingRight) -
           (parseFloat(box.columnGap) || 0),
-        pinned: pinned.getBoundingClientRect().width,
+        pinned: pinned.getBoundingClientRect().width + (usageRef?.getBoundingClientRect().width ?? 0) + gap,
         slot: (button?.getBoundingClientRect().width ?? 22) + gap,
         reserve: reserve(hint),
       })
@@ -1997,6 +2008,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const observer = new ResizeObserver(measure)
     if (hintRef) observer.observe(hintRef)
     if (pinnedRef) observer.observe(pinnedRef)
+    if (usageRef) observer.observe(usageRef)
     onCleanup(() => observer.disconnect())
   })
   const foldable = createMemo(() => {
@@ -2013,6 +2025,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         run: handleOpenIndexingSettings,
       })
     }
+    list.push(
+      {
+        key: "compact",
+        icon: "compress",
+        label: language.t("command.session.compact"),
+        disabled: !canCompact(),
+        run: () => session.compact(),
+      },
+      {
+        key: "search",
+        icon: "magnifying-glass",
+        label: language.t("chat.search.toggle"),
+        disabled: !hasMessages(),
+        run: toggleSearch,
+      },
+    )
     if (sandboxVisible())
       list.push({
         key: "sandbox",
@@ -2246,14 +2274,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           <For each={imageAttach.images()}>
             {(img) => (
               <div class="image-attachment">
-                <img
-                  src={img.dataUrl}
-                  alt={img.filename}
-                  title={img.filename}
-                  onClick={() =>
-                    vscode.postMessage({ type: "previewImage", dataUrl: img.dataUrl, filename: img.filename })
-                  }
-                />
+                <MessageImage url={img.dataUrl} filename={img.filename} />
                 <IconButton
                   icon="close-small"
                   variant="ghost"
@@ -2263,7 +2284,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   onClick={() => {
                     if (!readonly()) imageAttach.remove(img.id)
                   }}
-                  aria-label="Remove image"
+                  aria-label={language.t("chat.image.remove", { name: img.filename })}
                 />
               </div>
             )}
@@ -2430,6 +2451,51 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           <div class="prompt-action" data-folded={hidden().length === 0 ? "" : undefined}>
             <PromptOverflow items={hidden()} />
           </div>
+          <div class="prompt-action prompt-action--usage" ref={usageRef}>
+            <Tooltip
+              value={tokens() ? `${tokens()} tokens` : language.t("prompt.action.contextUsage")}
+              placement="top"
+              openDelay={0}
+            >
+              <Button
+                size="small"
+                variant="ghost"
+                class="prompt-context-usage"
+                aria-label={language.t("prompt.action.contextUsage")}
+                aria-expanded={props.contextUsage ?? false}
+                onClick={() => props.onContextUsage?.()}
+              >
+                <Show when={tokens()} fallback={<Icon name="gauge" size="small" />}>
+                  {tokens()}
+                </Show>
+              </Button>
+            </Tooltip>
+          </div>
+          <div class="prompt-action" data-folded={folded("compact") ? "" : undefined}>
+            <Tooltip value={language.t("command.session.compact")} placement="top" openDelay={0}>
+              <IconButton
+                icon="compress"
+                size="small"
+                variant="ghost"
+                disabled={!canCompact()}
+                onClick={() => session.compact()}
+                aria-label={language.t("command.session.compact")}
+              />
+            </Tooltip>
+          </div>
+          <div class="prompt-action" data-folded={folded("search") ? "" : undefined}>
+            <Tooltip value={language.t("chat.search.toggle")} placement="top" openDelay={0}>
+              <IconButton
+                icon="magnifying-glass"
+                size="small"
+                variant="ghost"
+                disabled={!hasMessages()}
+                onClick={toggleSearch}
+                aria-label={language.t("chat.search.toggle")}
+                aria-pressed={search.active()}
+              />
+            </Tooltip>
+          </div>
           <Show when={showIndexing()}>
             <div class="prompt-action" data-folded={folded("indexing") ? "" : undefined}>
               <Tooltip value={indexing.status().message || indexing.label()} placement="top" openDelay={0}>
@@ -2444,18 +2510,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </Tooltip>
             </div>
           </Show>
-          <div class="prompt-action">
-            <Tooltip value={language.t("prompt.action.contextUsage")} placement="top" openDelay={0}>
-              <IconButton
-                icon="gauge"
-                size="small"
-                variant="ghost"
-                aria-label={language.t("prompt.action.contextUsage")}
-                aria-expanded={props.contextUsage ?? false}
-                onClick={() => props.onContextUsage?.()}
-              />
-            </Tooltip>
-          </div>
           <Show when={sandboxVisible()}>
             <div class="prompt-action" data-folded={folded("sandbox") ? "" : undefined}>
               <SandboxButtonBase

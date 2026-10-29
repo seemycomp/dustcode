@@ -281,7 +281,7 @@ type ProviderInternals = {
   resolveSession: (sid?: string, draft?: string, context?: string, dir?: string) => Promise<unknown>
   handleCostAlertResponse: (sid: string, limit: number, response: "continue" | "stop") => Promise<void>
   setMaxCost: (value: unknown) => void
-  handleRevertSession: (sid: string, messageID: string) => Promise<void>
+  handleRevertSession: (sid: string, messageID: string) => Promise<unknown>
   handleUnrevertSession: (sid: string) => Promise<void>
   handleSendMessage: (text: string, messageID?: string, sessionID?: string, draftID?: string) => Promise<void>
   handleResubmitMessage: (input: {

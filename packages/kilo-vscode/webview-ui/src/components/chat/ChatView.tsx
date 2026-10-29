@@ -481,7 +481,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           <Show when={isSidebar() && !props.readonly && tabs && showTabStrip(tabs.ids())}>
             <SessionTabStrip />
           </Show>
-          <TaskHeader readonly={props.readonly} />
+          <TaskHeader />
           <div class="chat-messages-wrapper">
             <div class="chat-messages">
               <MessageList

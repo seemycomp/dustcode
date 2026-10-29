@@ -72,6 +72,7 @@ import { handleSessionReview, rewindSessionReview } from "./kilo-provider/sessio
 import { sessionSourceId } from "./diff/sources/session"
 import { parseMessageFiles, type MessageFile } from "./kilo-provider/message-files"
 import { renameSession } from "./kilo-provider/rename-session"
+import { parseSessionTitle, SESSION_TITLE_LIMIT } from "./shared/session-title"
 import { handleFileSearch, type SearchRoot } from "./kilo-provider/file-search"
 import { handleSessionSearch } from "./kilo-provider/session-search"
 import { handleFilePicker } from "./kilo-provider/file-picker"
@@ -681,14 +682,15 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.opts.tabTitle(title)
   }
 
-  private checkpoint(sid: string, run: () => Promise<void>): Promise<void> {
+  private checkpoint<T>(sid: string, run: () => Promise<T>): Promise<T> {
     const prior = this.checkpoints.get(sid) ?? Promise.resolve()
-    const pending = prior.catch(() => undefined).then(run)
+    const pending = prior.catch(() => undefined).then(run) as Promise<T>
+    const barrier = pending.then(() => undefined)
     const cleanup = () => {
-      if (this.checkpoints.get(sid) === pending) this.checkpoints.delete(sid)
+      if (this.checkpoints.get(sid) === barrier) this.checkpoints.delete(sid)
     }
-    this.checkpoints.set(sid, pending)
-    void pending.then(cleanup, (error) => {
+    this.checkpoints.set(sid, barrier)
+    void barrier.then(cleanup, (error) => {
       console.error("[Dustcode] checkpoint mutation failed:", error)
       cleanup()
     })
@@ -1112,6 +1114,28 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   /** Return the currently active session ID, if any. */
   public getCurrentSessionId(): string | undefined {
     return this.currentSession?.id ?? undefined
+  }
+
+  public async renameCurrentSession(): Promise<void> {
+    const session = this.currentSession
+    if (!session || !this.client) return
+    const title = await vscode.window.showInputBox({
+      title: vscode.l10n.t("Rename session"),
+      value: session.title,
+      valueSelection: [0, session.title.length],
+      ignoreFocusOut: true,
+      validateInput: (value) => {
+        const result = parseSessionTitle(value)
+        if (!("error" in result)) return undefined
+        if (result.error === "required") return vscode.l10n.t("Enter a session name.")
+        if (result.error === "too_long") return vscode.l10n.t("Use at most {0} characters.", SESSION_TITLE_LIMIT)
+        return vscode.l10n.t("Session names cannot contain control characters.")
+      },
+    })
+    if (title === undefined || !this.webview) return
+    const result = parseSessionTitle(title)
+    if ("error" in result || result.value === session.title) return
+    await this.handleRenameSession(session.id, result.value)
   }
 
   public canReceiveReviewComments(): boolean {
@@ -5104,7 +5128,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     messageID: string,
     partID?: string,
     strict = false,
-  ): Promise<void> {
+  ): Promise<Session> {
     if (!this.client) throw new Error("Not connected to CLI backend")
     const dir = this.getWorkspaceDirectory(sessionID)
     const { data, error } = await this.client.session.revert({ sessionID, messageID, partID, directory: dir })
@@ -5125,6 +5149,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.refreshes.set(sessionID, (this.refreshes.get(sessionID) ?? 0) + 1)
     if (this.currentSession?.id === sessionID) this.setCurrentSession(data)
     this.postMessage({ type: "sessionUpdated", session: sessionToWebview(data) })
+    return data
   }
 
   private async handleUnrevertSession(sessionID: string): Promise<void> {

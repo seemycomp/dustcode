@@ -4,7 +4,7 @@ import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { Tooltip } from "@kilocode/kilo-ui/tooltip"
 import { partFeedback } from "../../../../src/shared/browser-feedback"
 import { injectedView } from "../../../../src/shared/injected-prompt"
-import type { Message, Part, TextPart } from "../../types/messages"
+import type { Message, ModelSelection, Part, TextPart } from "../../types/messages"
 import type { ImageAttachment } from "../../hooks/useImageAttachments"
 import { MessageImage } from "./MessageImage"
 import { UserMessageEditor } from "./UserMessageEditor"
@@ -19,7 +19,7 @@ interface VscodeUserMessageProps {
   interrupted?: boolean
   queued?: boolean
   onEdit?: () => void
-  onResubmit?: (text: string, images: ImageAttachment[]) => Promise<boolean>
+  onResubmit?: (text: string, images: ImageAttachment[], model: ModelSelection | null) => Promise<boolean>
   queuedDisabled?: boolean
   editDisabled?: boolean
   onDelete?: () => void
@@ -180,7 +180,7 @@ export const VscodeUserMessage: Component<VscodeUserMessageProps> = (props) => {
         <UserMessageEditor
           message={props.message}
           parts={props.parts}
-          onSubmit={(text, images) => props.onResubmit?.(text, images) ?? Promise.resolve(false)}
+          onSubmit={(text, images, model) => props.onResubmit?.(text, images, model) ?? Promise.resolve(false)}
           onCancel={() => setEditing(false)}
         />
       </Show>

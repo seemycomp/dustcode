@@ -1564,7 +1564,7 @@ export const TaskHeaderSubagent: Story = {
     <StoryProviders sessionID={SESSION_ID} noPadding>
       <SessionContext.Provider value={subagentHeaderSession() as any}>
         <div style={{ width: "100%" }}>
-          <TaskHeader readonly />
+          <TaskHeader />
         </div>
       </SessionContext.Provider>
     </StoryProviders>

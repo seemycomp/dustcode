@@ -30,12 +30,25 @@ type Prompt = {
   variant?: string
 }
 
+type RevertResult = {
+  revert?: { workspace?: "restored" | "snapshots-disabled" | "unavailable" | "not-a-git-repo" }
+  summary?: { files?: number; diffs?: unknown[] }
+}
+
+function validate(result: RevertResult) {
+  if ((result.summary?.diffs?.length ?? result.summary?.files ?? 0) > 0 && result.revert?.workspace !== "restored") {
+    throw new Error(
+      "Cannot resend the edited message because its workspace changes were not restored. Enable snapshots and retry.",
+    )
+  }
+}
+
 export type ResubmitContext = {
   client: KiloClient
   directory: string
   checkpoint: (run: () => Promise<void>) => Promise<void>
   stop: () => Promise<void>
-  revert: () => Promise<void>
+  revert: () => Promise<RevertResult>
   send: (prompt: Prompt) => Promise<boolean>
 }
 
@@ -158,6 +171,6 @@ async function run(input: Input, ctx: ResubmitContext): Promise<boolean> {
   } satisfies Prompt
 
   await ctx.stop()
-  await ctx.revert()
+  validate(await ctx.revert())
   return ctx.send(prompt)
 }

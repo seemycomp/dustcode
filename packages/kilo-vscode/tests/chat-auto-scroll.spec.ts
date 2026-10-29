@@ -94,7 +94,7 @@ test("transcript navigation does not scroll the outer webview host", async ({ pa
     .toBeLessThanOrEqual(1)
   expect(await host.evaluate((el) => el.scrollTop)).toBe(0)
 
-  await frame.locator(".task-header-search-toggle").press("Enter")
+  await frame.getByRole("button", { name: "Search chat", exact: true }).press("Enter")
   const search = frame.locator('[data-slot="transcript-search-input"]')
   await search.fill("Initial streamed response.")
   await list.evaluate((el) => (el.scrollTop = el.scrollHeight))
