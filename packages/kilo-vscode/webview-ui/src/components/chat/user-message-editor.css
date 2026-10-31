@@ -1,18 +1,31 @@
-.user-message-editor-picker {
-  display: none;
+.user-message-editor .prompt-input-container {
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.user-message-editor[data-dragging] {
-  outline: 2px dashed var(--vscode-focusBorder);
-  outline-offset: -6px;
+.user-message-editor .prompt-input,
+.user-message-editor .prompt-input-highlight {
+  max-height: calc(3lh + 16px);
 }
 
-.user-message-editor-attachment {
-  position: relative;
+.user-message-editor[data-expanded]:has(.prompt-input-container[data-inline]) .prompt-input-container[data-inline] {
+  max-height: none;
 }
 
-.user-message-editor-attachment > [data-component="icon-button"] {
-  position: absolute;
-  inset: 0 0 auto auto;
-  background: var(--vscode-editor-background);
+.user-message-editor[data-expanded]:has(.prompt-input-container[data-inline])
+  .prompt-input-container[data-inline]
+  .prompt-input,
+.user-message-editor[data-expanded]:has(.prompt-input-container[data-inline])
+  .prompt-input-container[data-inline]
+  .prompt-input-highlight {
+  max-height: 200px;
+}
+
+.user-message-editor .slash-command-dropdown,
+.user-message-editor .file-mention-dropdown {
+  top: 100%;
+  bottom: auto;
+  margin-top: 4px;
+  margin-bottom: 0;
 }

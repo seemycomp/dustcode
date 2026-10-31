@@ -1,20 +1,24 @@
 import type { SessionProvider } from "./host"
-import type { WorktreeStateManager } from "./WorktreeStateManager"
+import type { ProjectContext } from "./project/context"
 
 export async function pruneSubagents(
-  state: WorktreeStateManager,
-  sessions: SessionProvider | undefined,
+  ctx: ProjectContext | undefined,
+  sessions: Pick<SessionProvider, "getSessionInfo" | "clearSessionDirectory"> | undefined,
+  id: string,
+  push: (ctx: ProjectContext) => void,
   log: (message: string) => void,
 ): Promise<void> {
+  const state = ctx?.peekState()
   const get = sessions?.getSessionInfo
-  if (!sessions || !get) return
-  const managed = state.getSessions()
-  const infos = await Promise.all(managed.map(async (item) => ({ item, info: await get(item.id) })))
-  for (const result of infos) {
-    const parent = result.info?.parentID
-    if (parent === undefined || parent === null) continue
-    state.removeSession(result.item.id)
-    sessions.clearSessionDirectory(result.item.id)
-    log(`Removed subagent session ${result.item.id} from managed state`)
-  }
+  if (!ctx || !state?.getSession(id) || !sessions || !get) return
+  const generation = ctx.generation
+  const info = await get(id).catch((err: unknown) => {
+    log(`Failed to validate managed session ${id}: ${err}`)
+    return undefined
+  })
+  if (!ctx.isCurrent(generation) || !state.getSession(id) || info?.parentID == null) return
+  state.removeSession(id)
+  sessions.clearSessionDirectory(id)
+  log(`Removed subagent session ${id} from managed state`)
+  push(ctx)
 }

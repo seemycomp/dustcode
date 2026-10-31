@@ -2,9 +2,10 @@ import { createMemo, createSignal, Show, type Component } from "solid-js"
 import { UserMessageDisplay } from "@kilocode/kilo-ui/message-part"
 import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { Tooltip } from "@kilocode/kilo-ui/tooltip"
+import { useI18n } from "@kilocode/kilo-ui/context/i18n"
 import { partFeedback } from "../../../../src/shared/browser-feedback"
 import { injectedView } from "../../../../src/shared/injected-prompt"
-import type { Message, ModelSelection, Part, TextPart } from "../../types/messages"
+import type { Message, ModelSelection, Part, ResubmitMessageRequest, TextPart } from "../../types/messages"
 import type { ImageAttachment } from "../../hooks/useImageAttachments"
 import { MessageImage } from "./MessageImage"
 import { UserMessageEditor } from "./UserMessageEditor"
@@ -16,10 +17,16 @@ import "./user-message.css"
 interface VscodeUserMessageProps {
   message: Message
   parts: Part[]
+  sticky?: boolean
   interrupted?: boolean
   queued?: boolean
   onEdit?: () => void
-  onResubmit?: (text: string, images: ImageAttachment[], model: ModelSelection | null) => Promise<boolean>
+  onResubmit?: (
+    text: string,
+    images: ImageAttachment[],
+    model: ModelSelection | null,
+    options: Pick<ResubmitMessageRequest, "agent" | "variant" | "files" | "command">,
+  ) => Promise<boolean>
   queuedDisabled?: boolean
   editDisabled?: boolean
   onDelete?: () => void
@@ -34,6 +41,7 @@ const ATTRIBUTION = /\n\n<!-- kilo-agent-manager source=([^ ]+) -->$/
 
 export const VscodeUserMessage: Component<VscodeUserMessageProps> = (props) => {
   const language = useLanguage()
+  const i18n = useI18n()
   // Cron and wakeup fires are synthetic parts flagged `metadata.wakeup`; show them as scheduled notes.
   const text = createMemo(() =>
     props.parts.find(
@@ -123,6 +131,37 @@ export const VscodeUserMessage: Component<VscodeUserMessageProps> = (props) => {
       </>
     )
   })
+  const controls = createMemo(() => {
+    if (!props.onRevert && !view()) return undefined
+    return (
+      <>
+        {bubble()}
+        <Show when={props.onRevert}>
+          <span class="user-message-revert">
+            <Tooltip
+              value={
+                props.revertDisabled ? language.t("revert.disabled.agentBusy") : i18n.t("ui.message.revertMessage")
+              }
+              placement="top"
+            >
+              <IconButton
+                icon="arrow-left"
+                size="small"
+                variant="ghost"
+                disabled={props.revertDisabled}
+                aria-label={i18n.t("ui.message.revertMessage")}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  props.onRevert?.()
+                }}
+              />
+            </Tooltip>
+          </span>
+        </Show>
+      </>
+    )
+  })
 
   return (
     <div
@@ -145,7 +184,7 @@ export const VscodeUserMessage: Component<VscodeUserMessageProps> = (props) => {
               parts={props.parts as unknown as Parameters<typeof UserMessageDisplay>[0]["parts"]}
               text={body()}
               copyText={view() ? full() : feedback() ? text()?.text : undefined}
-              bubbleHeader={bubble()}
+              bubbleHeader={controls()}
               header={header()}
               interrupted={props.interrupted}
               queued={props.queued}
@@ -157,30 +196,21 @@ export const VscodeUserMessage: Component<VscodeUserMessageProps> = (props) => {
               queuedDisabled={props.queuedDisabled}
               onDelete={props.onDelete}
               onFork={props.onFork}
-              onRevert={props.onRevert}
-              revertDisabled={props.revertDisabled}
               renderAttachment={(file) => {
                 if (!file.mime.startsWith("image/")) return undefined
                 return <MessageImage url={file.url} filename={file.filename} />
               }}
             />
-            <Show when={editable()}>
-              <IconButton
-                class="user-message-edit-trigger"
-                icon="edit"
-                size="small"
-                variant="ghost"
-                aria-label={language.t("common.edit")}
-                onClick={edit}
-              />
-            </Show>
           </>
         }
       >
         <UserMessageEditor
           message={props.message}
           parts={props.parts}
-          onSubmit={(text, images, model) => props.onResubmit?.(text, images, model) ?? Promise.resolve(false)}
+          expanded={props.sticky}
+          onSubmit={(text, images, model, options) =>
+            props.onResubmit?.(text, images, model, options) ?? Promise.resolve(false)
+          }
           onCancel={() => setEditing(false)}
         />
       </Show>

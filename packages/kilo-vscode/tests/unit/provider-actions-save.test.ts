@@ -283,6 +283,159 @@ describe("connectProvider", () => {
 })
 
 describe("saveCustomProvider", () => {
+  for (const stage of ["config", "providers"] as const) {
+    it(`acknowledges persisted credentials before the ${stage} refresh finishes`, async () => {
+      const { ctx, calls, setCachedConfig } = createCtx()
+      const entered = Promise.withResolvers<void>()
+      const released = Promise.withResolvers<void>()
+      const wait = async () => {
+        entered.resolve()
+        await released.promise
+        return { data: {} }
+      }
+      if (stage === "config") ctx.client.config.get = wait as typeof ctx.client.config.get
+      if (stage === "providers")
+        ctx.fetchAndSendProviders = async () => {
+          await wait()
+        }
+
+      const pending = saveCustomProvider(
+        ctx,
+        "req",
+        "myprovider",
+        createProvider(),
+        "sk-test",
+        true,
+        null,
+        setCachedConfig,
+      )
+      await entered.promise
+      const posts = [...calls.posts]
+      const credentials = [...calls.set]
+      released.resolve()
+      await pending
+
+      expect(credentials).toEqual([{ providerID: "myprovider", auth: { type: "api", key: "sk-test" } }])
+      expect(posts).toContainEqual({ type: "providerConnected", requestId: "req", providerID: "myprovider" })
+      expect(calls.cached).toHaveLength(1)
+    })
+  }
+
+  for (const changed of [false, true]) {
+    it(`does not dispose again after backend config/auth invalidation (key changed: ${changed})`, async () => {
+      const { ctx, calls, setCachedConfig } = createCtx()
+
+      await saveCustomProvider(ctx, "req", "myprovider", createProvider(), "sk-test", changed, null, setCachedConfig)
+
+      expect(calls.dispose).toBe(0)
+      expect(calls.refresh).toBe(1)
+    })
+  }
+
+  it("does not acknowledge success before credentials are persisted", async () => {
+    const { ctx, calls, setCachedConfig } = createCtx()
+    const entered = Promise.withResolvers<void>()
+    const released = Promise.withResolvers<void>()
+    ctx.client.auth.set = async () => {
+      entered.resolve()
+      await released.promise
+      return { data: true } as never
+    }
+
+    const pending = saveCustomProvider(
+      ctx,
+      "req",
+      "myprovider",
+      createProvider(),
+      "sk-test",
+      true,
+      null,
+      setCachedConfig,
+    )
+    await entered.promise
+    const posts = [...calls.posts]
+    released.resolve()
+    await pending
+
+    expect(posts).not.toContainEqual({ type: "providerConnected", requestId: "req", providerID: "myprovider" })
+    expect(calls.posts).toContainEqual({ type: "providerConnected", requestId: "req", providerID: "myprovider" })
+  })
+
+  it("reports credential errors before a slow refresh without acknowledging success", async () => {
+    const { ctx, calls, setCachedConfig } = createCtx()
+    const entered = Promise.withResolvers<void>()
+    const released = Promise.withResolvers<void>()
+    ctx.client.auth.set = async () => {
+      throw new Error("Credential write failed")
+    }
+    ctx.fetchAndSendProviders = async () => {
+      entered.resolve()
+      await released.promise
+    }
+
+    const pending = saveCustomProvider(
+      ctx,
+      "req",
+      "myprovider",
+      createProvider(),
+      "sk-test",
+      true,
+      null,
+      setCachedConfig,
+    )
+    await entered.promise
+    const posts = [...calls.posts]
+    released.resolve()
+    await pending
+
+    expect(posts).toContainEqual({
+      type: "providerActionError",
+      requestId: "req",
+      providerID: "myprovider",
+      action: "connect",
+      message: "Credential write failed",
+    })
+    expect(calls.posts).not.toContainEqual({ type: "providerConnected", requestId: "req", providerID: "myprovider" })
+  })
+
+  it("does not acknowledge success or write credentials when config persistence fails", async () => {
+    const { ctx, calls, setCachedConfig } = createCtx()
+    ctx.client.global.config.update = async () => {
+      throw new Error("Config write failed")
+    }
+
+    await saveCustomProvider(ctx, "req", "myprovider", createProvider(), "sk-test", true, null, setCachedConfig)
+
+    expect(calls.set).toEqual([])
+    expect(calls.refresh).toBe(0)
+    expect(calls.posts).toEqual([
+      {
+        type: "providerActionError",
+        requestId: "req",
+        providerID: "myprovider",
+        action: "connect",
+        message: "Config write failed",
+      },
+    ])
+  })
+
+  for (const stage of ["config", "providers"] as const) {
+    it(`does not report a failed save when the ${stage} refresh fails after persistence`, async () => {
+      const { ctx, calls, setCachedConfig } = createCtx()
+      const fail = async () => {
+        throw new Error("Refresh unavailable")
+      }
+      if (stage === "config") ctx.client.config.get = fail
+      if (stage === "providers") ctx.fetchAndSendProviders = fail
+
+      await saveCustomProvider(ctx, "req", "myprovider", createProvider(), undefined, false, null, setCachedConfig)
+
+      expect(calls.posts).toContainEqual({ type: "providerConnected", requestId: "req", providerID: "myprovider" })
+      expect(calls.posts).not.toContainEqual(expect.objectContaining({ type: "providerActionError" }))
+      expect(calls.refresh).toBe(stage === "config" ? 1 : 0)
+    })
+  }
+
   it("preserves auth when the api key field is unchanged", async () => {
     const { ctx, calls, setCachedConfig } = createCtx()
 

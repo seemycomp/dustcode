@@ -117,6 +117,7 @@ const CheckpointsTab: Component = () => {
         <SettingsRow
           title={language.t("settings.checkpoints.enable.title")}
           description={language.t("settings.checkpoints.enable.description")}
+          tag={() => language.t("settings.config.scope.local")}
           last
         >
           <Switch

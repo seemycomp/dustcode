@@ -395,6 +395,8 @@ async function launch() {
   // Strip Electron/VS Code env vars so the spawned instance doesn't attach
   // to the current Electron process (e.g. when launched from a VS Code task).
   const env = cleanEnv(process.env)
+  // Packaged Electron rejects Node debug flags inherited from debug terminals.
+  delete env.NODE_OPTIONS
   if (kilo) {
     env.XDG_DATA_HOME = join(kilo, "data")
     env.XDG_CONFIG_HOME = join(kilo, "config")
@@ -419,6 +421,7 @@ async function launch() {
       stdio: ["ignore", "inherit", "inherit"],
     })
     console.log(`[launch] VS Code exited (code ${result.exitCode})`)
+    if (result.exitCode !== 0) process.exitCode = result.exitCode ?? 1
     return
   }
 

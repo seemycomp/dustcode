@@ -98,6 +98,7 @@ function createClient(options?: {
   const created: Array<Record<string, unknown>> = []
   const sandboxed: Array<Record<string, unknown>> = []
   const sandboxSupport: Array<Record<string, unknown>> = []
+  const sandboxReads: Array<Record<string, unknown>> = []
   const configReads: Array<Record<string, unknown>> = []
   return {
     calls,
@@ -110,6 +111,7 @@ function createClient(options?: {
     created,
     sandboxed,
     sandboxSupport,
+    sandboxReads,
     configReads,
     session: {
       message: async (params: { sessionID: string; messageID: string }) => ({
@@ -169,6 +171,10 @@ function createClient(options?: {
       },
     },
     sandbox: {
+      status: async (params: Record<string, unknown>) => {
+        sandboxReads.push(params)
+        return { data: { directory: params.directory, enabled: false, available: true, version: 1 } }
+      },
       support: async (params: Record<string, unknown>) => {
         sandboxSupport.push(params)
         return options?.supportDeferred?.promise ?? { data: { available: true } }
@@ -727,6 +733,50 @@ describe("KiloProvider session status reconciliation", () => {
 })
 
 describe("KiloProvider sandbox status", () => {
+  it("reads selected session metadata without restarting an established connection", async () => {
+    const client = createClient({ sessionData: mkSession() })
+    const { provider, internal } = makeProvider(client)
+    const init = spyOn(internal as unknown as { initializeConnection: () => Promise<void> }, "initializeConnection")
+    try {
+      expect((await provider.getSessionInfo("s1"))?.id).toBe("s1")
+      expect((await provider.getSessionInfo("s1"))?.id).toBe("s1")
+      expect(init).not.toHaveBeenCalled()
+      expect(internal.connectionState).toBe("connected")
+    } finally {
+      init.mockRestore()
+      provider.dispose()
+    }
+  })
+
+  it("keeps bulk route registration free of sandbox detail requests", async () => {
+    const client = createClient()
+    const { provider, internal } = makeProvider(client)
+    for (let index = 0; index < 100; index++)
+      provider.setSessionDirectory(`session-${index}`, `/repo/worktree-${index}`)
+    expect(internal.sessionDirectories.size).toBe(100)
+    expect(client.sandboxReads).toEqual([])
+    internal.currentSession = { id: "session-1" }
+    provider.setSessionDirectory("session-1", "/repo/worktree-1")
+    expect(client.sandboxReads).toEqual([])
+    provider.setSessionDirectory("session-1", "/repo/moved")
+    expect(client.sandboxReads).toEqual([{ sessionID: "session-1", directory: "/repo/moved" }])
+    const listener =
+      Promise.withResolvers<(message: { type: "requestSandboxStatus"; sessionID: string }) => Promise<void>>()
+    internal.setupWebviewMessageHandler({
+      onDidReceiveMessage: (
+        handler: (message: { type: "requestSandboxStatus"; sessionID: string }) => Promise<void>,
+      ) => {
+        listener.resolve(handler)
+        return { dispose: () => {} }
+      },
+    })
+    await (
+      await listener.promise
+    )({ type: "requestSandboxStatus", sessionID: "session-2" })
+    expect(client.sandboxReads.at(-1)).toEqual({ sessionID: "session-2", directory: "/repo/worktree-2" })
+    provider.dispose()
+  })
+
   it("ignores events from another directory for the same session", () => {
     const client = createClient()
     const { internal, sent } = makeProvider(client)

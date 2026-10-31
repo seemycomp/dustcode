@@ -1053,13 +1053,24 @@ export const MessageList: Component<MessageListProps> = (props) => {
             <VscodeUserMessage
               message={sticky()!.message}
               parts={sticky()!.parts}
+              sticky
+              onRevert={
+                sticky()!.answered && !props.readonly
+                  ? () => {
+                      if (session.status() !== "idle" || !server.isConnected()) return
+                      session.revertSession(sticky()!.message.id)
+                    }
+                  : undefined
+              }
+              revertDisabled={session.status() !== "idle" || !server.isConnected()}
               interrupted={sticky()!.interrupted}
               onSelectSession={props.onSelectSession}
               isSessionOpen={props.isSessionOpen}
               editDisabled={props.editDisabled || !server.isConnected()}
               onResubmit={
                 !props.readonly
-                  ? (text, images, model) => session.resubmitMessage(sticky()!.message.id, text, images, model)
+                  ? (text, images, model, options) =>
+                      session.resubmitMessage(sticky()!.message.id, text, images, model, options)
                   : undefined
               }
               onFork={

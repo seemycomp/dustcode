@@ -20,6 +20,13 @@
       "cwd": "${workspaceFolder}"
     },
     {
+      "name": "VSCode - Build VSIX",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "bun run package:vsix --single",
+      "cwd": "${workspaceFolder}/packages/kilo-vscode"
+    },
+    {
       "name": "VSCode - Run Extension",
       "type": "extensionHost",
       "request": "launch",

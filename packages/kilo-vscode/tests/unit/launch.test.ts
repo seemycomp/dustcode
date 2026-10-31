@@ -30,7 +30,7 @@ async function fixture() {
   return {
     root,
     workspace,
-    run: (args: string[] = ["--no-build"], app = process.execPath) =>
+    run: (args: string[] = ["--no-build"], app = process.execPath, env: NodeJS.ProcessEnv = {}) =>
       Bun.spawnSync(
         [
           process.execPath,
@@ -45,7 +45,7 @@ async function fixture() {
         ],
         {
           cwd: repo,
-          env: { ...process.env, PATH: [dirname(process.execPath), process.env.PATH].join(delimiter) },
+          env: { ...process.env, PATH: [dirname(process.execPath), process.env.PATH].join(delimiter), ...env },
           stdout: "pipe",
           stderr: "pipe",
         },
@@ -54,6 +54,34 @@ async function fixture() {
 }
 
 describe("extension launch build", () => {
+  test("does not forward Node debug options to the editor process", async () => {
+    const item = await fixture()
+    await Bun.write(join(item.root, "dist/extension.js"), "previous")
+    await Bun.write(
+      join(item.workspace, "index.ts"),
+      'await Bun.write("environment.json", JSON.stringify({ options: process.env.NODE_OPTIONS ?? null, project: process.env.DUSTCODE_LAUNCH_TEST }))',
+    )
+    expect(
+      item.run(["--no-build"], process.execPath, {
+        NODE_OPTIONS: "--trace-warnings",
+        DUSTCODE_LAUNCH_TEST: "preserved",
+      }).exitCode,
+    ).toBe(0)
+    expect(await Bun.file(join(item.workspace, "environment.json")).json()).toEqual({
+      options: null,
+      project: "preserved",
+    })
+  })
+
+  test("reports the editor exit code to the caller", async () => {
+    const item = await fixture()
+    await Bun.write(join(item.root, "dist/extension.js"), "previous")
+    await Bun.write(join(item.workspace, "index.ts"), "process.exit(7)")
+    const result = item.run()
+    expect(result.exitCode).toBe(7)
+    expect(result.stdout.toString()).toContain("VS Code exited (code 7)")
+  })
+
   test("keeps the app running after launch exits when the executable path contains spaces", async () => {
     const item = await fixture()
     const app = join(item.root, process.platform === "win32" ? "Bun Runtime.exe" : "Bun Runtime")

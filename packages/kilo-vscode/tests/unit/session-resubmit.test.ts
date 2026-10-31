@@ -1,18 +1,10 @@
 import { createRoot } from "solid-js"
 import { describe, expect, it } from "bun:test"
 import { createResubmitter } from "../../webview-ui/src/context/session-resubmit"
-import type { ExtensionMessage } from "../../webview-ui/src/types/messages"
-import type { ImageAttachment } from "../../webview-ui/src/hooks/useImageAttachments"
+import type { ExtensionMessage, ResubmitMessageRequest } from "../../webview-ui/src/types/messages"
 
 function setup() {
-  const sent: Array<{
-    type: "resubmitMessage"
-    sessionID: string
-    messageID: string
-    text: string
-    images?: ImageAttachment[]
-    requestID: string
-  }> = []
+  const sent: ResubmitMessageRequest[] = []
   const failed: Array<string | undefined> = []
   const handlers: Array<(message: ExtensionMessage) => void> = []
   let session = "session-original"
@@ -52,6 +44,43 @@ function setup() {
 }
 
 describe("session resubmitter", () => {
+  it.each([null, "low"])("transports fifth-argument options with variant %j", async (variant) => {
+    const state = setup()
+    const files = [{ mime: "text/plain", url: "file:///repo/new.ts", filename: "new.ts" }]
+    const command = { name: "review", args: "src/app.ts" }
+    const images = [{ id: "image", filename: "new.png", mime: "image/png", dataUrl: "data:image/png;base64,AA==" }]
+    const pending = state.resubmitter.send(
+      "message-1",
+      "edited",
+      images,
+      { providerID: "p", modelID: "m" },
+      {
+        agent: "code",
+        variant,
+        files,
+        command,
+      },
+    )
+    const request = state.sent.at(0)!
+    expect(request).toMatchObject({ images, providerID: "p", modelID: "m", agent: "code", variant, files, command })
+    state.dispatch({ ...request, type: "resubmitMessageResult", success: true })
+    expect(await pending).toBe(true)
+    state.dispose()
+  })
+
+  it("leaves omitted selections absent when only files are supplied", async () => {
+    const state = setup()
+    const pending = state.resubmitter.send("message-1", "edited", undefined, null, { files: [] })
+    const request = state.sent.at(0)!
+    expect(request.files).toEqual([])
+    for (const key of ["images", "providerID", "modelID", "agent", "variant", "command"]) {
+      expect(request).not.toHaveProperty(key)
+    }
+    state.dispatch({ ...request, type: "resubmitMessageResult", success: true })
+    expect(await pending).toBe(true)
+    state.dispose()
+  })
+
   it.each([
     { images: [] },
     { images: [{ id: "image", filename: "new.png", mime: "image/png", dataUrl: "data:image/png;base64,AA==" }] },

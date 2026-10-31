@@ -63,14 +63,15 @@ export const TranscriptRowView: Component<TranscriptRowViewProps> = (props) => {
             <VscodeUserMessage
               message={row().message}
               parts={row().parts}
-              revertDisabled={row().answered && session.status() !== "idle"}
+              revertDisabled={session.status() !== "idle" || !server.isConnected()}
               onSelectSession={props.onSelectSession}
               isSessionOpen={props.isSessionOpen}
               interrupted={row().interrupted}
               queued={row().queued}
               onResubmit={
                 !props.readonly && server.isConnected()
-                  ? (text, images, model) => session.resubmitMessage(row().message.id, text, images, model)
+                  ? (text, images, model, options) =>
+                      session.resubmitMessage(row().message.id, text, images, model, options)
                   : undefined
               }
               onEdit={
@@ -89,7 +90,7 @@ export const TranscriptRowView: Component<TranscriptRowViewProps> = (props) => {
                   : undefined
               }
               onRevert={
-                row().answered
+                row().answered && !props.readonly
                   ? () => {
                       if (session.status() !== "idle") return
                       session.revertSession(row().message.id)

@@ -157,7 +157,7 @@ import { mergeInjected } from "./shared/injected-prompt"
 import { completesWithoutStatus, goalControl } from "./kilo-provider/command-completion"
 import { KiloProviderMemory } from "./kilo-provider/memory"
 import { resubmitMessage } from "./kilo-provider/resubmit-message"
-import type { ImageAttachment } from "../webview-ui/src/hooks/useImageAttachments"
+import type { ResubmitMessageRequest } from "../webview-ui/src/types/messages"
 import { sessionCheckpoints } from "./kilo-provider/session-checkpoints"
 
 import {
@@ -1037,7 +1037,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     const current = this.sessionDirectories.get(sessionId) ?? this.getRootDirectory()
     this.aborts.preserve(sessionId, this.sessionStatusMap.get(sessionId), current)
     this.sessionDirectories.set(sessionId, directory)
-    if (this.connectionState === "connected") void this.fetchAndSendSandboxStatus(sessionId)
+    if (this.connectionState === "connected" && current !== directory && this.currentSession?.id === sessionId)
+      void this.fetchAndSendSandboxStatus(sessionId)
   }
 
   public clearSessionDirectory(sessionId: string): void {
@@ -1045,7 +1046,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.aborts.preserve(sessionId, this.sessionStatusMap.get(sessionId), current)
     this.sessionDirectories.delete(sessionId)
     this.owners.delete(sessionId)
-    if (this.connectionState === "connected") void this.fetchAndSendSandboxStatus(sessionId)
+    if (this.connectionState === "connected" && this.currentSession?.id === sessionId)
+      void this.fetchAndSendSandboxStatus(sessionId)
   }
 
   /** Exposes the session→directory map so callers outside the webview can resolve worktree paths. */
@@ -1092,7 +1094,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   public async getSessionInfo(sessionId: string): Promise<Session | undefined> {
-    await this.initializeConnection()
+    if (this.connectionState !== "connected") await this.initializeConnection()
     const client = this.client
     if (!client) return
     // Agent Manager: never query an ambiguous raw session id against the
@@ -1417,19 +1419,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           break
         }
         case "resubmitMessage":
-          await this.handleResubmitMessage(
-            message as {
-              sessionID: string
-              messageID: string
-              text: string
-              images?: ImageAttachment[]
-              requestID: string
-              providerID?: string
-              modelID?: string
-              agent?: string
-              variant?: string
-            },
-          )
+          await this.handleResubmitMessage(message as ResubmitMessageRequest)
           break
         case "sendCommand": {
           const msg = message as typeof message & ContextMessage
@@ -1857,17 +1847,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     return
   }
 
-  private async handleResubmitMessage(input: {
-    sessionID: string
-    messageID: string
-    text: string
-    images?: ImageAttachment[]
-    requestID: string
-    providerID?: string
-    modelID?: string
-    agent?: string
-    variant?: string
-  }): Promise<void> {
+  private async handleResubmitMessage(input: ResubmitMessageRequest): Promise<void> {
     try {
       const dir = this.getWorkspaceDirectory(input.sessionID)
       const ok = await resubmitMessage(input, {
@@ -1887,20 +1867,31 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           await this.connectionService.prepareTools(dir)
           const messageID = prompt.messageID
           this.connectionService.recordMessageSessionId(messageID, input.sessionID)
+          const request = {
+            sessionID: input.sessionID,
+            directory: dir,
+            messageID,
+            agent: prompt.agent,
+            variant: prompt.variant,
+            snapshotInitialization: this.opts.snapshotInitialization,
+          }
           await runWithMessageConfirmation(this.confirmations, messageID, "KiloProvider: Resubmit request", () =>
             this.withRetry(
               () =>
-                this.client!.session.promptAsync({
-                  sessionID: input.sessionID,
-                  directory: dir,
-                  messageID,
-                  parts: prompt.parts as Array<TextPartInput | FilePartInput>,
-                  model: prompt.model,
-                  agent: prompt.agent,
-                  variant: prompt.variant,
-                  editorContext,
-                  snapshotInitialization: this.opts.snapshotInitialization,
-                }),
+                prompt.command
+                  ? this.client!.session.command({
+                      ...request,
+                      command: prompt.command.name,
+                      arguments: prompt.command.args,
+                      model: prompt.model ? `${prompt.model.providerID}/${prompt.model.modelID}` : undefined,
+                      parts: prompt.parts.filter((part): part is FilePartInput => part.type === "file"),
+                    })
+                  : this.client!.session.promptAsync({
+                      ...request,
+                      parts: prompt.parts as Array<TextPartInput | FilePartInput>,
+                      model: prompt.model,
+                      editorContext,
+                    }),
               input.sessionID,
               messageID,
             ),

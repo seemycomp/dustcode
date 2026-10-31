@@ -119,6 +119,16 @@ it("keeps prompts in the readable lane, clamps display, and pins live and virtua
       const editor = sticky.locator("textarea")
       await check(editor).toHaveValue(/Prompt line 8/)
       await editor.fill("Unsaved sticky draft")
+      await editor.fill(Array.from({ length: 10 }, (_, index) => `sticky line ${index}`).join("\n"))
+      const stickySize = await editor.evaluate((node) => ({
+        height: node.clientHeight,
+        line: parseFloat(getComputedStyle(node).lineHeight),
+        padding: parseFloat(getComputedStyle(node).paddingTop) + parseFloat(getComputedStyle(node).paddingBottom),
+        scroll: node.scrollHeight,
+      }))
+      expect(stickySize.height).toBeGreaterThan(stickySize.line * 3 + stickySize.padding)
+      expect(stickySize.height).toBeLessThanOrEqual(200)
+      await editor.fill("Unsaved sticky draft")
       await page.getByTestId("refresh-parts").click()
       await check(editor).toHaveValue("Unsaved sticky draft")
       await editor.press("Escape")

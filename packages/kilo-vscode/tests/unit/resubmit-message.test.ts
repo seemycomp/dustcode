@@ -66,6 +66,138 @@ function fixture() {
 
 describe("historical prompt resubmission", () => {
   it.each([
+    { name: "review", args: "src/app.ts" },
+    { name: "skill", args: "" },
+  ])("preserves selected server command %j and selection through resubmission", async (command) => {
+    const f = fixture()
+    f.stopped.resolve()
+    f.reverted.resolve()
+    await resubmitMessage(
+      {
+        sessionID: "s1",
+        messageID: "m1",
+        text: `/${command.name} ${command.args}`,
+        command,
+        providerID: "other",
+        modelID: "new",
+        agent: "code",
+        variant: null,
+      },
+      f.ctx,
+    )
+    expect(f.sent.at(0)).toMatchObject({ command, model: { providerID: "other", modelID: "new" }, agent: "code" })
+    expect(f.sent.at(0)?.variant).toBeUndefined()
+    expect(f.sent.at(0)?.parts.filter((part) => part.type === "file")).toHaveLength(2)
+    expect(f.events).toEqual(["stop", "stopped", "revert", "reverted", "send"])
+  })
+
+  it.each([null, "review", {}, { name: 1, args: "" }, { name: "review" }, { name: "review", args: null }])(
+    "rejects malformed command %j before abort or revert",
+    async (command) => {
+      const f = fixture()
+      f.stopped.resolve()
+      f.reverted.resolve()
+      await expect(
+        resubmitMessage({ sessionID: "s1", messageID: "m1", text: "edited", command: command as never }, f.ctx),
+      ).rejects.toThrow("Invalid command")
+      expect(f.events).toEqual([])
+      expect(f.sent).toEqual([])
+    },
+  )
+
+  it.each([{ files: undefined }, { files: [] }])(
+    "preserves historical attachments with files %j",
+    async ({ files }) => {
+      const f = fixture()
+      f.stopped.resolve()
+      f.reverted.resolve()
+      await resubmitMessage({ sessionID: "s1", messageID: "m1", text: "edited", files }, f.ctx)
+      expect(f.sent.at(0)?.parts.filter((part) => part.type === "file")).toHaveLength(2)
+    },
+  )
+
+  it("appends safe files and deduplicates historical mentions and new attachments", async () => {
+    const f = fixture()
+    const mention = {
+      mime: "text/plain",
+      url: "file:///repo/new.ts",
+      filename: "new.ts",
+      source: { type: "file" as const, path: "/repo/new.ts", text: { value: "@new.ts", start: 0, end: 7 } },
+    }
+    const data = { mime: "text/plain", url: "data:text/plain;charset=utf-8,context", filename: "context.txt" }
+    f.stopped.resolve()
+    f.reverted.resolve()
+    await resubmitMessage(
+      {
+        sessionID: "s1",
+        messageID: "m1",
+        text: "edited",
+        images: [],
+        files: [{ mime: "text/plain", url: "file:///repo/file.ts" }, mention, mention, data],
+      },
+      f.ctx,
+    )
+    expect(f.sent.at(0)?.parts.filter((part) => part.type === "file")).toEqual([
+      expect.objectContaining({
+        url: "file:///repo/file.ts",
+        source: { path: "/repo/file.ts", type: "file", text: { value: "@file.ts", start: 0, end: 8 } },
+      }),
+      { type: "file", ...mention },
+      { type: "file", ...data },
+    ])
+  })
+
+  it.each([
+    "https://example.com/file.ts",
+    "http://example.com/file.ts",
+    "//example.com/file.ts",
+    "javascript:alert(1)",
+    "/repo/file.ts",
+    "file://[invalid",
+  ])("rejects unsafe file URL %s before abort or revert", async (url) => {
+    const f = fixture()
+    f.stopped.resolve()
+    f.reverted.resolve()
+    await expect(
+      resubmitMessage(
+        { sessionID: "s1", messageID: "m1", text: "edited", files: [{ mime: "text/plain", url }] },
+        f.ctx,
+      ),
+    ).rejects.toThrow("Invalid file attachment")
+    expect(f.events).toEqual([])
+    expect(f.sent).toEqual([])
+  })
+
+  it.each([null, {}, [null], [{ url: "file:///repo/file.ts" }], [{ mime: "text/plain", url: 42 }]])(
+    "rejects malformed files %j before abort or revert",
+    async (files) => {
+      const f = fixture()
+      f.stopped.resolve()
+      f.reverted.resolve()
+      await expect(
+        resubmitMessage({ sessionID: "s1", messageID: "m1", text: "edited", files: files as never }, f.ctx),
+      ).rejects.toThrow("Invalid file attachment")
+      expect(f.events).toEqual([])
+      expect(f.sent).toEqual([])
+    },
+  )
+
+  it.each([
+    { variant: null, expected: undefined },
+    { variant: "low", expected: "low" },
+    { providerID: "other", modelID: "m", expected: undefined },
+    { providerID: "p", modelID: "other", expected: undefined },
+    { providerID: "p", modelID: "m", expected: "high" },
+    { providerID: "other", modelID: "new", variant: "low", expected: "low" },
+  ])("resolves reasoning overrides for %j", async ({ expected, ...selection }) => {
+    const f = fixture()
+    f.stopped.resolve()
+    f.reverted.resolve()
+    await resubmitMessage({ sessionID: "s1", messageID: "m1", text: "edited", ...selection }, f.ctx)
+    expect(f.sent.at(0)?.variant).toBe(expected)
+  })
+
+  it.each([
     { images: [] },
     { images: [{ id: "new", filename: "new.webp", mime: "image/webp", dataUrl: "data:image/webp;base64,AQ==" }] },
   ])("replaces image attachments with %j while preserving file mentions and context", async ({ images }) => {

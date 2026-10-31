@@ -63,7 +63,11 @@ export const GlobTool = Tool.define(
           const base = absolute?.dir ?? params.path ?? ins.directory
           const search = path.isAbsolute(base) ? base : path.resolve(ins.directory, base)
           // kilocode_change end
-          const info = yield* fs.stat(search).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          // kilocode_change start - only missing directories are empty search results
+          const info = yield* fs
+            .stat(search)
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+          // kilocode_change end
           if (info?.type === "File") {
             throw new Error(`glob path must be a directory: ${search}`)
           }
@@ -71,6 +75,16 @@ export const GlobTool = Tool.define(
             bypass: false,
             kind: "directory",
           })
+
+          // kilocode_change start - avoid spawning ripgrep with a missing working directory
+          if (!info) {
+            return {
+              title: path.relative(ins.worktree, search),
+              metadata: { count: 0, truncated: false },
+              output: `No files found. Search directory does not exist: ${search}`,
+            }
+          }
+          // kilocode_change end
 
           const limit = 100
           // kilocode_change start - retain bounded-search metadata from Core ripgrep.

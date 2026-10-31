@@ -88,7 +88,7 @@ export const ThinkingSelectorBase: Component<ThinkingSelectorBaseProps> = (props
       // agent or model popover on hover). Do not pull focus back to the prompt.
       const el = document.activeElement
       if (el?.closest("[data-component='popover-content']") && !listRef?.contains(el)) return
-      window.dispatchEvent(new CustomEvent("focusPrompt", { detail: { restore: true } }))
+      window.dispatchEvent(new CustomEvent("focusPrompt", { detail: { restore: true, source: props.trigger } }))
     })
   }
 
@@ -274,6 +274,7 @@ export const ThinkingSelectorBase: Component<ThinkingSelectorBaseProps> = (props
 
 interface ThinkingSelectorProps {
   sessionID?: Accessor<string | undefined>
+  trigger?: string
   blocked?: boolean
 }
 
@@ -286,6 +287,7 @@ export const ThinkingSelector: Component<ThinkingSelectorProps> = (props) => {
   return (
     <ThinkingSelectorBase
       variants={session.variantList(id())}
+      trigger={props.trigger}
       value={session.currentVariant(id())}
       blocked={props.blocked}
       onSelect={(value) => session.selectVariant(value, id())}

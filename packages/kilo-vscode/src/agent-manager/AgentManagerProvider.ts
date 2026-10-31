@@ -470,8 +470,8 @@ export class AgentManagerProvider implements Disposable {
       this.pushEmptyState()
       return
     }
-    const state = ctx.stateManager()
     const init = await initContextState(ctx, (...args) => this.log(...args))
+    if (!init.current) return
     if (!init.ok) {
       this.postToWebview({ type: "error", message: "Agent Manager state could not be recovered." })
       this.pushState()
@@ -487,19 +487,11 @@ export class AgentManagerProvider implements Disposable {
     }
 
     registerProjectSessions(ctx, this.panel?.sessions)
-    await pruneSubagents(state, this.panel?.sessions, (message) => this.log(message))
-    for (const s of state.getSessions()) this.panel?.sessions.trackSession(s.id)
-    this.pushState()
-    // Always list sessions, even when the state tracks none: the backend may
-    // still hold sessions for this project, and without the listing the
-    // sessionsLoaded message never reaches the webview, leaving the sidebar
-    // on skeletons forever.
+    this.pushState(ctx)
+    // List summaries even with no managed sessions, so sessionsLoaded can clear the skeletons.
     this.panel?.sessions.refreshSessions()
 
-    // Recover any pending permission/question prompts that were missed during
-    // panel recreation or SSE reconnection. Must run after all worktree sessions
-    // are registered with their directory overrides so the recovery queries the
-    // correct CLI backend Instances.
+    // Recover prompts only after directory overrides are registered for every worktree session.
     this.panel?.sessions.recoverPendingPrompts()
   }
 
@@ -696,6 +688,13 @@ export class AgentManagerProvider implements Disposable {
     }
     if (m.type === "loadMessages" && m.focus === false) return msg
     if (m.type === "loadMessages") {
+      void pruneSubagents(
+        this.context,
+        this.panel?.sessions,
+        m.sessionID,
+        (ctx) => this.pushState(ctx),
+        (msg) => this.log(msg),
+      )
       this.activeSessionId = m.sessionID
       this.terminalManager.syncOnSessionSwitch(m.sessionID)
       this.prBridge.poller.setActiveWorktreeId(this.state?.getSession(m.sessionID)?.worktreeId ?? undefined)

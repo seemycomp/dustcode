@@ -92,7 +92,9 @@ export interface ResubmitMessageRequest {
   providerID?: string
   modelID?: string
   agent?: string
-  variant?: string
+  variant?: string | null
+  files?: FileAttachment[]
+  command?: { name: string; args: string }
 }
 
 export interface UnrevertSessionRequest {

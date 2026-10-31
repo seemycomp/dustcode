@@ -110,10 +110,12 @@ const ProvidersTab: Component = () => {
     return isCustomProviderPackage(cfg?.npm)
   }
 
-  function editProvider(item: Provider) {
+  function editProvider(item: Provider, copy = false) {
     const cfg = config().provider?.[item.id]
     if (!cfg) return
-    dialog.show(() => <CustomProviderDialog existing={{ providerID: item.id, name: item.name, config: cfg }} />)
+    dialog.show(() => (
+      <CustomProviderDialog existing={{ providerID: item.id, name: item.name, config: cfg }} copy={copy} />
+    ))
   }
 
   function disconnect(providerID: string, name: string) {
@@ -319,6 +321,9 @@ const ProvidersTab: Component = () => {
                     <Show when={isCustom(item)}>
                       <Button size="large" variant="ghost" onClick={() => editProvider(item)}>
                         {language.t("provider.custom.edit.title")}
+                      </Button>
+                      <Button size="large" variant="ghost" icon="copy" onClick={() => editProvider(item, true)}>
+                        {language.t("ui.message.copy")}
                       </Button>
                     </Show>
                     <Button size="large" variant="ghost" onClick={() => disconnect(item.id, item.name)}>

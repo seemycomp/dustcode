@@ -33,6 +33,18 @@
   cursor: text;
 }
 
+.vscode-user-message [data-slot="user-message-text"]:has(.user-message-revert) {
+  position: relative;
+  padding-right: 40px;
+}
+
+.user-message-revert {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  display: flex;
+}
+
 .message-list-sticky-prompt .vscode-user-message [data-slot="user-message-text"] {
   display: block;
   white-space: nowrap;
@@ -40,8 +52,7 @@
   -webkit-line-clamp: unset;
 }
 
-.message-list-sticky-prompt [data-slot="user-message-copy-wrapper"],
-.message-list-sticky-prompt .user-message-edit-trigger {
+.message-list-sticky-prompt [data-slot="user-message-copy-wrapper"] {
   display: none;
 }
 
@@ -76,71 +87,7 @@
   border-radius: 4px;
 }
 
-.user-message-edit-trigger {
-  position: absolute;
-  inset-inline-start: 0;
-  bottom: 0;
-  opacity: 0;
-}
-
-.vscode-user-message:hover .user-message-edit-trigger,
-.vscode-user-message:focus-within .user-message-edit-trigger {
-  opacity: 1;
-}
-
 .user-message-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
   width: 100%;
   min-width: 0;
-  padding: 12px;
-  border: 1px solid var(--vscode-focusBorder);
-  border-radius: 12px;
-  background: var(--vscode-input-background);
-}
-
-.user-message-editor [data-component="input"],
-.user-message-editor [data-slot="input-wrapper"] {
-  width: 100%;
-}
-
-.user-message-editor textarea {
-  width: 100%;
-  min-height: 32px;
-  max-height: 76px;
-  line-height: 20px;
-  overflow-y: auto;
-  resize: none;
-}
-
-.user-message-editor-input {
-  position: relative;
-  min-width: 0;
-}
-
-.user-message-editor-images,
-.user-message-editor-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.user-message-editor-images:empty {
-  display: none;
-}
-
-.user-message-editor-actions {
-  justify-content: flex-end;
-}
-
-.user-message-editor-model {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-weak);
-  font-size: var(--font-size-small);
 }

@@ -15,17 +15,34 @@ export const KiloEmbeddingModelsContext = createContext<KiloEmbeddingModelsConte
 export const KiloEmbeddingModelsProvider: ParentComponent = (props) => {
   const vscode = useVSCode()
   const [catalog, setCatalog] = createSignal<KiloEmbeddingModelCatalog>(EMPTY_KILO_EMBEDDING_MODEL_CATALOG)
+  let loaded = false
 
   const unsubscribe = vscode.onMessage((message: ExtensionMessage) => {
     if (message.type !== "kiloEmbeddingModelsLoaded") return
+    loaded = true
     setCatalog(message.catalog)
   })
 
-  vscode.postMessage({ type: "requestKiloEmbeddingModels" })
+  const load = () => {
+    if (loaded) return
+    loaded = true
+    vscode.postMessage({ type: "requestKiloEmbeddingModels" })
+  }
 
   onCleanup(unsubscribe)
 
-  return <KiloEmbeddingModelsContext.Provider value={{ catalog }}>{props.children}</KiloEmbeddingModelsContext.Provider>
+  return (
+    <KiloEmbeddingModelsContext.Provider
+      value={{
+        catalog: () => {
+          load()
+          return catalog()
+        },
+      }}
+    >
+      {props.children}
+    </KiloEmbeddingModelsContext.Provider>
+  )
 }
 
 export function useKiloEmbeddingModels(): KiloEmbeddingModelsContextValue {

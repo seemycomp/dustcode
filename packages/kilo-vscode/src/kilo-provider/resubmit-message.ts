@@ -10,16 +10,19 @@ import { formatBrowserFeedback, partFeedback } from "../shared/browser-feedback"
 import { formatReviewCommentsMarkdown } from "../shared/review-comments"
 import { Identifier } from "../../webview-ui/src/utils/id"
 import type { ImageAttachment } from "../../webview-ui/src/hooks/useImageAttachments"
+import type { FileAttachment, ResubmitMessageRequest } from "../../webview-ui/src/types/messages"
 
 type Input = {
   sessionID: string
   messageID: string
   text: string
   images?: ImageAttachment[]
+  files?: FileAttachment[]
   providerID?: string
   modelID?: string
   agent?: string
-  variant?: string
+  variant?: string | null
+  command?: ResubmitMessageRequest["command"]
 }
 
 type Prompt = {
@@ -28,6 +31,7 @@ type Prompt = {
   model?: { providerID: string; modelID: string }
   agent?: string
   variant?: string
+  command?: ResubmitMessageRequest["command"]
 }
 
 type RevertResult = {
@@ -63,8 +67,68 @@ type User = {
   parts: Part[]
 }
 
+function files(input: FileAttachment[] | undefined, history: Part[]) {
+  if (input !== undefined && !Array.isArray(input)) throw new Error("Invalid file attachments")
+  const urls = new Set(
+    history
+      .filter(
+        (part): part is Extract<Part, { type: "file" }> =>
+          part.type === "file" && (!part.mime.startsWith("image/") || part.source?.type === "file"),
+      )
+      .map((part) => part.url),
+  )
+  return (input ?? [])
+    .map((file) => {
+      if (
+        !file ||
+        typeof file.mime !== "string" ||
+        typeof file.url !== "string" ||
+        (file.filename !== undefined && typeof file.filename !== "string") ||
+        !URL.canParse(file.url) ||
+        !["data:", "file:"].includes(new URL(file.url).protocol)
+      ) {
+        throw new Error("Invalid file attachment")
+      }
+      return {
+        type: "file" as const,
+        mime: file.mime,
+        url: file.url,
+        ...(file.filename !== undefined ? { filename: file.filename } : {}),
+        ...(file.source ? { source: file.source } : {}),
+      }
+    })
+    .filter((file) => {
+      if (urls.has(file.url)) return false
+      urls.add(file.url)
+      return true
+    })
+}
+
+function selection(input: Input, info: User["info"]) {
+  const model =
+    input.providerID && input.modelID
+      ? { providerID: input.providerID, modelID: input.modelID }
+      : { providerID: info.model.providerID, modelID: info.model.modelID }
+  return {
+    model,
+    agent: input.agent ?? info.agent,
+    variant:
+      input.variant !== undefined
+        ? (input.variant ?? undefined)
+        : model.providerID === info.model.providerID && model.modelID === info.model.modelID
+          ? info.model.variant
+          : undefined,
+  }
+}
+
 /** Stop a session tree, restore its historical boundary, and send an edited turn. */
 export async function resubmitMessage(input: Input, ctx: ResubmitContext): Promise<boolean> {
+  if (
+    input.command !== undefined &&
+    (!input.command || typeof input.command.name !== "string" || typeof input.command.args !== "string")
+  ) {
+    throw new Error("Invalid command")
+  }
   let sent = false
   await ctx.checkpoint(async () => {
     sent = await run(input, ctx)
@@ -158,16 +222,13 @@ async function run(input: Input, ctx: ResubmitContext): Promise<boolean> {
       )
       .filter((part): part is NonNullable<typeof part> => part !== undefined),
     ...(images ?? []),
+    ...files(input.files, message.parts),
   ] satisfies Prompt["parts"]
   const prompt = {
     messageID: Identifier.ascending("message"),
     parts,
-    model:
-      input.providerID && input.modelID
-        ? { providerID: input.providerID, modelID: input.modelID }
-        : { providerID: message.info.model.providerID, modelID: message.info.model.modelID },
-    agent: input.agent ?? message.info.agent,
-    variant: input.variant ?? message.info.model.variant,
+    command: input.command,
+    ...selection(input, message.info),
   } satisfies Prompt
 
   await ctx.stop()

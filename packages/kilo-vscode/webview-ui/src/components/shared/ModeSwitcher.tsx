@@ -109,7 +109,9 @@ export const ModeSwitcherBase: Component<ModeSwitcherBaseProps> = (props) => {
     setOpen(false)
     if (slash) {
       slash = false
-      requestAnimationFrame(() => window.dispatchEvent(new CustomEvent("focusPrompt", { detail: { restore: true } })))
+      requestAnimationFrame(() =>
+        window.dispatchEvent(new CustomEvent("focusPrompt", { detail: { restore: true, source: props.trigger } })),
+      )
     }
   }
 
@@ -235,6 +237,7 @@ export const ModeSwitcherBase: Component<ModeSwitcherBaseProps> = (props) => {
 
 interface ModeSwitcherProps {
   sessionID?: Accessor<string | undefined>
+  trigger?: string
   blocked?: boolean
   /** Tooltip with the mode cycle shortcut. */
   hint?: { title: string; keybind: string }
@@ -254,11 +257,14 @@ export const ModeSwitcher: Component<ModeSwitcherProps> = (props) => {
     >
       <ModeSwitcherBase
         agents={session.agents()}
+        trigger={props.trigger}
         value={session.selectedAgent(id())}
         blocked={props.blocked}
         onSelect={(name) => {
           session.selectAgent(name, id())
-          requestAnimationFrame(() => window.dispatchEvent(new Event("focusPrompt")))
+          requestAnimationFrame(() =>
+            window.dispatchEvent(new CustomEvent("focusPrompt", { detail: { source: props.trigger } })),
+          )
         }}
       />
     </TooltipKeybind>

@@ -5,6 +5,7 @@ import { SessionContext } from "../../webview-ui/src/context/session"
 import type { SessionContextValue } from "../../webview-ui/src/context/session-types"
 import { MessageList } from "../../webview-ui/src/components/chat/MessageList"
 import { PromptInput } from "../../webview-ui/src/components/chat/PromptInput"
+import { post } from "../../webview-ui/src/utils/webview-message"
 import { TaskHeader } from "../../webview-ui/src/components/chat/TaskHeader"
 import type { Message, Part } from "../../webview-ui/src/types/messages"
 import { applyKiloTheme, applyVscodeTheme } from "../../../kilo-ui/src/stories/theme-decorator"
@@ -96,4 +97,4 @@ function App() {
   )
 }
 render(() => <App />, document.body)
-window.dispatchEvent(new MessageEvent("message", { data: { type: "connectionState", state: "connected" } }))
+post({ type: "connectionState", state: "connected" })

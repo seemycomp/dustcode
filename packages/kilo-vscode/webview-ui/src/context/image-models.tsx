@@ -17,23 +17,45 @@ export const ImageModelsContext = createContext<ImageModelsContextValue>()
 export const ImageModelsProvider: ParentComponent = (props) => {
   const vscode = useVSCode()
   const [models, setModels] = createSignal<ImageModel[]>([])
+  let loaded = false
+  let retry: ReturnType<typeof setTimeout> | undefined
 
-  const request = () => vscode.postMessage({ type: "requestImageModels" })
+  const load = () => {
+    if (loaded) return
+    loaded = true
+    vscode.postMessage({ type: "requestImageModels" })
+    retry = setTimeout(() => {
+      retry = undefined
+      vscode.postMessage({ type: "requestImageModels" })
+    }, 3000)
+  }
 
   const unsubscribe = vscode.onMessage((message: ExtensionMessage) => {
     if (message.type !== "imageModelsLoaded") return
+    loaded = true
+    if (retry) clearTimeout(retry)
+    retry = undefined
     setModels(message.models)
   })
 
-  request()
-
-  // Retry once after a delay in case the backend wasn't ready for the initial request.
-  const retry = setTimeout(request, 3000)
-  onCleanup(() => clearTimeout(retry))
+  onCleanup(() => {
+    if (retry) clearTimeout(retry)
+  })
 
   onCleanup(unsubscribe)
 
-  return <ImageModelsContext.Provider value={{ models }}>{props.children}</ImageModelsContext.Provider>
+  return (
+    <ImageModelsContext.Provider
+      value={{
+        models: () => {
+          load()
+          return models()
+        },
+      }}
+    >
+      {props.children}
+    </ImageModelsContext.Provider>
+  )
 }
 
 export function useImageModels(): ImageModelsContextValue {

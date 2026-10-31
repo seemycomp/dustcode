@@ -14,6 +14,7 @@ import type {
   Part,
   PermissionRequest,
   QuestionRequest,
+  ResubmitMessageRequest,
   SessionCloseReason,
   SessionInfo,
   SessionModelUsage,
@@ -190,6 +191,7 @@ export interface SessionContextValue {
     text: string,
     images?: ImageAttachment[],
     model?: ModelSelection | null,
+    options?: Pick<ResubmitMessageRequest, "agent" | "variant" | "files" | "command">,
   ) => Promise<boolean>
   submit: (input: SendMessageRequest) => void
   sendMessage: (

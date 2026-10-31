@@ -167,6 +167,8 @@ export interface CustomProviderDialogProps {
   onBack?: () => void
   /** When set, the dialog opens in edit mode with pre-filled values. */
   existing?: ExistingProvider
+  /** Use existing values as a template for a new provider, without its stored credentials. */
+  copy?: boolean
 }
 
 const CustomProviderDialog = (props: CustomProviderDialogProps) => {
@@ -178,10 +180,21 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
   const action = createProviderAction(vscode)
   onCleanup(action.dispose)
 
-  const editing = () => !!props.existing
+  const editing = () => !!props.existing && !props.copy
 
-  const auth = resolveAuth(props.existing, provider.authStates())
-  const [form, setForm] = createStore<FormState>(initForm(props.existing, auth))
+  const auth = props.copy ? undefined : resolveAuth(props.existing, provider.authStates())
+  const initial = initForm(props.copy ? structuredClone(props.existing) : props.existing, auth)
+  if (props.copy && props.existing) {
+    const ids = new Set([...Object.keys(config().provider ?? {}), ...Object.keys(provider.providers())])
+    const prefix = `${props.existing.providerID}-copy`
+    let id = prefix
+    let index = 2
+    while (ids.has(id)) id = `${prefix}-${index++}`
+    initial.providerID = id
+    const env = props.existing.config.env?.at(0)
+    initial.apiKey = env ? `{env:${env}}` : ""
+  }
+  const [form, setForm] = createStore<FormState>(initial)
 
   const [errors, setErrors] = createStore<FormErrors>({
     providerID: undefined,
@@ -227,7 +240,7 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
   // the same store, causing unwanted re-runs that wipe the model picker.
   const [fetchPackage, setFetchPackage] = createSignal(form.npm)
   const [fetchURL, setFetchURL] = createSignal(form.baseURL)
-  const [fetchKey, setFetchKey] = createSignal("")
+  const [fetchKey, setFetchKey] = createSignal(props.copy ? form.apiKey : "")
   let fetchVersion = 0
 
   // Whether a model-listing fetch is possible for the current package + URL.
@@ -276,7 +289,7 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
     // reaches it. Send the providerID so the extension can authenticate the
     // fetch with the stored key (#10139). Anything typed into the field
     // (a key or {env:VAR} syntax) takes precedence.
-    const providerID = !raw && props.existing ? props.existing.providerID : undefined
+    const providerID = !raw && !props.copy && props.existing ? props.existing.providerID : undefined
     const existing = new Set(form.models.map((m) => m.id.trim().toLowerCase()).filter(Boolean))
 
     const hdrs = form.headers
@@ -499,8 +512,11 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
       form,
       t: language.t,
       editing: editing(),
-      disabledProviders: config().disabled_providers ?? [],
-      existingProviderIDs: new Set(Object.keys(provider.providers())),
+      disabledProviders: props.copy ? [] : (config().disabled_providers ?? []),
+      existingProviderIDs: new Set([
+        ...Object.keys(provider.providers()),
+        ...(props.copy ? Object.keys(config().provider ?? {}) : []),
+      ]),
       existingEnv: props.existing?.config?.env,
     })
     setErrors(reconcile(output.errors))

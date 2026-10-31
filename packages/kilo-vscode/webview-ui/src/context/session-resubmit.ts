@@ -1,4 +1,4 @@
-import type { ExtensionMessage } from "../types/messages"
+import type { ExtensionMessage, ResubmitMessageRequest } from "../types/messages"
 import { onCleanup } from "solid-js"
 import { showToast } from "@kilocode/kilo-ui/toast"
 import { useLanguage } from "./language"
@@ -6,16 +6,7 @@ import type { ImageAttachment } from "../hooks/useImageAttachments"
 import type { ModelSelection } from "../types/messages"
 
 type Input = {
-  post: (message: {
-    type: "resubmitMessage"
-    sessionID: string
-    messageID: string
-    text: string
-    images?: ImageAttachment[]
-    requestID: string
-    providerID?: string
-    modelID?: string
-  }) => void
+  post: (message: ResubmitMessageRequest) => void
   current: () => string | undefined
   connected: () => boolean
   fail: (error?: string) => void
@@ -56,6 +47,7 @@ export function createResubmitter(input: Input) {
     text: string,
     images?: ImageAttachment[],
     model?: ModelSelection | null,
+    options?: Pick<ResubmitMessageRequest, "agent" | "variant" | "files" | "command">,
   ): Promise<boolean> => {
     const sessionID = input.current()
     if (!sessionID || !input.connected()) return false
@@ -70,6 +62,10 @@ export function createResubmitter(input: Input) {
       requestID,
       ...(images !== undefined ? { images } : {}),
       ...(model?.providerID && model.modelID ? { providerID: model.providerID, modelID: model.modelID } : {}),
+      ...(options?.agent !== undefined ? { agent: options.agent } : {}),
+      ...(options?.variant !== undefined ? { variant: options.variant } : {}),
+      ...(options?.files !== undefined ? { files: options.files } : {}),
+      ...(options?.command !== undefined ? { command: options.command } : {}),
     })
     return result.promise
   }

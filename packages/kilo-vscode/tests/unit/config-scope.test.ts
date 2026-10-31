@@ -2,6 +2,13 @@ import { describe, expect, it } from "bun:test"
 import { splitConfigByScope } from "../../webview-ui/src/utils/config-scope"
 
 describe("splitConfigByScope", () => {
+  it.each([true, false])("writes snapshot=%s to project config instead of the shadowed global config", (snapshot) => {
+    const split = splitConfigByScope({ snapshot, retention: { enabled: true } })
+
+    expect(split.project).toEqual({ snapshot })
+    expect(split.global).toEqual({ retention: { enabled: true } })
+  })
+
   it("keeps indexing configuration out of project config", () => {
     const split = splitConfigByScope({
       indexing: {

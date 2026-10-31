@@ -19,6 +19,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Git } from "@/git"
 import { Filesystem } from "@/util/filesystem"
 import { Config } from "@/config/config" // kilocode_change
+import { systemError } from "effect/PlatformError" // kilocode_change
 
 const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Layer.mergeAll(
@@ -50,6 +51,54 @@ const unixInstance = process.platform !== "win32" ? it.instance : it.instance.sk
 // kilocode_change end
 
 describe("tool.glob", () => {
+  // kilocode_change start - missing optional directories must not reach ripgrep spawn
+  for (const kind of ["relative", "absolute", "pattern"] as const) {
+    it.instance(`returns no files for a missing ${kind} directory`, () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const dir = path.join(test.directory, ".compound-engineering")
+        const info = yield* GlobTool
+        const glob = yield* info.init()
+        const result = yield* glob.execute(
+          kind === "pattern"
+            ? { pattern: path.join(dir, "**/*.yaml") }
+            : { pattern: "**/*.yaml", path: kind === "relative" ? ".compound-engineering" : dir },
+          ctx,
+        )
+        expect(result.metadata).toEqual({ count: 0, truncated: false })
+        expect(result.output.replaceAll("\\", "/")).toBe(
+          `No files found. Search directory does not exist: ${dir.replaceAll("\\", "/")}`,
+        )
+      }),
+    )
+  }
+
+  it.instance("preserves permission errors instead of searching an inaccessible directory", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const dir = path.join(test.directory, "restricted")
+      yield* Effect.promise(() => fs.mkdir(dir))
+      const fsys = yield* FSUtil.Service
+      const denied = systemError({
+        _tag: "PermissionDenied",
+        module: "FileSystem",
+        method: "stat",
+        pathOrDescriptor: dir,
+      })
+      const info = yield* GlobTool.pipe(
+        Effect.provideService(FSUtil.Service, {
+          ...fsys,
+          stat: (file) => (file === dir ? Effect.fail(denied) : fsys.stat(file)),
+        }),
+      )
+      const glob = yield* info.init()
+      const exit = yield* glob.execute({ pattern: "*", path: dir }, ctx).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBe(denied)
+    }),
+  )
+  // kilocode_change end
+
   // kilocode_change start - skip on windows: address windows ci failures #9496
   unixInstance("matches files from a directory path", () =>
     // kilocode_change end
