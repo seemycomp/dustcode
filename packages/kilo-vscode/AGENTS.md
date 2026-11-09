@@ -12,6 +12,7 @@ Paths below are relative to this package. Start with the relevant implementation
 | Host/webview messages | [host handlers](src/kilo-provider/), [message contracts](webview-ui/src/types/messages/) |
 | Agent Manager and project routing | [host](src/agent-manager/), [project routing/settings](src/agent-manager/project/), [webview](webview-ui/agent-manager/) |
 | Webview composition and styles | [provider-shell.tsx](webview-ui/src/context/provider-shell.tsx), [styles](webview-ui/src/styles/) |
+| UI layout, components, UX, and focused tests | [UI structure map](docs/UI-STRUCTURE.md) |
 | Tests | [unit tests](tests/unit/), [visual regression](tests/visual-regression.spec.ts) |
 
 ## Product Context
