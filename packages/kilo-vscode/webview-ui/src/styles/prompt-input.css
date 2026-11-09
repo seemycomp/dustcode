@@ -24,6 +24,50 @@
   color: var(--text-base, var(--vscode-foreground));
 }
 
+.prompt-session-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.prompt-usage-popover[data-component="popover-content"] {
+  width: min(420px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+}
+
+.prompt-usage-popover [data-slot="popover-body"] {
+  padding: 0;
+}
+
+.prompt-usage-popover .context-usage-panel {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  max-height: min(520px, calc(100vh - 120px));
+}
+
+.prompt-usage-popover .context-usage-body {
+  max-height: min(480px, calc(100vh - 160px));
+}
+
+.compact-session-popover[data-component="popover-content"] {
+  min-width: 200px;
+  max-width: min(280px, calc(100vw - 24px));
+}
+
+.compact-session-confirm p {
+  margin: 0 0 10px;
+  font-size: var(--kilo-font-size-12);
+  color: var(--text-base);
+}
+
+.compact-session-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .context-usage-header {
   display: flex;
   align-items: center;
@@ -496,9 +540,9 @@
 
 .prompt-input {
   flex: 1;
-  min-height: 54px;
+  min-height: calc(1.4em + 16px);
   max-height: 200px;
-  padding: 8px 8px calc(8px + 1.4em);
+  padding: 8px;
   color: transparent;
   caret-color: var(--vscode-input-foreground);
   font-family: var(--vscode-font-family);
@@ -532,7 +576,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  padding: 8px 8px calc(8px + 1.4em);
+  padding: 8px;
   font-family: var(--vscode-font-family);
   font-size: var(--font-size-base);
   line-height: 1.4;
@@ -589,7 +633,7 @@
   right: 0;
   bottom: 0;
   pointer-events: none;
-  padding: 8px 8px calc(8px + 1.4em);
+  padding: 8px;
   font-family: var(--vscode-font-family);
   font-size: var(--font-size-base);
   line-height: 1.4;

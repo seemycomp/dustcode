@@ -127,6 +127,9 @@ export const dict = {
   "revert.disabled.agentBusy": "等待智能体完成",
   "revert.error.body": "仓库可能正在使用中。请重试，或查看 Dustcode 日志了解详情。",
   "command.session.compact": "精简会话",
+  "command.session.compact.confirm": "精简此会话？",
+  "command.session.compact.no": "否",
+  "command.session.compact.yes": "是",
   "command.session.export": "导出会话记录",
 
   "dialog.provider.search.placeholder": "搜索提供商",

@@ -2078,7 +2078,24 @@ const AgentManagerContent: Component = () => {
       selectSessionTab,
       sessionMiddleClick: handleTabMouseDown,
       sessionClose: handleCloseTab,
-      sessionFork: handleForkSession,
+      get sessionFork() {
+        return !readOnly() && !settingUpSelection() && activeProjectId() === currentProjectId()
+          ? handleForkSession
+          : undefined
+      },
+      get sessionNew() {
+        return !readOnly() && !settingUpSelection() && activeProjectId() === currentProjectId()
+          ? handleAddSession
+          : undefined
+      },
+      get sessionMove() {
+        return selection() === LOCAL && isGitRepo() && activeProjectId() === currentProjectId()
+          ? (sessionId: string) => {
+              if (isPending(sessionId) || !localSessionIDs().includes(sessionId)) return
+              vscode.postMessage({ type: "agentManager.promoteSession", projectId: currentProjectId(), sessionId })
+            }
+          : undefined
+      },
       ...tabState.tab,
       onTabKey: tabFocus.key,
       reviewLabel: t("session.tab.review"),

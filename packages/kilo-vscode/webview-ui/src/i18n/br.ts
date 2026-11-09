@@ -135,6 +135,9 @@ export const dict = {
   "revert.error.body":
     "O repositório pode estar em uso. Tente novamente ou consulte os logs do Dustcode para mais detalhes.",
   "command.session.compact": "Compactar sessão",
+  "command.session.compact.confirm": "Compactar esta sessão?",
+  "command.session.compact.no": "Não",
+  "command.session.compact.yes": "Sim",
   "command.session.export": "Exportar transcrição da sessão",
 
   "dialog.provider.search.placeholder": "Buscar provedores",

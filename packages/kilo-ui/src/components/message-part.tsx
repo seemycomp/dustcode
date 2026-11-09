@@ -973,7 +973,9 @@ export function UserMessageDisplay(props: {
               <Show when={text() || props.bubbleHeader}>
                 <div data-slot="user-message-text" dir="auto" data-queued={props.queued ? "" : undefined}>
                   {props.bubbleHeader}
-                  <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+                  <span data-slot="user-message-content">
+                    <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+                  </span>
                 </div>
               </Show>
             </div>

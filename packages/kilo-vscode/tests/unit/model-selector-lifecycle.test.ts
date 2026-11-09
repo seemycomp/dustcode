@@ -32,7 +32,7 @@ const setup = new Bun.Transpiler({ loader: "ts" }).transformSync(`
       .join("\n")}
     return { open, setOpen, search, setSearch, activeModel, hasProviders, canOpen, triggerLabel,
       visibleModels, filtered, favoriteKeys, favoriteModels, groups, rows, nodes,
-      nodeMap, nodeIndex, rowMap, mounted, selectedKey, previewModel, handleKeyDown, toggleGroup }
+      nodeMap, nodeIndex, rowMap, mounted, selectedKey, previewModel, handleKeyDown, toggleGroup, toggleFavorite }
   }
 `)
 
@@ -78,6 +78,9 @@ function check(code: string) {
       const [recent, setRecent] = createSignal([])
       provider = { models, connected, findModel: (selection) => models().find((item) => item.providerID === selection?.providerID && item.id === selection?.modelID), kiloUnavailable: () => false, failures: () => [] }
       session = {
+        toggleFavorite: (providerID, modelID) => setFavorites((items) => items.some((item) => item.providerID === providerID && item.modelID === modelID)
+          ? items.filter((item) => item.providerID !== providerID || item.modelID !== modelID)
+          : [...items, { providerID, modelID }]),
         favoriteModels: () => { stats.favorites++; return favorites() },
         modelUsageHistory: () => { stats.usage++; return usage() },
         recentModels: () => { stats.recent++; return recent() },
@@ -107,6 +110,110 @@ function check(code: string) {
 }
 
 describe("ModelSelector closed popup work", () => {
+  for (const allowClear of [true, false]) {
+    it(`restores a visible favorite after clearing search (allowClear=${allowClear})`, () => {
+      check(`
+        const state = scene({ allowClear: ${allowClear} })
+        try {
+          await flush()
+          state.setOpen(true)
+          await flush()
+          state.setSearch("bravo")
+          assert.equal(state.previewModel()?.id, "bravo")
+          state.setSearch("")
+          assert.equal(state.selectedKey(), "favorite:kilo/alpha")
+          assert.ok(state.nodeMap().has(state.selectedKey()))
+          assert.equal(state.previewModel()?.id, "alpha")
+          assert.equal(state.value().modelID, "alpha")
+          key(state, "Enter")
+          assert.equal(state.value().modelID, "alpha")
+          assert.equal(state.open(), false)
+        } finally { state.dispose() }
+      `)
+    })
+  }
+
+  for (const interaction of ["none", "navigation", "search", "group"]) {
+    it(`recovers a missing provider without overriding ${interaction}`, () => {
+      check(`
+        const state = scene()
+        try {
+          await flush()
+          state.setValue({ providerID: "anthropic", modelID: "charlie" })
+          state.setUsage({ "kilo/bravo": { count: 7, lastUsed: 10 }, "anthropic/charlie": { count: 9, lastUsed: 20 } })
+          state.refresh([model("alpha"), model("bravo")])
+          state.setOpen(true)
+          await flush()
+          assert.ok(state.nodeMap().has(state.selectedKey()))
+          if ("${interaction}" === "navigation") key(state, "ArrowDown")
+          if ("${interaction}" === "search") state.setSearch("bravo")
+          if ("${interaction}" === "group") state.toggleGroup("most-used")
+          const selected = state.selectedKey()
+          state.refresh([model("alpha"), model("bravo"), model("charlie", "anthropic")])
+          await flush()
+          assert.ok(state.nodeMap().has(state.selectedKey()))
+          assert.equal(state.value().modelID, "charlie")
+          if ("${interaction}" === "none") {
+            assert.equal(state.selectedKey(), "model:anthropic/charlie")
+            assert.equal(state.previewModel()?.id, "charlie")
+            key(state, "Enter")
+            assert.equal(state.open(), false)
+          } else {
+            assert.equal(state.selectedKey(), selected)
+            assert.equal(state.search(), "${interaction}" === "search" ? "bravo" : "")
+          }
+        } finally { state.dispose() }
+      `)
+    })
+  }
+
+  it("keeps explicit collapse through refresh and expands the canonical destination on unfavorite", () => {
+    check(`
+      const state = scene()
+      try {
+        await flush()
+        state.setOpen(true)
+        await flush()
+        state.toggleGroup("favorites")
+        state.refresh([model("alpha"), model("bravo")])
+        await flush()
+        assert.equal(state.selectedKey(), "group:favorites")
+        assert.equal(state.nodeMap().has("favorite:kilo/alpha"), false)
+        key(state, "Enter")
+        const row = state.rowMap().get("favorite:kilo/alpha")
+        state.toggleFavorite(row.model, row)
+        await flush()
+        assert.equal(state.selectedKey(), "model:kilo/alpha")
+        assert.ok(state.nodeMap().has(state.selectedKey()))
+        assert.equal(state.previewModel()?.id, "alpha")
+        assert.equal(state.value().modelID, "alpha")
+      } finally { state.dispose() }
+    `)
+  })
+
+  it("keeps unconfigured groups compact and ignores recovery from an older opening", () => {
+    check(`
+      const state = scene()
+      try {
+        await flush()
+        state.setValue(null)
+        state.setOpen(true)
+        await flush()
+        assert.equal(state.selectedKey(), "clear")
+        assert.ok(state.nodes().every((node) => !node.row?.model))
+        state.setOpen(false)
+        state.setValue({ providerID: "offline", modelID: "missing" })
+        state.setOpen(true)
+        state.setOpen(false)
+        state.setValue({ providerID: "kilo", modelID: "alpha" })
+        state.setOpen(true)
+        await flush()
+        assert.equal(state.selectedKey(), "favorite:kilo/alpha")
+        assert.equal(state.previewModel()?.id, "alpha")
+      } finally { state.dispose() }
+    `)
+  })
+
   it("keeps trigger state reactive without catalog filtering or personalization work while closed", () => {
     check(`
       const state = scene()
@@ -173,6 +280,8 @@ describe("ModelSelector closed popup work", () => {
         assert.deepEqual(state.groups().map((group) => group.key), ["favorites", "most-used", "kilo", "anthropic"])
         assert.equal(state.selectedKey(), "favorite:kilo/alpha")
         assert.equal(state.previewModel()?.id, "alpha")
+        assert.equal(state.nodeMap().has("model:kilo/bravo"), false)
+        assert.equal(state.nodeMap().has("model:anthropic/charlie"), false)
         state.toggleGroup("favorites")
         assert.equal(state.nodeMap().has("favorite:kilo/alpha"), false)
         key(state, "ArrowRight")
@@ -197,7 +306,8 @@ describe("ModelSelector closed popup work", () => {
         assert.equal(state.search(), "")
         assert.equal(state.selectedKey(), "favorite:kilo/bravo")
         assert.equal(state.previewModel()?.id, "bravo")
-        assert.equal(state.nodeMap().has("model:kilo/delta"), true)
+        assert.equal(state.nodeMap().has("group:kilo"), true)
+        assert.equal(state.nodeMap().has("model:kilo/delta"), false)
         assert.deepEqual(state.groups().find((group) => group.key === "most-used").rows.map((row) => row.model.id), ["alpha"])
         key(state, "Escape")
         assert.equal(state.value().modelID, "bravo")

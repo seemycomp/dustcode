@@ -7,13 +7,31 @@ import { MessageList } from "../../webview-ui/src/components/chat/MessageList"
 import { PromptInput } from "../../webview-ui/src/components/chat/PromptInput"
 import { post } from "../../webview-ui/src/utils/webview-message"
 import { TaskHeader } from "../../webview-ui/src/components/chat/TaskHeader"
+import { SessionChanges } from "../../webview-ui/src/components/chat/SessionChanges"
 import type { Message, Part } from "../../webview-ui/src/types/messages"
 import { applyKiloTheme, applyVscodeTheme } from "../../../kilo-ui/src/stories/theme-decorator"
 import "@kilocode/kilo-ui/styles"
 import "../../webview-ui/src/styles/chat.css"
+import { ContextUsagePanel } from "../../webview-ui/src/components/chat/ContextUsagePanel"
+import { LocalTabsProvider } from "../../webview-ui/src/context/local-tabs"
+import { SessionTabStrip } from "../../webview-ui/src/components/chat/SessionTabStrip"
+import { getVSCodeAPI } from "../../webview-ui/src/context/vscode"
 
 applyKiloTheme("kilo-vscode", applyVscodeTheme("dark-modern"))
 const sid = "prompt-browser"
+if (location.search.includes("tabs")) {
+  const api = getVSCodeAPI()
+  let state: unknown = { sidebarSessionTabIDs: [sid, "other-session"], sidebarActiveSessionTabID: sid }
+  api.getState = () => state
+  api.setState = (value) => {
+    state = value
+  }
+  const send = api.postMessage
+  api.postMessage = (message) => {
+    if (message.type === "forkSession") document.body.dataset.forked = message.sessionId
+    send(message)
+  }
+}
 const prompt = Array.from({ length: 8 }, (_, i) => `Prompt line ${i + 1}: preserve this full original text.`).join("\n")
 const answer = Array.from({ length: 35 }, (_, i) => `Assistant paragraph ${i + 1}. Readable chat lane proof.`).join(
   "\n\n",
@@ -58,6 +76,50 @@ for (const message of messages.filter((message) => message.role === "user")) {
   })
 }
 
+if (location.search.includes("internal")) {
+  for (const i of [15, 30]) {
+    const id = `internal-${i}`
+    const reply = `continuation-${i}`
+    const index = messages.findIndex((message) => message.id === `assistant-${i}`)
+    messages.splice(
+      index + 1,
+      0,
+      { id, sessionID: sid, role: "user", time: { created: i * 100 + 60 } },
+      { ...messages.at(index)!, id: reply, parentID: id, time: { created: i * 100 + 70 } },
+    )
+    parts[id] =
+      i === 15
+        ? [{ id: `part-${id}`, messageID: id, type: "compaction", auto: true }]
+        : [{ id: `part-${id}`, messageID: id, type: "text", text: "Internal continuation", synthetic: true }]
+    parts[reply] = [{ id: `part-${reply}`, messageID: reply, type: "text", text: answer }]
+  }
+}
+
+if (location.search.includes("todos")) {
+  parts["assistant-30"]!.push({
+    id: "todo-part",
+    type: "tool",
+    tool: "todowrite",
+    callID: "todo-call",
+    messageID: "assistant-30",
+    sessionID: sid,
+    state: {
+      status: "completed",
+      input: {},
+      output: "Updated todos",
+      metadata: {
+        todos: location.search.includes("complete")
+          ? [{ content: "Create test.txt with content test", status: "completed" }]
+          : [
+              { content: "Review the sticky tracker", status: "completed" },
+              { content: "Keep the conversation in place", status: "in_progress" },
+              { content: "Verify the floating list", status: "pending" },
+            ],
+      },
+    },
+  })
+}
+
 function App() {
   const [revision, refresh] = createSignal(0)
   const session = {
@@ -67,6 +129,12 @@ function App() {
     contextUsage: () => ({ tokens: 25533, percentage: 13 }),
     status: () => (location.search.includes("composer") ? "idle" : "busy"),
     compact: () => document.body.setAttribute("data-compacted", "true"),
+    sessions: () => [
+      { id: sid, title: "Active session" },
+      { id: "other-session", title: "Other session" },
+    ],
+    activityFor: (id: string) => (location.search.includes("tabs-busy") && id === "other-session" ? "busy" : "idle"),
+    isSubmitting: () => false,
     userMessages: () => messages.filter((message) => message.role === "user"),
     statusInfo: () => ({ type: "busy" as const }),
     getParts: (message: string | Message) => {
@@ -89,11 +157,40 @@ function App() {
         <div class="chat-view" style={{ height: "100vh" }}>
           <Show when={location.search.includes("composer")} fallback={<MessageList />}>
             <TaskHeader />
-            <PromptInput />
+            <SessionChanges
+              files={[{ file: "example.txt", additions: 1, deletions: 0 }]}
+              onAccept={() => {}}
+              onReject={() => {}}
+              onKeepAll={() => {}}
+              onUndoAll={() => {}}
+              onReview={() => {}}
+              onRetry={() => {}}
+            />
+            <Show when={location.search.includes("tabs")} fallback={<Composer />}>
+              <LocalTabsProvider>
+                <SessionTabStrip
+                  onMoveToWorktree={(id) => {
+                    document.body.dataset.moved = id
+                  }}
+                />
+                <Composer />
+              </LocalTabsProvider>
+            </Show>
           </Show>
         </div>
       </SessionContext.Provider>
     </StoryProviders>
+  )
+}
+
+function Composer() {
+  const [usage, setUsage] = createSignal(false)
+  return (
+    <PromptInput
+      contextUsage={usage()}
+      onContextUsage={() => setUsage((value) => !value)}
+      contextUsagePanel={<ContextUsagePanel onClose={() => setUsage(false)} />}
+    />
   )
 }
 render(() => <App />, document.body)

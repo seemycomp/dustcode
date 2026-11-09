@@ -15,10 +15,12 @@ import {
   Show,
   untrack,
   type Component,
+  type JSX,
 } from "solid-js"
 import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { Button } from "@kilocode/kilo-ui/button"
 import { Tooltip } from "@kilocode/kilo-ui/tooltip"
+import { Popover } from "@kilocode/kilo-ui/popover"
 import { FileIcon } from "@kilocode/kilo-ui/file-icon"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { showToast } from "@kilocode/kilo-ui/toast"
@@ -189,6 +191,8 @@ interface PromptInputProps {
   }
   contextUsage?: boolean
   onContextUsage?: () => void
+  contextUsagePanel?: JSX.Element
+  leadingAction?: JSX.Element
   blocked?: () => boolean
   edit?: { sessionID: string; messageID: string }
   onEditReady?: (ready: boolean) => void
@@ -306,6 +310,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const projectMemory = useMemory()
   const sid = () => session.currentSessionID() ?? props.pendingSessionID ?? session.draftSessionID() ?? undefined
   const [sending, setSending] = createSignal(false)
+  const [compactConfirm, setCompactConfirm] = createSignal(false)
   const trigger = props.inline ? `edit:${props.inline.message.id}` : undefined
   const mentionTrigger = props.inline ? `${trigger}:mention` : MENTION_MODEL_TRIGGER
   const ctx = () => {
@@ -868,13 +873,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   window.addEventListener("agentManagerDiscardDraft", onAgentManagerDiscardDraft)
   onCleanup(() => window.removeEventListener("agentManagerDiscardDraft", onAgentManagerDiscardDraft))
 
-  // Compact/summarize the current session (mirrors canCompact guards in TaskHeader)
+  // Keyboard commands use the same confirmation as the toolbar.
   const onCompact = () => {
     if (props.inline) return
-    if (session.status() === "busy") return
-    if (session.messages().length === 0) return
-    if (!session.selected(sid())) return
-    session.compact()
+    if (!canCompact()) return
+    setCompactConfirm(true)
   }
   window.addEventListener("compactSession", onCompact)
   onCleanup(() => window.removeEventListener("compactSession", onCompact))
@@ -2087,11 +2090,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let hintRef: HTMLDivElement | undefined
   let pinnedRef: HTMLDivElement | undefined
   let usageRef: HTMLDivElement | undefined
+  let controls: HTMLDivElement | undefined
   const search = useTranscriptSearch()
   const hasMessages = createMemo(() => session.messages().length > 0)
   const canCompact = createMemo(
     () => session.status() === "idle" && session.visibleMessages().length > 0 && !!session.selected(),
   )
+  createEffect(on(sid, () => setCompactConfirm(false), { defer: true }))
+  createEffect(() => {
+    if (!canCompact()) setCompactConfirm(false)
+  })
   const tokens = createMemo(() => session.contextUsage()?.tokens.toLocaleString(language.locale()))
   const toggleSearch = () => (search.active() ? search.closeSearch() : search.setActive(true))
   const [metrics, setMetrics] = createSignal({ width: Number.POSITIVE_INFINITY, pinned: 0, slot: 26, reserve: 210 })
@@ -2110,7 +2118,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           parseFloat(box.paddingLeft) -
           parseFloat(box.paddingRight) -
           (parseFloat(box.columnGap) || 0),
-        pinned: pinned.getBoundingClientRect().width + (usageRef?.getBoundingClientRect().width ?? 0) + gap,
+        pinned:
+          pinned.getBoundingClientRect().width +
+          (usageRef?.getBoundingClientRect().width ?? 0) +
+          (controls?.getBoundingClientRect().width ?? 0) +
+          gap * 2,
         slot: (button?.getBoundingClientRect().width ?? 22) + gap,
         reserve: reserve(hint),
       })
@@ -2119,6 +2131,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (hintRef) observer.observe(hintRef)
     if (pinnedRef) observer.observe(pinnedRef)
     if (usageRef) observer.observe(usageRef)
+    if (controls) observer.observe(controls)
     onCleanup(() => observer.disconnect())
   })
   const foldable = createMemo(() => {
@@ -2135,22 +2148,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         run: handleOpenIndexingSettings,
       })
     }
-    list.push(
-      {
-        key: "compact",
-        icon: "compress",
-        label: language.t("command.session.compact"),
-        disabled: !canCompact(),
-        run: () => session.compact(),
-      },
-      {
-        key: "search",
-        icon: "magnifying-glass",
-        label: language.t("chat.search.toggle"),
-        disabled: !hasMessages(),
-        run: toggleSearch,
-      },
-    )
+    list.push({
+      key: "search",
+      icon: "magnifying-glass",
+      label: language.t("chat.search.toggle"),
+      disabled: !hasMessages(),
+      run: toggleSearch,
+    })
     if (sandboxVisible())
       list.push({
         key: "sandbox",
@@ -2584,30 +2588,72 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 placement="top"
                 openDelay={0}
               >
-                <Button
-                  size="small"
-                  variant="ghost"
-                  class="prompt-context-usage"
-                  aria-label={language.t("prompt.action.contextUsage")}
-                  aria-expanded={props.contextUsage ?? false}
-                  onClick={() => props.onContextUsage?.()}
+                <Popover
+                  class="prompt-usage-popover"
+                  open={props.contextUsage ?? false}
+                  onOpenChange={(open) => {
+                    if (open !== (props.contextUsage ?? false)) props.onContextUsage?.()
+                  }}
+                  placement="top-end"
+                  gutter={8}
+                  triggerAs={Button}
+                  triggerProps={{
+                    size: "small",
+                    variant: "ghost",
+                    class: "prompt-context-usage",
+                    "aria-label": language.t("prompt.action.contextUsage"),
+                    "aria-expanded": props.contextUsage ?? false,
+                  }}
+                  trigger={
+                    <Show when={tokens()} fallback={<Icon name="gauge" size="small" />}>
+                      {tokens()}
+                    </Show>
+                  }
                 >
-                  <Show when={tokens()} fallback={<Icon name="gauge" size="small" />}>
-                    {tokens()}
-                  </Show>
-                </Button>
+                  <Show when={props.contextUsagePanel}>{props.contextUsagePanel}</Show>
+                </Popover>
               </Tooltip>
             </div>
-            <div class="prompt-action" data-folded={folded("compact") ? "" : undefined}>
+            <div class="prompt-session-controls" ref={controls}>
+              {props.leadingAction}
               <Tooltip value={language.t("command.session.compact")} placement="top" openDelay={0}>
-                <IconButton
-                  icon="compress"
-                  size="small"
-                  variant="ghost"
-                  disabled={!canCompact()}
-                  onClick={() => session.compact()}
-                  aria-label={language.t("command.session.compact")}
-                />
+                <Popover
+                  open={compactConfirm()}
+                  onOpenChange={(next) => setCompactConfirm(next && canCompact())}
+                  placement="top-end"
+                  gutter={8}
+                  class="compact-session-popover"
+                  contentLabel={language.t("command.session.compact")}
+                  triggerAs={IconButton}
+                  triggerProps={{
+                    icon: "compress",
+                    size: "small",
+                    variant: "ghost",
+                    disabled: !canCompact(),
+                    "aria-label": language.t("command.session.compact"),
+                  }}
+                >
+                  <div class="compact-session-confirm">
+                    <p>{language.t("command.session.compact.confirm")}</p>
+                    <div class="compact-session-confirm-actions">
+                      <Button size="small" variant="ghost" data-autofocus onClick={() => setCompactConfirm(false)}>
+                        {language.t("command.session.compact.no")}
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="primary"
+                        disabled={!compactConfirm() || !canCompact()}
+                        onClick={() => {
+                          if (!compactConfirm() || !canCompact()) return
+                          setCompactConfirm(false)
+                          session.compact()
+                        }}
+                      >
+                        {language.t("command.session.compact.yes")}
+                      </Button>
+                    </div>
+                  </div>
+                </Popover>
               </Tooltip>
             </div>
             <div class="prompt-action" data-folded={folded("search") ? "" : undefined}>

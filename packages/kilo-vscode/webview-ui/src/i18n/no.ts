@@ -136,6 +136,9 @@ export const dict = {
   "revert.disabled.agentBusy": "Vent til agenten er ferdig",
   "revert.error.body": "Repositoriet er kanskje i bruk. Prøv igjen, eller se Dustcode-loggene for detaljer.",
   "command.session.compact": "Komprimer sesjon",
+  "command.session.compact.confirm": "Komprimere denne sesjonen?",
+  "command.session.compact.no": "Nei",
+  "command.session.compact.yes": "Ja",
   "command.session.export": "Eksporter sesjonsutskrift",
 
   "dialog.provider.search.placeholder": "Søk etter leverandører",

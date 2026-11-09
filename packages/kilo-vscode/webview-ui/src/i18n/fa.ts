@@ -134,6 +134,9 @@ export const dict = {
   "revert.error.body":
     "ممکن است مخزن در حال استفاده باشد. دوباره تلاش کنید یا برای جزئیات گزارش‌های Dustcode را بررسی کنید.",
   "command.session.compact": "فشرده‌سازی جلسه",
+  "command.session.compact.confirm": "این جلسه فشرده شود؟",
+  "command.session.compact.no": "خیر",
+  "command.session.compact.yes": "بله",
   "command.session.export": "صدور رونوشت جلسه",
 
   "dialog.provider.search.placeholder": "جستجوی ارائه‌دهندگان",

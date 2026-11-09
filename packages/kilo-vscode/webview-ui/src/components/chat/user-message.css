@@ -19,14 +19,27 @@
 }
 
 .vscode-user-message [data-slot="user-message-text"] {
-  display: -webkit-box;
   width: 100%;
   overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
   border-color: var(--border-weak-base);
   border-radius: 12px;
   text-align: start;
+}
+
+.vscode-user-message [data-slot="user-message-content"] {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+body.vscode-light:not(.vscode-high-contrast-light) .vscode-user-message [data-slot="user-message-text"] {
+  background: #ffffff;
+  border: 1px solid #d6d6d6;
+}
+
+body.vscode-high-contrast-light .vscode-user-message [data-slot="user-message-text"] {
+  background: #ffffff;
 }
 
 .vscode-user-message[data-editable] [data-slot="user-message-text"] {
@@ -46,6 +59,10 @@
 }
 
 .message-list-sticky-prompt .vscode-user-message [data-slot="user-message-text"] {
+  display: block;
+}
+
+.message-list-sticky-prompt .vscode-user-message [data-slot="user-message-content"] {
   display: block;
   white-space: nowrap;
   text-overflow: ellipsis;

@@ -133,6 +133,9 @@ export const dict = {
   "revert.disabled.agentBusy": "Дождитесь завершения агента",
   "revert.error.body": "Репозиторий может использоваться. Повторите попытку или проверьте журналы Dustcode.",
   "command.session.compact": "Сжать сессию",
+  "command.session.compact.confirm": "Сжать эту сессию?",
+  "command.session.compact.no": "Нет",
+  "command.session.compact.yes": "Да",
   "command.session.export": "Экспортировать запись сеанса",
 
   "dialog.provider.search.placeholder": "Поиск провайдеров",

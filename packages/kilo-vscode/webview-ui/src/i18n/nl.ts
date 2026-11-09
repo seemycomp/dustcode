@@ -135,6 +135,9 @@ export const dict = {
   "revert.error.body":
     "De repository is mogelijk in gebruik. Probeer het opnieuw of bekijk de Dustcode-logs voor details.",
   "command.session.compact": "Sessie comprimeren",
+  "command.session.compact.confirm": "Deze sessie comprimeren?",
+  "command.session.compact.no": "Nee",
+  "command.session.compact.yes": "Ja",
   "command.session.export": "Sessietranscript exporteren",
 
   "dialog.provider.search.placeholder": "Providers zoeken",

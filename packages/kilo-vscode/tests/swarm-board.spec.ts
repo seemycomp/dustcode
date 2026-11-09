@@ -100,7 +100,11 @@ test("hides empty boards and discovers the first async message without polling i
 
 test("uses a distinct icon and fills short histories without manual paging", async ({ page }) => {
   const scene = await setup(page)
-  await expect(page.locator('.session-dock-state[data-active] [data-component="board-trigger"]')).toBeVisible()
+  await expect(page.locator('.prompt-session-controls [data-component="board-trigger"]')).toBeVisible()
+  await expect(page.locator(".session-dock")).toHaveCount(0)
+  const button = await scene.toggle.boundingBox()
+  const compact = await page.getByRole("button", { name: "Compact session", exact: true }).boundingBox()
+  expect(button!.x + button!.width).toBeLessThanOrEqual(compact!.x)
   await expect(page.locator(".task-board")).toHaveCount(0)
   const icon = await scene.toggle.locator("svg").innerHTML()
   await scene.open()

@@ -8,7 +8,8 @@
  * ended, the two offsets did not cancel out, and the conversation text jumped a
  * few pixels every time.
  *
- * The invariant now: one dock, one decision point, one fixed height.
+ * The standalone dock retains its layout contract for stories. ChatView now
+ * omits it and exposes session actions through tab menus and toolbar overlays.
  */
 
 import { describe, expect, it } from "bun:test"
@@ -73,13 +74,12 @@ describe("session dock layout", () => {
     expect(hidden![1]).not.toContain("display: none")
   })
 
-  it("keeps the reserved actions row independent of the turn lifecycle", () => {
+  it("omits the session dock and its reserved actions row from chat", () => {
     const view = read("webview-ui/src/components/chat/ChatView.tsx")
-    const fork = view.match(/const canFork = \(hasChat: boolean\) =>([^\n]*)/)
-    expect(fork).not.toBeNull()
-    // A button that came and went with the turn would resize the hidden row.
-    expect(fork![1]).not.toContain('session.status() === "idle"')
-    expect(view).toContain("session.messages().length > 0 || session.submitting()")
+    expect(view).not.toContain("<SessionDock")
+    expect(view).not.toContain("renderActions")
+    expect(view).not.toContain('class="new-task-button-wrapper"')
+    expect(view).toContain("leadingAction={<SwarmBoardButton")
   })
 
   it("drops the placeholder that used to offset the session actions", () => {
@@ -88,11 +88,14 @@ describe("session dock layout", () => {
     expect(read("webview-ui/src/components/shared/WorkingIndicator.tsx")).not.toContain("working-indicator-slot")
   })
 
-  it("keeps Goal inside the shared session actions", () => {
-    const view = read("webview-ui/src/components/chat/ChatView.tsx")
-    expect(view).toContain("hasActions={() => !props.readonly && (hasActions(hasMessages()) || !!goal())}")
-    expect(view).toContain("actions={(control, agents, todos) => renderActions(hasMessages(), control, agents, todos)}")
-    expect(view).toContain("{control()}")
+  it("keeps new, fork, and move actions in the chat tab context menu", () => {
+    const menu = read("webview-ui/src/components/chat/SessionTabMenu.tsx")
+    expect(menu).toContain('t("sidebar.session.newSession")')
+    expect(menu).toContain('t("agentManager.tab.forkSession")')
+    expect(menu).toContain('t("sidebar.session.moveToWorktree")')
+    expect(menu).toContain("props.onNewSession")
+    expect(menu).toContain("props.onFork")
+    expect(menu).toContain("props.onMoveToWorktree")
   })
 
   it("only exposes Goal controls while the action row is available", () => {
@@ -145,11 +148,9 @@ describe("session dock layout", () => {
     expect(css).toContain("var(--surface-interactive-hover, var(--vscode-list-hoverBackground))")
   })
 
-  it("keeps the composer column as the only owner of the row", () => {
-    // A second copy inside the scrollable transcript would resize the scroll
-    // content on every turn boundary again.
+  it("does not mount a dock row in either the transcript or composer", () => {
     expect(read("webview-ui/src/components/chat/MessageList.tsx")).not.toContain("WorkingIndicator")
-    expect(read("webview-ui/src/components/chat/ChatView.tsx")).toContain("<SessionDock")
+    expect(read("webview-ui/src/components/chat/ChatView.tsx")).not.toContain("<SessionDock")
   })
 
   it("routes both states through the dock so neither can claim the row alone", () => {

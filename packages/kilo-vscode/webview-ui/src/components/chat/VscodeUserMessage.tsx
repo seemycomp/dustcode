@@ -13,6 +13,7 @@ import { BrowserReferences } from "./BrowserReferences"
 import { ReviewComments } from "./ReviewComments"
 import { useLanguage } from "../../context/language"
 import "./user-message.css"
+import { TurnTodos } from "./todo/TurnTodos"
 
 interface VscodeUserMessageProps {
   message: Message
@@ -214,6 +215,7 @@ export const VscodeUserMessage: Component<VscodeUserMessageProps> = (props) => {
           onCancel={() => setEditing(false)}
         />
       </Show>
+      <TurnTodos id={props.message.id} floating={props.sticky} />
     </div>
   )
 }

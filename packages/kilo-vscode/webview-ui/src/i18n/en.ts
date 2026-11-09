@@ -139,6 +139,9 @@ export const dict = {
   "revert.disabled.agentBusy": "Wait for agent to finish",
   "revert.error.body": "The repository may be in use. Try again, or check the Dustcode logs for details.",
   "command.session.compact": "Compact session",
+  "command.session.compact.confirm": "Compact this session?",
+  "command.session.compact.no": "No",
+  "command.session.compact.yes": "Yes",
   "command.session.export": "Export session transcript",
 
   "dialog.provider.search.placeholder": "Search providers",
@@ -1436,7 +1439,7 @@ export const dict = {
 
   "error.details.show": "Details",
 
-  "task.todos.progress": "{{done}}/{{total}} to-dos done",
+  "task.todos.progress": "{{done}} of {{total}} To-dos Completed",
   "task.todos.allDone": "{{count}} to-dos done",
   "task.todos.title": "To-dos",
   "task.todos.done": "All done",

@@ -1,6 +1,7 @@
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
-import { For, Show, createMemo, createSignal, type Component, type JSX } from "solid-js"
+import { For, Show, createMemo, createSignal, onCleanup, type Component, type JSX } from "solid-js"
+import { showToast } from "@kilocode/kilo-ui/toast"
 import { useLanguage } from "../../context/language"
 import { useLocalTabs } from "../../context/local-tabs"
 import { useSession } from "../../context/session"
@@ -17,7 +18,7 @@ import { SessionTabSwitcher } from "./SessionTabSwitcher"
 import { ConstrainDragYAxis, SortableTabContainer, outsideTabBar } from "./TabDnd"
 import { beginPromptMentionDrop, endPromptMentionDrop, sessionDrop } from "../../utils/prompt-mention-drop"
 
-export const SessionTabStrip: Component = () => {
+export const SessionTabStrip: Component<{ onMoveToWorktree?: (id: string) => void }> = (props) => {
   const tabs = useLocalTabs()
   const session = useSession()
   const language = useLanguage()
@@ -25,7 +26,17 @@ export const SessionTabStrip: Component = () => {
   const config = useConfig()
   const [dragging, setDragging] = createSignal<string>()
   const [announcement, setAnnouncement] = createSignal("")
+  const [moving, setMoving] = createSignal(false)
   if (!tabs) return null
+
+  onCleanup(
+    vscode.onMessage((msg) => {
+      if (msg.type !== "continueInWorktreeProgress") return
+      if (msg.status !== "done" && msg.status !== "error") return
+      setMoving(false)
+      if (msg.status === "error") showToast({ title: msg.error ?? language.t("sidebar.session.progress.failed") })
+    }),
+  )
 
   const items = createMemo(() => new Map(session.sessions().map((item) => [item.id, item])))
   const title = (id: string) => {
@@ -34,6 +45,17 @@ export const SessionTabStrip: Component = () => {
   }
   const state = (id: string) => (isPendingTab(id) ? "idle" : session.activityFor(id))
   const working = (id: string) => running(state(id))
+  const actionable = (id: string) =>
+    !isPendingTab(id) && !working(id) && state(id) !== "waiting" && !session.isSubmitting(id)
+  const fork = (id: string) => {
+    if (!actionable(id)) return
+    vscode.postMessage({ type: "forkSession", sessionId: id })
+  }
+  const move = (id: string) => {
+    if (!actionable(id) || moving() || !props.onMoveToWorktree) return
+    setMoving(true)
+    props.onMoveToWorktree(id)
+  }
   const middle = (id: string, event: MouseEvent) => {
     if (event.button !== 1) return
     event.preventDefault()
@@ -146,11 +168,11 @@ export const SessionTabStrip: Component = () => {
                     <SortableTabContainer id={id}>
                       <SessionTabMenu
                         showFork
-                        onFork={
-                          !isPendingTab(id) && !working(id)
-                            ? () => vscode.postMessage({ type: "forkSession", sessionId: id })
-                            : undefined
-                        }
+                        showNewSession
+                        showMoveToWorktree={!isPendingTab(id) && !!props.onMoveToWorktree}
+                        onNewSession={() => window.dispatchEvent(new CustomEvent("newTaskRequest"))}
+                        onFork={actionable(id) ? () => fork(id) : undefined}
+                        onMoveToWorktree={actionable(id) && !moving() ? () => move(id) : undefined}
                         onClose={() => close(id)}
                         onCloseOthers={tabs.display().length > 1 ? () => closeOthers(id) : undefined}
                         onCloseToRight={tabs.closableRight(id).length ? () => closeRight(id) : undefined}

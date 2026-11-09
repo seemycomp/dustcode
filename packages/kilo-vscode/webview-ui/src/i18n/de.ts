@@ -142,6 +142,9 @@ export const dict = {
   "revert.error.body":
     "Das Repository wird möglicherweise gerade verwendet. Versuchen Sie es erneut oder prüfen Sie die Dustcode-Logs.",
   "command.session.compact": "Sitzung komprimieren",
+  "command.session.compact.confirm": "Diese Sitzung komprimieren?",
+  "command.session.compact.no": "Nein",
+  "command.session.compact.yes": "Ja",
   "command.session.export": "Sitzungsprotokoll exportieren",
 
   "dialog.provider.search.placeholder": "Anbieter durchsuchen",

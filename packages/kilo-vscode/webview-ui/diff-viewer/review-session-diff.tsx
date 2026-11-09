@@ -289,10 +289,24 @@ export function ReviewSessionDiff<T>(
             expansionLineCount={20}
             unsafeCSS={`${props.options.unsafeCSS ?? createDefaultOptions<T>(props.options.diffStyle).unsafeCSS}
               [data-separator="custom"] {
-                display: contents;
+                display: block;
+                position: relative;
+                height: 24px;
                 margin-block: 0;
                 padding-block: 0;
                 white-space: normal;
+              }
+              /* Gap controls must not contribute to the line-number column's intrinsic width. */
+              [data-separator="custom"] > slot {
+                display: block;
+                position: absolute;
+                inset-block-start: 0;
+                inset-inline-start: 0;
+                inset-inline-end: auto;
+                width: var(--diffs-column-width, 100cqi);
+              }
+              [data-diff-type="split"] [data-separator="custom"] > slot {
+                width: var(--diffs-column-width, 50cqi);
               }
             `}
             hunkSeparators={separators}

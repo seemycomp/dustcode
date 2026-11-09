@@ -753,6 +753,19 @@ export const FullScreenSessionReview: Story = {
       rejectable: true,
       hunks: [{ id: "added" }],
     }
+    const before = Array.from({ length: 160 }, (_, index) => `line ${index + 1}\n`).join("")
+    const modified: WorktreeFileDiff = {
+      file: "src/example.txt",
+      status: "modified",
+      before,
+      after: before.replace("line 40\n", "changed 40\n").replace("line 120\n", "changed 120\n"),
+      patch:
+        "--- a/src/example.txt\n+++ b/src/example.txt\n@@ -39,3 +39,3 @@\n line 39\n-line 40\n+changed 40\n line 41\n@@ -119,3 +119,3 @@\n line 119\n-line 120\n+changed 120\n line 121\n",
+      additions: 2,
+      deletions: 2,
+      rejectable: true,
+      hunks: [{ id: "first" }, { id: "second" }],
+    }
     return (
       <StoryProviders noPadding>
         <div style={{ height: "600px", display: "flex", "flex-direction": "column" }}>
@@ -760,7 +773,7 @@ export const FullScreenSessionReview: Story = {
           <div style={{ display: "flex", "min-height": "0", flex: "1" }}>
             <FullScreenDiffView
               sessionReview
-              diffs={[file]}
+              diffs={[file, modified]}
               loading={false}
               diffStyle={style()}
               onDiffStyleChange={setStyle}

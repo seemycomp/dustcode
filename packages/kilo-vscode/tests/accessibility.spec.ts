@@ -1,8 +1,58 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test, type Locator, type Page } from "@playwright/test"
+import { VSCODE_THEMES } from "../../kilo-ui/src/stories/vscode-themes"
 
 const GLOBALS = "colorScheme:dark;theme:kilo-vscode;vscodeTheme:dark-modern"
 const RULES = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"]
+
+const THEMES = ["light-modern", "hc-light", "dark-modern", "hc-black"]
+for (const [index, theme] of THEMES.entries()) {
+  test(`user message theme ${theme} preserves its outline across theme switches`, async ({ page }) => {
+    await page.goto(
+      `/iframe.html?id=chat--user-message-injected-short&viewMode=story&globals=theme:kilo-vscode;vscodeTheme:${theme}`,
+    )
+    const message = page.locator('.vscode-user-message [data-slot="user-message-text"]')
+    await expect(message).toBeVisible()
+    const original = await message.evaluateHandle((el) => el)
+    async function check(id: string) {
+      const style = await message.evaluate((el) => {
+        const probe = document.createElement("span")
+        probe.style.borderColor = "var(--border-weak-base)"
+        el.append(probe)
+        const token = getComputedStyle(probe).borderTopColor
+        probe.remove()
+        const style = getComputedStyle(el)
+        return { border: style.borderTopColor, width: style.borderTopWidth, background: style.backgroundColor, token }
+      })
+      expect(style.border).toBe(id === "light-modern" ? "rgb(214, 214, 214)" : style.token)
+      expect(style.width).toBe("1px")
+      if (id === "light-modern" || id === "hc-light") expect(style.background).toBe("rgb(255, 255, 255)")
+    }
+    await check(theme)
+    const next = THEMES.at((index + 1) % THEMES.length)!
+    const palette = VSCODE_THEMES[next]!
+    // Apply the same host theme variables/classes without remounting the message.
+    await page.evaluate(
+      ({ next, palette }) => {
+        for (const [key, value] of Object.entries(palette.vars)) document.documentElement.style.setProperty(key, value)
+        document.documentElement.dataset.colorScheme = palette.colorScheme
+        document.body.classList.remove(
+          "vscode-light",
+          "vscode-dark",
+          "vscode-high-contrast",
+          "vscode-high-contrast-light",
+        )
+        if (next.startsWith("hc-")) document.body.classList.add("vscode-high-contrast")
+        if (next === "hc-light") document.body.classList.add("vscode-high-contrast-light")
+        if (!next.startsWith("hc-")) document.body.classList.add(`vscode-${palette.colorScheme}`)
+      },
+      { next, palette },
+    )
+    expect(await message.evaluate((el, original) => el === original, original)).toBe(true)
+    await check(next)
+    await original.dispose()
+  })
+}
 
 // Explicitly ratchet in repaired/stable workflows rather than making existing
 // untriaged Storybook findings block unrelated webview changes.

@@ -10,18 +10,14 @@ import { AgentAvatarPalette } from "@kilocode/kilo-ui/agent-avatar"
 import { useData } from "@kilocode/kilo-ui/context/data"
 import { useClipboard } from "@kilocode/kilo-ui/context/clipboard"
 import { Button } from "@kilocode/kilo-ui/button"
-import { Icon } from "@kilocode/kilo-ui/icon"
-import { Spinner } from "@kilocode/kilo-ui/spinner"
-import { Tooltip } from "@kilocode/kilo-ui/tooltip"
 import { showToast } from "@kilocode/kilo-ui/toast"
-import { DropdownMenu } from "@kilocode/kilo-ui/dropdown-menu"
 import { TaskHeader } from "./TaskHeader"
 import { MessageList } from "./MessageList"
 import { PromptInput } from "./PromptInput"
 import { ContextUsagePanel } from "./ContextUsagePanel"
 import type { ManagerContext } from "../../utils/shortcut-hint"
 import { PermissionDock } from "./PermissionDock"
-import { SessionDock } from "./SessionDock"
+import { SwarmBoardButton, useSwarmBoard } from "./SwarmBoard"
 import { SessionChanges } from "./SessionChanges"
 import { createSessionReview } from "./session-review"
 import { useDialog } from "@kilocode/kilo-ui/context/dialog"
@@ -53,7 +49,7 @@ interface ChatViewProps {
   readonly?: boolean
   /** Whether this chat owns actionable prompt controls. Defaults to true. */
   interactivePrompts?: boolean
-  /** When true, show the "Continue in Worktree" button. Defaults to true in the sidebar. */
+  /** Enable moving sidebar tabs to a worktree from their context menu. */
   continueInWorktree?: boolean
   worktree?: boolean
   onUpdateBase?: () => void
@@ -85,12 +81,23 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   // Show "Show Changes" only in the standalone sidebar, not inside Agent Manager
   const isSidebar = () => worktreeMode === undefined
   const pendingSessionID = () => props.pendingSessionID ?? tabs?.pending()
-  // Show "Continue in Worktree": only when explicitly enabled via prop
-  const canContinueInWorktree = () => props.continueInWorktree === true
   const ownsPrompts = () => props.interactivePrompts !== false
 
   const id = () => session.currentSessionID()
   const [usage, setUsage] = createSignal(false)
+  const board = useSwarmBoard({
+    get projectId() {
+      return props.projectId
+    },
+    get readonly() {
+      return props.readonly
+    },
+  })
+  createEffect(() => {
+    id()
+    props.projectId
+    setUsage(false)
+  })
   const toggleUsage = () => {
     if (props.onContextUsage) return props.onContextUsage()
     setUsage((value) => !value)
@@ -150,15 +157,9 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     }
     data.openUrl(url, id())
   }
-  // Keeps the background job list fresh for the dock's agent stack and the
-  // swarm board, which both read the replies.
+  // Keep the swarm board's background job replies fresh.
   pollBackgroundJobs()
   const goal = () => session.currentSession()?.goal
-  // Counts the in-flight first message too, so the dock reserves the same row on
-  // the very first send instead of growing once the message lands.
-  // A memo, so the dock's actions row rebuilds only when this flips, not on
-  // every new message. A rebuild re-inserts the row and skips its transitions.
-  const hasMessages = createMemo(() => session.messages().length > 0 || session.submitting())
 
   const [editable, setEditable] = createSignal(false)
   const [editing, setEditing] = createSignal<{ sessionID: string; messageID: string }>()
@@ -166,16 +167,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     if (props.readonly || !editable() || editing()) return
     setEditing({ sessionID, messageID })
   }
-  const [transferring, setTransferring] = createSignal(false)
-  const [transferDetail, setTransferDetail] = createSignal("")
-  const [repoBranch, setRepoBranch] = createSignal<string>()
-  let worktreeRef: HTMLDivElement | undefined
   let view: HTMLDivElement | undefined
-  let scroll: (() => void) | undefined
-  const setScroll = (handler: (() => void) | undefined) => {
-    scroll = handler
-  }
-  const scrollToBottom = () => scroll?.()
 
   // Permissions and questions scoped to this session's family (self + subagents).
   // Each ChatView only sees its own session tree — no cross-session leakage.
@@ -200,10 +192,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const dock = () =>
     ownsPrompts() &&
     (!props.readonly || !!goal() || !!permissionRequest() || session.submitting() || session.status() !== "idle")
-  // The session dock stays empty while another surface owns the interaction:
-  // a permission card, a pending question or suggestion, or agent requirements.
-  // A spinner there would claim the agent is working while it waits on the user.
-  const dockBlocked = () => blocked() || familyQuestions().length > 0 || familySuggestions().length > 0
 
   onMount(() => {
     const copy = (event: KeyboardEvent) => {
@@ -260,38 +248,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     onCleanup(() => document.removeEventListener("keydown", handler))
   })
 
-  // Listen for "Continue in Worktree" progress messages
-  {
-    const labels: Record<string, string> = {
-      capturing: language.t("sidebar.session.progress.capturing"),
-      creating: language.t("sidebar.session.progress.creating"),
-      setup: language.t("sidebar.session.progress.setup"),
-      transferring: language.t("sidebar.session.progress.transferring"),
-      forking: language.t("sidebar.session.progress.forking"),
-    }
-    const cleanup = vscode.onMessage((msg) => {
-      if (msg.type === "agentManager.repoInfo") {
-        setRepoBranch(msg.branch)
-        return
-      }
-      if (msg.type !== "continueInWorktreeProgress") return
-      const m = msg as { status: string; error?: string }
-      if (m.status === "done") {
-        setTransferring(false)
-        setTransferDetail("")
-        return
-      }
-      if (m.status === "error") {
-        setTransferring(false)
-        setTransferDetail("")
-        showToast({ title: m.error ?? language.t("sidebar.session.progress.failed") })
-        return
-      }
-      setTransferDetail(labels[m.status] ?? language.t("session.status.working"))
-    })
-    onCleanup(cleanup)
-  }
-
   const decide = (
     permissionID: string,
     response: "once" | "always" | "reject",
@@ -303,165 +259,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     if (!perm || perm.id !== permissionID || session.respondingPermissions().has(permissionID)) return
     session.respondToPermission(permissionID, response, approvedAlways, deniedAlways, feedback)
   }
-
-  const startSession = () => window.dispatchEvent(new CustomEvent("newTaskRequest"))
-
-  const fork = () => {
-    const sid = id()
-    if (!sid) return
-    props.onForkSession?.(sid)
-  }
-
-  const startWorktree = () => vscode.postMessage({ type: "agentManager.createWorktree" })
-
-  const startWorktreeFromBranch = () =>
-    vscode.postMessage({ type: "agentManager.createWorktree", baseBranch: repoBranch()! })
-
-  const openAgentManager = () => vscode.postMessage({ type: "openAgentManager" })
-
-  const moveToWorktree = () => {
-    if (transferring()) return
-    const sid = id()
-    if (!sid) return
-    setTransferring(true)
-    setTransferDetail(language.t("sidebar.session.progress.capturing"))
-    vscode.postMessage({ type: "continueInWorktree", sessionId: sid })
-  }
-
-  const worktreeTooltip = language.t("sidebar.session.newWorktree.tooltip")
-
-  const advancedTooltip = language.t("sidebar.session.configureWorktree.tooltip")
-
-  const moveTooltip = () => {
-    const stats = session.worktreeStats()
-    if (!stats?.files) return language.t("sidebar.session.moveToWorktree.tooltip.empty")
-    if (stats.files === 1) return language.t("sidebar.session.moveToWorktree.tooltip.one")
-    return language.t("sidebar.session.moveToWorktree.tooltip.other", { files: stats.files })
-  }
-
-  const showAdvancedWorktree = () => vscode.postMessage({ type: "openAdvancedWorktree" })
-
-  createEffect(() => {
-    if (!isSidebar() || !server.gitInstalled()) return
-    vscode.postMessage({ type: "agentManager.requestRepoInfo" })
-  })
-
-  const canStartSession = (hasChat: boolean) => hasChat
-
-  // Deliberately status-independent so the row keeps one stable layout across
-  // turns. The dock hides it and makes it non-interactive while a turn runs.
-  const canFork = (hasChat: boolean) => hasChat && !isSidebar() && !!props.onForkSession
-
-  const canStartWorktree = () => isSidebar() && server.gitInstalled()
-
-  const canMoveToWorktree = (hasChat: boolean) => hasChat && canContinueInWorktree() && server.gitInstalled()
-
-  const hasActions = (hasChat: boolean) =>
-    canStartSession(hasChat) || canFork(hasChat) || canStartWorktree() || canMoveToWorktree(hasChat)
-
-  const renderActions = (hasChat: boolean, control: () => JSX.Element, agents: JSX.Element, todos: JSX.Element) => (
-    <Show when={hasActions(hasChat) || !!goal()}>
-      <div class="new-task-button-wrapper" classList={{ "new-task-button-wrapper--empty": !hasChat }}>
-        <div class="session-actions-row">
-          {agents}
-          <Show when={canStartSession(hasChat)}>
-            <Tooltip value={language.t("sidebar.session.newSession.tooltip")} placement="top">
-              <Button
-                variant="secondary"
-                size="small"
-                class="session-new-button"
-                onClick={startSession}
-                aria-label={language.t("sidebar.session.newSession")}
-              >
-                {language.t("sidebar.session.newSession")}
-              </Button>
-            </Tooltip>
-          </Show>
-          <Show when={canFork(hasChat)}>
-            <Tooltip value={language.t("agentManager.tab.forkSession")} placement="top">
-              <Button
-                variant="ghost"
-                size="small"
-                onClick={fork}
-                aria-label={language.t("agentManager.tab.forkSession")}
-              >
-                <Icon name="fork" size="small" />
-                {language.t("agentManager.tab.forkSession")}
-              </Button>
-            </Tooltip>
-          </Show>
-          <Show when={canStartWorktree()}>
-            <div class="session-worktree-split" ref={worktreeRef}>
-              <Tooltip value={worktreeTooltip} placement="top">
-                <Button
-                  variant="secondary"
-                  size="small"
-                  class="session-worktree-main"
-                  onClick={startWorktree}
-                  aria-label={language.t("sidebar.session.newWorktree")}
-                >
-                  {language.t("sidebar.session.newWorktree")}
-                </Button>
-              </Tooltip>
-              <DropdownMenu gutter={4} placement="top-start" getAnchorRect={() => worktreeRef?.getBoundingClientRect()}>
-                <Tooltip value={advancedTooltip} placement="top">
-                  <DropdownMenu.Trigger
-                    class="session-worktree-split-arrow"
-                    aria-label={language.t("agentManager.worktree.advancedOptions")}
-                  >
-                    <Icon name="chevron-down" size="small" />
-                  </DropdownMenu.Trigger>
-                </Tooltip>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.Content class="session-worktree-split-menu">
-                    <DropdownMenu.Item disabled={!repoBranch()} onSelect={startWorktreeFromBranch}>
-                      <span class="session-worktree-menu-gap" aria-hidden="true" />
-                      <DropdownMenu.ItemLabel class="session-worktree-menu-label">
-                        <span>{language.t("sidebar.session.newWorktree.from")}</span>
-                        <span class="session-worktree-menu-branch">
-                          <Icon name="branch" size="small" />
-                          <strong>{repoBranch() ?? language.t("sidebar.session.currentBranch")}</strong>
-                        </span>
-                      </DropdownMenu.ItemLabel>
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item onSelect={showAdvancedWorktree}>
-                      <Icon name="settings-gear" size="small" />
-                      <DropdownMenu.ItemLabel>
-                        {language.t("agentManager.dialog.configureWorktree")}
-                      </DropdownMenu.ItemLabel>
-                    </DropdownMenu.Item>
-                  </DropdownMenu.Content>
-                </DropdownMenu.Portal>
-              </DropdownMenu>
-            </div>
-          </Show>
-          <Show when={canMoveToWorktree(hasChat)}>
-            <>
-              <Tooltip value={moveTooltip()} placement="top">
-                <Button
-                  variant="ghost"
-                  size="small"
-                  class="session-move-action"
-                  aria-disabled={transferring()}
-                  onClick={moveToWorktree}
-                  aria-label={language.t("sidebar.session.moveToWorktree")}
-                >
-                  <Show when={transferring()} fallback={<Icon name="branch" size="small" />}>
-                    <Spinner class="chat-spinner-small" />
-                  </Show>
-                  <span class="session-move-label">
-                    {transferring() ? transferDetail() : language.t("sidebar.session.moveToWorktree")}
-                  </span>
-                </Button>
-              </Tooltip>
-            </>
-          </Show>
-          {todos}
-          {control()}
-        </div>
-      </div>
-    </Show>
-  )
 
   // Sibling-aware avatar colors for every subagent spawned by this session.
   const siblings = createMemo(() => (id() ? taskChildren(session.getSessionToolParts(id()!)) : []))
@@ -479,7 +276,13 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           }}
         >
           <Show when={isSidebar() && !props.readonly && tabs && showTabStrip(tabs.ids())}>
-            <SessionTabStrip />
+            <SessionTabStrip
+              onMoveToWorktree={
+                props.continueInWorktree === true && server.gitInstalled()
+                  ? (sessionId) => vscode.postMessage({ type: "continueInWorktree", sessionId })
+                  : undefined
+              }
+            />
           </Show>
           <TaskHeader />
           <div class="chat-messages-wrapper">
@@ -490,7 +293,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                 onShowHistory={props.onShowHistory}
                 onForkMessage={props.onForkMessage}
                 onEditMessage={edit}
-                onScrollToBottomReady={setScroll}
                 queuedDisabled={editing()?.sessionID === id() && !!editing()}
                 editDisabled={!editable() || !!editing()}
                 questions={standaloneQuestions}
@@ -519,18 +321,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                   />
                 )}
               </Show>
-              <SessionDock
-                blocked={dockBlocked()}
-                hasActions={() => !props.readonly && (hasActions(hasMessages()) || !!goal())}
-                actions={(control, agents, todos) => renderActions(hasMessages(), control, agents, todos)}
-                onScrollToBottom={scrollToBottom}
-                readonly={props.readonly}
-                projectId={props.projectId}
-              />
               <Show when={ownsPrompts() && !props.readonly}>
-                <Show when={!props.onContextUsage && usage()}>
-                  <ContextUsagePanel onClose={() => setUsage(false)} />
-                </Show>
                 <SessionChanges
                   files={review.files().map((file) => ({
                     file: file.file,
@@ -551,6 +342,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                   onRetry={review.refresh}
                 />
                 <PromptInput
+                  leadingAction={<SwarmBoardButton state={board} active={true} />}
+                  contextUsagePanel={<ContextUsagePanel onClose={toggleUsage} />}
                   contextUsage={props.onContextUsage ? props.contextUsage?.() : usage()}
                   onContextUsage={toggleUsage}
                   blocked={blocked}

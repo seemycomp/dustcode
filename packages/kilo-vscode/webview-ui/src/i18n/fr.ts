@@ -134,6 +134,9 @@ export const dict = {
   "revert.error.body":
     "Le dépôt est peut-être en cours d'utilisation. Réessayez ou consultez les journaux Dustcode pour plus de détails.",
   "command.session.compact": "Compacter la session",
+  "command.session.compact.confirm": "Compacter cette session ?",
+  "command.session.compact.no": "Non",
+  "command.session.compact.yes": "Oui",
   "command.session.export": "Exporter la transcription de la session",
 
   "dialog.provider.search.placeholder": "Rechercher des fournisseurs",

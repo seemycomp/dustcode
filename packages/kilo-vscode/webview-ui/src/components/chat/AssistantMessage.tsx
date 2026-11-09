@@ -270,7 +270,19 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
   const parts = createMemo(() => {
     const stored = props.parts ?? data.store.part?.[props.message.id]
     if (!stored) return []
-    return (stored as SDKPart[]).filter((part) => isRenderable(part, props.message))
+    return (stored as SDKPart[]).filter((part) => {
+      // Completed writes are summarized with their user prompt, not repeated
+      // as a second todo card in the assistant output. Keep failures visible.
+      if (
+        part.type === "tool" &&
+        part.tool === "todowrite" &&
+        part.state.status === "completed" &&
+        Array.isArray(part.state.metadata?.todos ?? part.state.input.todos) &&
+        session.messages().some((message) => message.role === "user" && message.id === props.message.parentID)
+      )
+        return false
+      return isRenderable(part, props.message)
+    })
   })
   // Pull the weighted generation rate across the turn's step-finish parts
   // (output + reasoning tokens over active generation duration) so the badge

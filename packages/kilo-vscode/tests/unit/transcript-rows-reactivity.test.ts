@@ -22,9 +22,9 @@ const SCRIPT = `
   stash.put("u1", [{ id: "context", messageID: "u1", type: "text", text: "Attachment context", synthetic: true }])
   const [store, setStore] = createStore({ parts: {} })
   const get = (id) => stash.read(id, store.parts)
-  const rows = createMemo(() => transcriptRows(turns, get, { queued: new Set(["u1"]) }))
+  const rows = createMemo(() => transcriptRows(turns, get))
 
-  if (rows().length !== 0) fail("synthetic context created a queued row")
+  if (rows().length !== 0) fail("synthetic context created a user row")
   stash.remove("u1")
   setStore("parts", "u1", [{ id: "prompt", messageID: "u1", type: "text", text: "Visible prompt" }])
   if (rows().length !== 1 || rows()[0]?.type !== "user") fail("canonical part did not invalidate rows")

@@ -29,6 +29,10 @@ export const SortableTab: Component<{
   onCloseOthers: () => void
   onCloseToRight?: () => void
   onFork?: () => void
+  showNewSession?: boolean
+  showMoveToWorktree?: boolean
+  onNewSession?: () => void
+  onMoveToWorktree?: () => void
   pinned?: boolean
   onTogglePin?: () => void
   role?: "tab"
@@ -41,6 +45,10 @@ export const SortableTab: Component<{
     <SortableTabContainer id={props.tab().id}>
       <SessionTabMenu
         showFork
+        showNewSession={props.showNewSession}
+        showMoveToWorktree={props.showMoveToWorktree}
+        onNewSession={props.onNewSession}
+        onMoveToWorktree={props.onMoveToWorktree}
         onFork={props.onFork}
         onClose={props.onClose}
         onCloseOthers={props.onCloseOthers}

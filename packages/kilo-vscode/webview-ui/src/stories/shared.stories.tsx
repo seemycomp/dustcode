@@ -192,6 +192,38 @@ export const ModelSelectorMostUsed: Story = {
   },
 }
 
+export const ModelSelectorRecovery: Story = {
+  render: () => {
+    const [recovered, recover] = createSignal(false)
+    const [value, select] = createSignal<ModelSelection | null>({ providerID: "nvidia", modelID: "nova" })
+    const session = {
+      ...mockSessionValue(),
+      modelUsageHistory: () => ({
+        "kilo/bravo": { count: 7, lastUsed: 10 },
+        "nvidia/nova": { count: 9, lastUsed: 20 },
+      }),
+    }
+    return (
+      <StoryProviders>
+        <SessionContext.Provider value={session as any}>
+          <ModelSelectorBase
+            value={value()}
+            models={ACCESSIBLE_MODELS.filter((model) => recovered() || model.providerID !== "nvidia")}
+            label="Recovery model"
+            allowClear
+            placement="bottom-start"
+            onSelect={(providerID, modelID) => select({ providerID, modelID })}
+          />
+          <output data-testid="model-selector-value">{value()?.modelID}</output>
+          <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => recover(true)}>
+            Recover provider
+          </button>
+        </SessionContext.Provider>
+      </StoryProviders>
+    )
+  },
+}
+
 const LARGE_MODELS: EnrichedModel[] = Array.from({ length: 600 }, (_, i) => {
   const id = String(i).padStart(3, "0")
   const provider = `provider-${i % 12}`

@@ -130,6 +130,9 @@ export const dict = {
   "revert.disabled.agentBusy": "انتظر انتهاء الوكيل",
   "revert.error.body": "قد يكون المستودع قيد الاستخدام. أعد المحاولة أو راجع سجلات Dustcode للتفاصيل.",
   "command.session.compact": "ضغط الجلسة",
+  "command.session.compact.confirm": "هل تريد ضغط هذه الجلسة؟",
+  "command.session.compact.no": "لا",
+  "command.session.compact.yes": "نعم",
   "command.session.export": "تصدير سجل الجلسة",
 
   "dialog.provider.search.placeholder": "البحث عن موفرين",

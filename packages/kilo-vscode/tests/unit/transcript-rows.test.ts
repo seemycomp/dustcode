@@ -37,6 +37,7 @@ describe("transcriptRows", () => {
     const a3 = assistant("a3", "u2")
     const parts = {
       u1: [part("up1", "u1")],
+      u2: [part("up2", "u2")],
       a1: Array.from({ length: 10 }, (_, i) => part(`p${i}`, "a1")),
       a2: [part("p10", "a2")],
       a3: [part("p11", "a3")],
@@ -81,7 +82,7 @@ describe("transcriptRows", () => {
     expect(rows[0]).toMatchObject({ type: "assistant", turn: "u1", partial: true, queued: true, live: true })
   })
 
-  it("omits queued user rows without visible content", () => {
+  it("omits user rows without visible content in every lifecycle state", () => {
     const cases: Part[][] = [
       [],
       [{ ...part("context", "u1"), synthetic: true }],
@@ -90,61 +91,68 @@ describe("transcriptRows", () => {
       [{ id: "file", messageID: "u1", type: "file", mime: "text/plain", url: "data:,context" }],
     ]
 
-    for (const parts of cases) {
-      const rows = transcriptRows(messageTurns([user("u1")]), lookup({ u1: parts }), {
-        queued: new Set(["u1"]),
-      })
-
-      expect(rows).toEqual([])
+    for (const opts of [{}, { live: new Set(["u1"]) }, { queued: new Set(["u1"]) }]) {
+      for (const parts of cases) {
+        const rows = transcriptRows(messageTurns([user("u1")]), lookup({ u1: parts }), opts)
+        expect(rows).toEqual([])
+      }
     }
   })
 
-  it("shows a queued message when its visible text arrives after metadata and context", () => {
-    const turns = messageTurns([user("u1")])
-    const opts = { queued: new Set(["u1"]) }
-    const parts: Record<string, Part[]> = {}
-    const get = lookup(parts)
-    const empty = transcriptRows(turns, get, opts)
-    expect(empty).toEqual([])
-
-    parts.u1 = [{ ...part("context", "u1"), synthetic: true }]
-    const hidden = transcriptRows(turns, get, opts, empty)
-    expect(hidden).toEqual([])
-
-    parts.u1 = [...parts.u1, part("prompt", "u1")]
-    const ready = transcriptRows(turns, get, opts, hidden)
-    expect(ready).toHaveLength(1)
-    expect(ready[0]).toMatchObject({ type: "user", key: "u1:user", queued: true, parts: parts.u1 })
-    expect(turns[0]?.user.id).toBe("u1")
+  it("keeps scheduled wakeup notes visible even when their text is synthetic", () => {
+    const parts: Part[] = [{ ...part("note", "u1"), synthetic: true, metadata: { wakeup: true } }]
+    const rows = transcriptRows(messageTurns([user("u1")]), lookup({ u1: parts }))
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ type: "user", parts })
   })
 
-  it("keeps queued image and PDF attachments visible without prompt text", () => {
-    for (const mime of ["image/png", "application/pdf"]) {
-      const parts: Part[] = [
-        { ...part("context", "u1"), synthetic: true },
-        { id: "file", messageID: "u1", type: "file", mime, url: "data:,attachment" },
-      ]
-      const rows = transcriptRows(messageTurns([user("u1")]), lookup({ u1: parts }), {
-        queued: new Set(["u1"]),
-      })
+  for (const state of ["queued", "live", "completed"] as const) {
+    it(`shows a ${state} message when its visible text arrives after metadata and context`, () => {
+      const turns = messageTurns([user("u1")])
+      const opts = state === "completed" ? {} : { [state]: new Set(["u1"]) }
+      const parts: Record<string, Part[]> = {}
+      const get = lookup(parts)
+      const empty = transcriptRows(turns, get, opts)
+      expect(empty).toEqual([])
 
-      expect(rows).toHaveLength(1)
-      expect(rows[0]).toMatchObject({ type: "user", queued: true, parts })
-    }
-  })
+      parts.u1 = [{ ...part("context", "u1"), synthetic: true }]
+      const hidden = transcriptRows(turns, get, opts, empty)
+      expect(hidden).toEqual([])
 
-  it("preserves assistant, diff, and error rows when an internal queued user row is hidden", () => {
-    const u1 = user("u1", { summary: { diffs: [{ file: "a.ts" }] } })
-    const a1 = assistant("a1", "u1", { error: { name: "ProviderError" } })
-    const rows = transcriptRows(
-      messageTurns([u1, a1]),
-      lookup({ u1: [{ ...part("context", "u1"), synthetic: true }], a1: [part("reply", "a1")] }),
-      { queued: new Set(["u1"]) },
-    )
+      parts.u1 = [...parts.u1, part("prompt", "u1")]
+      const ready = transcriptRows(turns, get, opts, hidden)
+      expect(ready).toHaveLength(1)
+      expect(ready[0]).toMatchObject({ type: "user", key: "u1:user", queued: state === "queued", parts: parts.u1 })
+      expect(turns[0]?.user.id).toBe("u1")
+    })
 
-    expect(rows.map((row) => `${row.turn}:${row.type}`)).toEqual(["u1:assistant", "u1:diff", "u1:error"])
-    expect(rows[0]?.message).toBe(a1)
-  })
+    it(`keeps ${state} image and PDF attachments visible without prompt text`, () => {
+      for (const mime of ["image/png", "application/pdf"]) {
+        const parts: Part[] = [
+          { ...part("context", "u1"), synthetic: true },
+          { id: "file", messageID: "u1", type: "file", mime, url: "data:,attachment" },
+        ]
+        const opts = state === "completed" ? {} : { [state]: new Set(["u1"]) }
+        const rows = transcriptRows(messageTurns([user("u1")]), lookup({ u1: parts }), opts)
+
+        expect(rows).toHaveLength(1)
+        expect(rows[0]).toMatchObject({ type: "user", queued: state === "queued", parts })
+      }
+    })
+
+    it(`preserves assistant, diff, and error rows when an internal ${state} user row is hidden`, () => {
+      const u1 = user("u1", { summary: { diffs: [{ file: "a.ts" }] } })
+      const a1 = assistant("a1", "u1", { error: { name: "ProviderError" } })
+      const rows = transcriptRows(
+        messageTurns([u1, a1]),
+        lookup({ u1: [{ ...part("context", "u1"), synthetic: true }], a1: [part("reply", "a1")] }),
+        state === "completed" ? {} : { [state]: new Set(["u1"]) },
+      )
+
+      expect(rows.map((row) => `${row.turn}:${row.type}`)).toEqual(["u1:assistant", "u1:diff", "u1:error"])
+      expect(rows[0]?.message).toBe(a1)
+    })
+  }
 
   it("does not show a blank queued row when only a later text part has content", () => {
     const rows = transcriptRows(
@@ -172,7 +180,10 @@ describe("transcriptRows", () => {
     const u1 = user("message_1")
     const a1 = assistant("message_2", "message_1", { error: { name: "ProviderError" } })
     const a2 = assistant("message_3", "message_1", { error: { name: "ProviderError" } })
-    const parts = { message_2: [part("part_1", "message_2"), part("part_2", "message_2")] }
+    const parts = {
+      message_1: [part("prompt", "message_1")],
+      message_2: [part("part_1", "message_2"), part("part_2", "message_2")],
+    }
     const rows = transcriptRows(messageTurns([u1, a1, a2], revert), lookup(parts), { revert })
 
     expect(rows.map((row) => row.type)).toEqual(["user", "assistant"])
@@ -197,9 +208,17 @@ describe("transcriptRows", () => {
     const u1 = user("u1")
     const a1 = assistant("a1", "u1")
     const parts = Array.from({ length: 8 }, (_, i) => part(`p${i}`, "a1"))
-    const current = transcriptRows(messageTurns([u1, a1]), lookup({ a1: parts }))
+    const prompt = part("prompt", "u1")
+    const current = transcriptRows(messageTurns([u1, a1]), lookup({ u1: [prompt], a1: parts }))
     const older = user("u0")
-    const next = transcriptRows(messageTurns([older, u1, a1]), lookup({ a1: [...parts, part("p8", "a1")] }))
+    const next = transcriptRows(
+      messageTurns([older, u1, a1]),
+      lookup({
+        u0: [part("older", "u0")],
+        u1: [prompt],
+        a1: [...parts, part("p8", "a1")],
+      }),
+    )
 
     expect(next.find((row) => row.type === "user" && row.turn === "u1")?.key).toBe(current[0]?.key)
     expect(next.find((row) => row.type === "assistant" && row.parts[0]?.id === "p0")?.key).toBe(current[1]?.key)
@@ -210,10 +229,11 @@ describe("transcriptRows", () => {
     const a1 = assistant("a1", "u1")
     const u2 = user("u2")
     const p1 = part("p1", "a1")
-    const first = transcriptRows(messageTurns([u1, a1, u2]), lookup({ a1: [p1] }))
+    const parts = { u0: [part("up0", "u0")], u1: [part("up1", "u1")], u2: [part("up2", "u2")], a1: [p1] }
+    const first = transcriptRows(messageTurns([u1, a1, u2]), lookup(parts))
     const u0 = user("u0")
     const a2 = assistant("a2", "u2")
-    const second = transcriptRows(messageTurns([u0, u1, a1, u2, a2]), lookup({ a1: [p1] }), {}, first)
+    const second = transcriptRows(messageTurns([u0, u1, a1, u2, a2]), lookup(parts), {}, first)
 
     expect(second[1]).toBe(first[0])
     expect(second[2]).toBe(first[1])
@@ -258,23 +278,29 @@ describe("transcriptRows", () => {
     const a2 = assistant("a2", "u1")
     const u3 = user("u3")
     const turns = messageTurns([u1, a1, u2, a2, u3], { messageID: "u3" })
-    const rows = transcriptRows(turns, (id) => (id === "u2" ? (u2.parts ?? []) : []))
+    const rows = transcriptRows(turns, lookup({ u1: [part("prompt", "u1")], u2: u2.parts ?? [] }))
 
-    expect(rows.map((row) => `${row.turn}:${row.message.id}`)).toEqual(["u1:u1", "u1:a1", "u2:u2", "u2:a2"])
+    expect(rows.map((row) => `${row.turn}:${row.message.id}`)).toEqual(["u1:u1", "u1:a1", "u2:a2"])
   })
 
   it("replaces only rows whose data or metadata changed", () => {
     const u1 = user("u1")
     const a1 = assistant("a1", "u1")
     const p1 = part("p1", "a1")
-    const first = transcriptRows(messageTurns([u1, a1]), lookup({ a1: [p1] }))
+    const prompt = part("prompt", "u1")
+    const first = transcriptRows(messageTurns([u1, a1]), lookup({ u1: [prompt], a1: [p1] }))
     const changed = { ...p1, text: "changed" }
-    const second = transcriptRows(messageTurns([u1, a1]), lookup({ a1: [changed] }), {}, first)
+    const second = transcriptRows(messageTurns([u1, a1]), lookup({ u1: [prompt], a1: [changed] }), {}, first)
 
     expect(second[0]).toBe(first[0])
     expect(second[1]).not.toBe(first[1])
 
-    const live = transcriptRows(messageTurns([u1, a1]), lookup({ a1: [changed] }), { live: new Set(["u1"]) }, second)
+    const live = transcriptRows(
+      messageTurns([u1, a1]),
+      lookup({ u1: [prompt], a1: [changed] }),
+      { live: new Set(["u1"]) },
+      second,
+    )
     expect(live[0]).not.toBe(second[0])
     expect(live[1]).not.toBe(second[1])
   })
@@ -353,9 +379,13 @@ describe("partitionRows", () => {
     const u2 = user("u2")
     const a2 = assistant("a2", "u2")
     const parts = Array.from({ length: 18 }, (_, i) => part(`p${i}`, "a2"))
-    const rows = transcriptRows(messageTurns([u1, a1, u2, a2]), lookup({ a1: [part("old", "a1")], a2: parts }), {
-      live: new Set(["u2"]),
-    })
+    const rows = transcriptRows(
+      messageTurns([u1, a1, u2, a2]),
+      lookup({ u1: [part("up1", "u1")], u2: [part("up2", "u2")], a1: [part("old", "a1")], a2: parts }),
+      {
+        live: new Set(["u2"]),
+      },
+    )
     const result = partitionRows(rows, new Set(["u2"]))
 
     // The whole live turn renders directly; only completed turns are virtualized.
@@ -374,9 +404,13 @@ describe("partitionRows", () => {
   it("keeps trailing diff and error rows after the direct assistant suffix", () => {
     const u1 = user("u1", { summary: { diffs: [{ file: "a.ts" }] } })
     const a1 = assistant("a1", "u1", { error: { name: "ProviderError" } })
-    const rows = transcriptRows(messageTurns([u1, a1]), lookup({ a1: [part("p1", "a1")] }), {
-      live: new Set(["u1"]),
-    })
+    const rows = transcriptRows(
+      messageTurns([u1, a1]),
+      lookup({ u1: [part("prompt", "u1")], a1: [part("p1", "a1")] }),
+      {
+        live: new Set(["u1"]),
+      },
+    )
     const result = partitionRows(rows, new Set(["u1"]))
 
     expect(result.virtual).toEqual([])
@@ -387,7 +421,7 @@ describe("partitionRows", () => {
     const u1 = user("u1")
     const a1 = assistant("a1", "u1")
     const u2 = user("u2")
-    const parts = { a1: [part("p1", "a1")], u2: [part("up2", "u2")] }
+    const parts = { u1: [part("up1", "u1")], a1: [part("p1", "a1")], u2: [part("up2", "u2")] }
     const first = transcriptRows(messageTurns([u1, a1, u2]), lookup(parts), {
       live: new Set(["u1"]),
       queued: new Set(["u2"]),
@@ -411,7 +445,10 @@ describe("partitionRows", () => {
     const u1 = user("u1")
     const a1 = assistant("a1", "u1")
     const u2 = user("u2")
-    const rows = transcriptRows(messageTurns([u1, a1, u2]), lookup({ a1: [part("p1", "a1")] }))
+    const rows = transcriptRows(
+      messageTurns([u1, a1, u2]),
+      lookup({ u1: [part("up1", "u1")], u2: [part("up2", "u2")], a1: [part("p1", "a1")] }),
+    )
     const result = partitionRows(rows, new Set(["u1"]))
 
     expect(result.virtual.map((row) => `${row.turn}:${row.type}`)).toEqual(["u1:user", "u1:assistant", "u2:user"])
@@ -422,7 +459,10 @@ describe("partitionRows", () => {
     const u1 = user("u1")
     const u2 = user("u2")
     const a2 = assistant("a2", "u2")
-    const rows = transcriptRows(messageTurns([u1, u2, a2]), lookup({ a2: [part("p1", "a2")] }))
+    const rows = transcriptRows(
+      messageTurns([u1, u2, a2]),
+      lookup({ u1: [part("up1", "u1")], u2: [part("up2", "u2")], a2: [part("p1", "a2")] }),
+    )
     const result = partitionRows(rows, new Set(["u1", "u2"]))
 
     expect(result.virtual.map((row) => row.turn)).toEqual(["u1"])
@@ -435,7 +475,7 @@ describe("partitionRows", () => {
     const u2 = user("u2")
     const rows = transcriptRows(
       messageTurns([u1, a1, u2]),
-      lookup({ a1: [part("p1", "a1")], u2: [part("up2", "u2")] }),
+      lookup({ u1: [part("up1", "u1")], a1: [part("p1", "a1")], u2: [part("up2", "u2")] }),
       {
         live: new Set(["u1"]),
         queued: new Set(["u2"]),

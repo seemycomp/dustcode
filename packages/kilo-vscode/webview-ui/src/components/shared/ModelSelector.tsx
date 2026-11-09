@@ -187,8 +187,13 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
   const [previewKey, setPreviewKey] = createSignal<string | null>(null)
   const [previewHeight, setPreviewHeight] = createSignal(500)
   // Per-group collapse state. Not persisted — resets every time the
-  // selector mounts so groups are always expanded on reopen.
+  // selector opens so only the active model's group is expanded on reopen.
   const [collapsed, setCollapsed] = createSignal<Set<string>>(new Set())
+  let pending: string | null = null
+  let epoch = 0
+  let revision = 0
+  let disposed = false
+  let known = new Set<string>()
   // Snapshot of the active model key captured when the popover opens.
   // Used to reorder favorites so the current model appears first — but only
   // based on the state at open-time, not reactively, to avoid list jumps
@@ -424,6 +429,7 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
   const isGroupOpen = (key: string) => !collapsed().has(key)
 
   function toggleGroup(key: string) {
+    interact()
     const target = groupKey(key)
     setSelectedKey(target)
     setBrowsing(true)
@@ -476,10 +482,13 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
   const defaultKey = () => nodes()[0]?.key ?? CLEAR_KEY
   const activeKey = (m?: EnrichedModel | null) => {
     if (!m) return props.allowClear ? CLEAR_KEY : defaultKey()
-    const key = modelKey(m.providerID, m.id)
     const favorite = favoriteKey(m)
-    if (!hasSearch() && favoriteKeys().has(key) && rowMap().has(favorite)) return favorite
-    return canonicalKey(m)
+    const canon = canonicalKey(m)
+    if (!hasSearch() && nodeMap().has(favorite)) return favorite
+    if (nodeMap().has(canon)) return canon
+    const group = groups().find((group) => group.rows.some((row) => row.key === favorite || row.key === canon))
+    const heading = group && groupKey(group.key)
+    return heading && nodeMap().has(heading) ? heading : defaultKey()
   }
   const chosen = (row: ModelRow) => {
     if (row.kind === "clear") return !props.value?.providerID
@@ -514,7 +523,9 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
     const saved = anchor()
     nodes()
     if (!saved) return
+    const token = epoch
     requestAnimationFrame(() => {
+      if (disposed || !open() || token !== epoch) return
       const handle = virtualizer()
       const idx = nodeIndex().get(saved.key)
       if (handle && idx !== undefined && saved.offset !== undefined) {
@@ -528,39 +539,31 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
     })
   })
 
-  // Reset selection when the search filter changes. Uses canonicalKey
-  // directly (not activeKey) to avoid a reactive dependency on favoriteKeys,
-  // which would cause star/unstar to reset selection mid-interaction.
-  // Falls back to defaultKey when the active model is filtered out.
+  // Track only query changes: catalog/personalization refreshes must preserve
+  // valid user focus. Resolve favorites inside untrack when clearing a query.
   createEffect(() => {
     if (!open()) return
     const query = search()
-    const list = filtered()
     const searchChanged = query !== previousSearch
     previousSearch = query
+    if (!searchChanged) return
+    if (query) interact()
     untrack(() => {
+      const list = filtered()
       const active = activeModel()
-      const canon = active ? canonicalKey(active) : null
       const match = list[0]
       const first = match ? canonicalKey(match) : null
-      const next =
-        hasSearch() && first
-          ? first
-          : canon && rowMap().has(canon)
-            ? canon
-            : first && rowMap().has(first)
-              ? first
-              : props.allowClear
-                ? CLEAR_KEY
-                : defaultKey()
+      const next = hasSearch() && first ? first : hasSearch() ? defaultKey() : activeKey(active)
       setSelectedKey(next)
-      setBrowsing(hasSearch() && (!!first || props.allowClear === true))
+      setBrowsing(nodeMap().has(next))
       setNavigating(false)
       setPreActiveKey(next)
       setPreviewKey(next)
       if (!open() || !searchChanged) return
       if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame)
+      const token = epoch
       scrollFrame = requestAnimationFrame(() => {
+        if (disposed || !open() || token !== epoch) return
         scrollFrame = undefined
         scrollRow(next, "nearest")
       })
@@ -568,36 +571,96 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
   })
 
   createEffect(() => {
-    if (open()) {
-      const active = activeModel()
-      const snap = active ? modelKey(active.providerID, active.id) : null
-      setOpenSnapshot(snap)
-      // Defer key resolution to next microtask so favoriteModels/groups/rows
-      // recompute with the snapshot before we try to resolve the key.
-      queueMicrotask(() => {
-        if (!open()) return
-        const next = activeKey(activeModel())
-        setSelectedKey(next ?? defaultKey())
-        setBrowsing(true)
-        setNavigating(false)
-        setPreActiveKey(next)
-        setPreviewKey(next)
-        requestAnimationFrame(() => {
-          if (!open()) return
-          searchRef?.focus()
-          scrollRow(next ?? CLEAR_KEY, "center")
-        })
-      })
-      return
-    }
-    setOpenSnapshot(null)
-    setBrowsing(false)
-    setNavigating(false)
-    setSearch("")
-    clearTimeout(previewTimer)
-    if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame)
-    scrollFrame = undefined
+    const shown = open()
+    untrack(() => {
+      epoch++
+      revision = 0
+      pending = null
+      known = new Set()
+      if (shown) {
+        const value = props.value
+        const snap = value?.providerID ? modelKey(value.providerID, value.modelID) : null
+        setOpenSnapshot(snap)
+        const group = groups().find((group) =>
+          group.rows.some((row) => row.model && modelKey(row.model.providerID, row.model.id) === snap),
+        )
+        known = new Set(groups().map((group) => group.key))
+        setCollapsed(
+          new Set(
+            groups()
+              .filter((item) => item !== group)
+              .map((item) => item.key),
+          ),
+        )
+        pending = group ? null : snap
+        restore(true)
+        return
+      }
+      setOpenSnapshot(null)
+      setCollapsed(new Set<string>())
+      setBrowsing(false)
+      setNavigating(false)
+      setSearch("")
+      previousSearch = undefined
+      setPreActiveKey(null)
+      setPreviewKey(null)
+      setAnchor(null)
+      clearTimeout(previewTimer)
+      if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame)
+      scrollFrame = undefined
+    })
   })
+
+  // Catalog recovery is separate from opening. New groups stay compact;
+  // only an untouched, pending opening may expand its recovered destination.
+  createEffect(() => {
+    if (!open() || hasSearch()) return
+    const list = groups()
+    untrack(() => {
+      const next = new Set(collapsed())
+      for (const group of list) {
+        if (!known.has(group.key)) next.add(group.key)
+      }
+      for (const group of list) known.add(group.key)
+      const group =
+        pending &&
+        list.find((group) =>
+          group.rows.some((row) => row.model && modelKey(row.model.providerID, row.model.id) === pending),
+        )
+      if (group) {
+        pending = null
+        next.delete(group.key)
+      }
+      setCollapsed(next)
+      if (group) restore(false)
+    })
+  })
+
+  function interact() {
+    pending = null
+    revision++
+  }
+
+  function restore(focus: boolean) {
+    const token = epoch
+    const intent = revision
+    queueMicrotask(() => {
+      if (disposed || !open() || token !== epoch || intent !== revision) return
+      const next = activeKey(activeModel())
+      if (!nodeMap().has(next)) return
+      setSelectedKey(next)
+      setBrowsing(true)
+      setNavigating(false)
+      setPreActiveKey(rowMap().get(next)?.model ? next : null)
+      setPreviewKey(rowMap().get(next)?.model ? next : null)
+      if (!focus) return
+      requestAnimationFrame(() => {
+        if (disposed || !open() || token !== epoch || intent !== revision) return
+        searchRef?.focus()
+        scrollRow(next, "center")
+      })
+    })
+  }
 
   // Register before the popover mounts so programmatic slash-command opens
   // always restore the prompt before the popover's own Escape handler runs.
@@ -625,6 +688,8 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
     })
   })
   onCleanup(() => {
+    disposed = true
+    epoch++
     clearTimeout(previewTimer)
     if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame)
   })
@@ -651,13 +716,18 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
   }
 
   function setRow(key: string) {
+    interact()
     setSelectedKey(key)
     setPreActiveKey(key)
   }
 
   function schedulePreview(key: string | null) {
     clearTimeout(previewTimer)
-    previewTimer = setTimeout(() => setPreviewKey(key), 200)
+    const token = epoch
+    previewTimer = setTimeout(() => {
+      if (disposed || !open() || token !== epoch) return
+      setPreviewKey(key && rowMap().get(key)?.model ? key : null)
+    }, 200)
   }
 
   function pointerMove(e: MouseEvent) {
@@ -670,6 +740,7 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
     pointerX = e.clientX
     pointerY = e.clientY
     if (!moved) return
+    interact()
     setPointer(true)
     setSelectedKey(key)
   }
@@ -683,6 +754,7 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
   }
 
   function activate(key: string) {
+    interact()
     setSelectedKey(key)
     setBrowsing(true)
     setNavigating(true)
@@ -741,6 +813,7 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
 
   function toggleFavorite(model: EnrichedModel, row: ModelRow) {
     if (!session) return
+    interact()
     const canon = canonicalKey(model)
     // When unfavoriting from the top duplicate, the favorite row will
     // disappear — anchor to the canonical provider row instead so the
@@ -752,11 +825,13 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
       offset: idx !== undefined ? virtualizer()?.getItemOffset(idx) : undefined,
       scroll: listRef?.scrollTop ?? 0,
     })
-    if (row.kind === "favorite") {
-      setRow(canon)
-      setPreviewKey(canon)
-    }
     session.toggleFavorite(model.providerID, model.id)
+    if (row.kind !== "favorite") return
+    const group = groups().find((group) => group.rows.some((row) => row.key === canon))
+    if (group) setCollapsed((prev) => new Set([...prev].filter((key) => key !== group.key)))
+    const next = nodeMap().has(canon) ? canon : activeKey(model)
+    setRow(next)
+    setPreviewKey(rowMap().get(next)?.model ? next : null)
   }
 
   function handleKeyDown(e: KeyboardEvent) {
@@ -804,7 +879,9 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
   }
 
   function scrollSelectedIntoView() {
+    const token = epoch
     requestAnimationFrame(() => {
+      if (disposed || !open() || token !== epoch) return
       scrollRow(preActiveKey() ?? selectedKey(), "nearest")
     })
   }
@@ -945,6 +1022,7 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
                     placeholder={language.t("dialog.model.search.placeholder")}
                     value={search()}
                     onInput={(e) => {
+                      interact()
                       setPointer(false)
                       setBrowsing(false)
                       setNavigating(false)

@@ -127,6 +127,9 @@ export const dict = {
   "revert.disabled.agentBusy": "等待 Agent 完成",
   "revert.error.body": "存放庫可能正在使用中。請重試，或查看 Dustcode 記錄以了解詳情。",
   "command.session.compact": "精簡工作階段",
+  "command.session.compact.confirm": "精簡此工作階段？",
+  "command.session.compact.no": "否",
+  "command.session.compact.yes": "是",
   "command.session.export": "匯出會話紀錄",
 
   "dialog.provider.search.placeholder": "搜尋供應商",

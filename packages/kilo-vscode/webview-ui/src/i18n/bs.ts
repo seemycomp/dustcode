@@ -133,6 +133,9 @@ export const dict = {
   "revert.disabled.agentBusy": "Sačekajte da agent završi",
   "revert.error.body": "Repozitorij je možda u upotrebi. Pokušajte ponovo ili pogledajte Dustcode zapise za detalje.",
   "command.session.compact": "Sažmi sesiju",
+  "command.session.compact.confirm": "Sažeti ovu sesiju?",
+  "command.session.compact.no": "Ne",
+  "command.session.compact.yes": "Da",
   "command.session.export": "Izvezi transkript sesije",
 
   "dialog.provider.search.placeholder": "Pretraži provajdere",

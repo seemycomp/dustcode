@@ -137,6 +137,9 @@ export const dict = {
   "revert.disabled.agentBusy": "에이전트가 완료될 때까지 기다리세요",
   "revert.error.body": "저장소가 사용 중일 수 있습니다. 다시 시도하거나 자세한 내용은 Dustcode 로그를 확인하세요.",
   "command.session.compact": "세션 압축",
+  "command.session.compact.confirm": "이 세션을 압축하시겠습니까?",
+  "command.session.compact.no": "아니요",
+  "command.session.compact.yes": "예",
   "command.session.export": "세션 기록 내보내기",
 
   "dialog.provider.search.placeholder": "공급자 검색",

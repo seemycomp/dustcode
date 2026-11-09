@@ -133,6 +133,9 @@ export const dict = {
   "revert.disabled.agentBusy": "Vent på at agenten er færdig",
   "revert.error.body": "Lageret er muligvis i brug. Prøv igen, eller se Dustcode-loggene for detaljer.",
   "command.session.compact": "Komprimér session",
+  "command.session.compact.confirm": "Komprimér denne session?",
+  "command.session.compact.no": "Nej",
+  "command.session.compact.yes": "Ja",
   "command.session.export": "Eksporter sessionsudskrift",
 
   "dialog.provider.search.placeholder": "Søg udbydere",

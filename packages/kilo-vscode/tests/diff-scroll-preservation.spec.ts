@@ -158,7 +158,7 @@ for (const mode of ["Unified", "Split"]) {
     await page.goto(`/iframe.html?id=agentmanager--full-screen-session-review&viewMode=story&globals=${GLOBALS}`)
     await disableAnimations(page)
     await page.getByText(mode, { exact: true }).click()
-    const diff = page.locator(".session-review-diff")
+    const diff = page.locator('[data-file-path=".dustcode/plans/create-test-files.md"] .session-review-diff')
     const row = diff.locator('[data-code] [data-line][data-line-type="change-addition"]').first()
     await row.hover()
     const toolbar = diff.locator(".session-review-hunk-actions")
@@ -182,6 +182,87 @@ for (const mode of ["Unified", "Split"]) {
     await toolbar.getByRole("button", { name: "Undo", exact: true }).click({ timeout: 3000 })
     await expect(page.getByTestId("session-decision")).toHaveText("reject:.dustcode/plans/create-test-files.md:added")
   })
+
+  for (const width of [1000, 420]) {
+    for (const dir of ["ltr", "rtl"]) {
+      for (const side of mode === "Split" ? [0, 1] : [0]) {
+        test(`keeps session review line numbers compact with gap controls in ${mode} at ${width}px ${dir} side ${side}`, async ({
+          page,
+        }) => {
+          await page.setViewportSize({ width, height: 900 })
+          await page.goto(`/iframe.html?id=agentmanager--full-screen-session-review&viewMode=story&globals=${GLOBALS}`)
+          await disableAnimations(page)
+          await page.getByText(mode, { exact: true }).click()
+          const diff = page.locator('[data-file-path="src/example.txt"] .session-review-diff')
+          await expect(diff).toBeVisible()
+          await page.evaluate((dir) => {
+            document.documentElement.dir = dir
+          }, dir)
+          await expect(page.locator("html")).toHaveAttribute("dir", dir)
+          const gap = diff.locator('.session-review-gap[data-gap="1"]').nth(side)
+          await expect(gap).toBeVisible()
+          const gutters = diff.locator("[data-gutter]")
+          await expect.poll(() => gutters.count()).toBeGreaterThan(0)
+          for (const gutter of await gutters.all()) {
+            const bounds = (await gutter.boundingBox())!
+            if (width === 1000) expect(bounds.width).toBeGreaterThan(24)
+            expect(bounds.width).toBeLessThan(80)
+          }
+          const buttons = gap.getByRole("button")
+          await expect(buttons).toHaveCount(2)
+          for (const button of await buttons.all()) {
+            await expect(button).toBeVisible()
+            const bounds = (await button.boundingBox())!
+            const pane = (await diff.boundingBox())!
+            expect(bounds.x).toBeGreaterThanOrEqual(Math.max(0, pane.x) - 1)
+            expect(bounds.x + bounds.width).toBeLessThanOrEqual(Math.min(width, pane.x + pane.width) + 1)
+            const column = await gap.evaluate((el) => {
+              const slot = el.closest<HTMLElement>("[slot]")?.assignedSlot
+              return slot?.getBoundingClientRect().toJSON() as { x: number; width: number } | undefined
+            })
+            expect(column).toBeDefined()
+            expect(bounds.x).toBeGreaterThanOrEqual(column!.x - 1)
+            expect(bounds.x + bounds.width).toBeLessThanOrEqual(column!.x + column!.width + 1)
+          }
+          const scroll = await diff.evaluate((el) => {
+            const pane = el.closest(".am-review-diff")
+            return { window: window.scrollY, pane: pane?.scrollTop ?? 0 }
+          })
+          await gap.getByRole("button", { name: "Show 20 more lines" }).click()
+          await expect(
+            diff
+              .locator("[data-code] [data-line]")
+              .filter({ hasText: /^line 99\b/ })
+              .first(),
+          ).toBeVisible()
+          await gap.getByRole("button", { name: "Expand All" }).click()
+          await expect(
+            diff
+              .locator("[data-code] [data-line]")
+              .filter({ hasText: /^line 80\b/ })
+              .first(),
+          ).toBeVisible()
+          for (const gutter of await gutters.all()) {
+            expect((await gutter.boundingBox())!.width).toBeLessThan(80)
+          }
+          expect(
+            await diff.evaluate((el) => ({
+              window: window.scrollY,
+              pane: el.closest(".am-review-diff")?.scrollTop ?? 0,
+            })),
+          ).toEqual(scroll)
+          const row = diff.locator('[data-code] [data-line][data-line-type="change-addition"]').first()
+          await row.hover()
+          const actions = diff.locator(".session-review-hunk-actions")
+          await actions.getByRole("button", { name: "Keep", exact: true }).click()
+          await expect(page.getByTestId("session-decision")).toContainText("accept:src/example.txt")
+          await row.hover()
+          await actions.getByRole("button", { name: "Undo", exact: true }).click()
+          await expect(page.getByTestId("session-decision")).toContainText("reject:src/example.txt")
+        })
+      }
+    }
+  }
 }
 
 test("preserves diff scroll position while an agent edit refreshes a file", async ({ page }) => {

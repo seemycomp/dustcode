@@ -33,6 +33,7 @@ export const ContextUsagePanel: Component<{ onClose: () => void }> = (props) => 
           icon="dash"
           variant="ghost"
           size="small"
+          data-autofocus
           aria-label={language.t("context.usage.hide")}
           onClick={props.onClose}
         />

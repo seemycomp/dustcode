@@ -32,6 +32,11 @@ test("model selector exposes combobox relationships and active option movement",
   await expect(page.getByRole("button", { name: "Add to favorites: Alpha" })).toBeVisible()
   await expect(page.locator(".model-selector-group-label").nth(0)).toContainText("Auto Models")
   await expect(page.locator(".model-selector-group-label").nth(1)).toContainText("Recommended")
+  await expect(page.getByRole("treeitem", { name: "Kilo", exact: true })).toHaveAttribute("aria-expanded", "true")
+  for (const name of ["Auto Models", "Recommended", "NVIDIA"]) {
+    await expect(page.getByRole("treeitem", { name, exact: true })).toHaveAttribute("aria-expanded", "false")
+  }
+  await page.getByRole("treeitem", { name: "Auto Models", exact: true }).click()
   const auto = page.getByRole("treeitem", { name: /Kilo Auto Efficient/ })
   await expect(auto).toBeVisible()
   await expect(auto.locator(".model-selector-auto-icon")).toHaveAttribute(
@@ -49,7 +54,11 @@ test("model selector exposes combobox relationships and active option movement",
     await legacy.getAttribute("id"),
   )
   expect(legacyAfterKilo).toBe(true)
+  await page.getByRole("treeitem", { name: "Recommended", exact: true }).click()
   await expect(page.getByRole("treeitem", { name: "Omega" })).toBeVisible()
+  await page.getByRole("treeitem", { name: "Recommended", exact: true }).click()
+  await page.getByRole("treeitem", { name: "Auto Models", exact: true }).click()
+  await alpha.click()
 
   await combobox.press("ArrowDown")
   await expect(combobox).toBeFocused()
@@ -81,6 +90,7 @@ test("auto efficient details show server description and model choices", async (
   await load(page, "shared--model-selector-accessible")
 
   await page.getByRole("button", { name: "Review model: Alpha" }).click()
+  await page.getByRole("treeitem", { name: "Auto Models", exact: true }).click()
   await page.getByRole("treeitem", { name: /Kilo Auto Efficient/ }).click()
 
   const preview = page.locator(".model-selector-preview")
@@ -97,6 +107,7 @@ test("auto frontier details show model choices when routes are present", async (
   await load(page, "shared--model-selector-accessible")
 
   await page.getByRole("button", { name: "Review model: Alpha" }).click()
+  await page.getByRole("treeitem", { name: "Auto Models", exact: true }).click()
   await page.getByRole("treeitem", { name: /Kilo Auto Frontier/ }).click()
 
   const preview = page.locator(".model-selector-preview")
@@ -206,10 +217,42 @@ test("selected favorite remains selected when its duplicate group is collapsed",
   await expect(alpha.first()).toHaveAttribute("aria-selected", "true")
   await expect.poll(() => favorites.evaluate((el) => getComputedStyle(el).borderTopStyle)).toBe("solid")
 
+  await expect(favorites).toHaveAttribute("aria-expanded", "true")
+  const kilo = page.getByRole("treeitem", { name: "Kilo", exact: true })
+  await expect(kilo).toHaveAttribute("aria-expanded", "false")
+  await kilo.click()
+  await expect(alpha).toHaveCount(2)
   await favorites.click()
   await expect(alpha).toHaveCount(1)
   await expect(alpha).toHaveAttribute("aria-selected", "true")
   await expect(combobox).toHaveAttribute("aria-activedescendant", await favorites.getAttribute("id"))
+})
+
+test("clearing search confirms the existing favorite and collapsing it keeps a visible descendant", async ({
+  page,
+}) => {
+  await load(page, "shared--model-selector-selected-favorite")
+  const trigger = page.getByRole("button", { name: "Review model: Alpha" })
+  await trigger.click()
+  const combobox = page.getByRole("combobox")
+  await combobox.fill("bravo")
+  await expect(page.locator(".model-selector-preview")).toContainText("Bravo")
+  await combobox.fill("")
+  const alpha = page.getByRole("treeitem", { name: "Alpha" })
+  await expect(combobox).toHaveAttribute("aria-activedescendant", await alpha.getAttribute("id"))
+  await expect(page.locator(".model-selector-preview")).toContainText("Alpha")
+  await combobox.press("Enter")
+  await expect(page.getByTestId("model-selector-value")).toHaveText("alpha")
+  await expect(trigger).toBeFocused()
+  await trigger.click()
+  const favorites = page.getByRole("treeitem", { name: "Favorites", exact: true })
+  await favorites.click()
+  await expect(alpha).toHaveCount(0)
+  await expect(combobox).toHaveAttribute("aria-activedescendant", await favorites.getAttribute("id"))
+  await combobox.press("Enter")
+  await expect(alpha).toBeVisible()
+  await combobox.press("Escape")
+  await expect(trigger).toBeFocused()
 })
 
 test("large catalogs keep the rendered tree bounded and navigate to distant models", async ({ page }) => {
@@ -241,6 +284,33 @@ test("large catalogs keep the rendered tree bounded and navigate to distant mode
   await expect(last).toBeVisible()
   await expect(combobox).toHaveAttribute("aria-activedescendant", await last.getAttribute("id"))
 })
+
+for (const navigation of [false, true]) {
+  test(`provider recovery preserves visible focus (navigation=${navigation})`, async ({ page }) => {
+    await load(page, "shared--model-selector-recovery")
+    await page.getByRole("button", { name: /^Recovery model:/ }).click()
+    const combobox = page.getByRole("combobox")
+    await expect(combobox).toBeFocused()
+    if (navigation) await combobox.press("ArrowDown")
+    const previous = await combobox.getAttribute("aria-activedescendant")
+    // Trigger a reactive catalog update without moving focus or dismissing the popup.
+    await page.getByRole("button", { name: "Recover provider" }).evaluate((el) => el.click())
+    await expect(combobox).toBeFocused()
+    if (navigation) await expect(combobox).toHaveAttribute("aria-activedescendant", previous!)
+    if (!navigation) {
+      const nova = page.getByRole("treeitem", { name: "Nova NVIDIA", exact: true })
+      await expect(nova).toBeVisible()
+      await expect(combobox).toHaveAttribute("aria-activedescendant", await nova.getAttribute("id"))
+      await expect(page.locator(".model-selector-preview")).toContainText("Nova")
+      await combobox.press("Enter")
+      await expect(page.getByTestId("model-selector-value")).toHaveText("nova")
+    }
+    if (navigation) {
+      const id = await combobox.getAttribute("aria-activedescendant")
+      await expect(page.locator(`[id="${id}"]`)).toBeVisible()
+    }
+  })
+}
 
 test("Enter selects the active option and Escape restores selector focus", async ({ page }) => {
   await load(page, "shared--model-selector-accessible")

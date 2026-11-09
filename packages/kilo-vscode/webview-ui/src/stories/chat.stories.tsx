@@ -15,6 +15,9 @@ import { Button } from "@kilocode/kilo-ui/button"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { ChatView } from "../components/chat/ChatView"
 import { SessionDock } from "../components/chat/SessionDock"
+import { SwarmBoardButton, useSwarmBoard } from "../components/chat/SwarmBoard"
+import { PromptInput } from "../components/chat/PromptInput"
+import { ContextUsagePanel } from "../components/chat/ContextUsagePanel"
 import { ErrorDisplay } from "../components/chat/ErrorDisplay"
 import { AgentStack, useAgentStack } from "../components/chat/AgentStack"
 import { pollBackgroundJobs } from "../components/chat/background-jobs"
@@ -1788,6 +1791,26 @@ const swarm: SessionBoard = {
   hasMore: false,
 }
 
+function SwarmToolbar(props: { projectId: string; readonly: boolean }) {
+  const [usage, setUsage] = createSignal(false)
+  const board = useSwarmBoard({
+    get projectId() {
+      return props.projectId
+    },
+    get readonly() {
+      return props.readonly
+    },
+  })
+  return (
+    <PromptInput
+      leadingAction={<SwarmBoardButton state={board} active={!props.readonly} />}
+      contextUsage={usage()}
+      onContextUsage={() => setUsage((value) => !value)}
+      contextUsagePanel={<ContextUsagePanel onClose={() => setUsage(false)} />}
+    />
+  )
+}
+
 function SwarmScene(props: { board?: SessionBoard; open?: boolean }) {
   const api = getVSCodeAPI()
   const [scene, setScene] = createSignal({
@@ -1828,7 +1851,7 @@ function SwarmScene(props: { board?: SessionBoard; open?: boolean }) {
     if (!props.open) return
     const observer = new MutationObserver(() => {
       const button = document.querySelector<HTMLButtonElement>(
-        '.session-dock-state[data-active] [data-component="board-trigger"]',
+        '.prompt-session-controls [data-component="board-trigger"]',
       )
       if (!button) return
       observer.disconnect()
@@ -1855,21 +1878,7 @@ function SwarmScene(props: { board?: SessionBoard; open?: boolean }) {
     <SessionContext.Provider value={session as unknown as SessionContextValue}>
       <WorktreeModeProvider>
         <div class="chat-input" style={{ width: "420px", "padding-top": "360px" }}>
-          <SessionDock
-            readonly={scene().readonly}
-            projectId={scene().projectId}
-            hasActions={() => true}
-            actions={(_, agents) => (
-              <div class="new-task-button-wrapper">
-                <div class="session-actions-row">
-                  {agents}
-                  <Button variant="secondary" size="small" class="session-new-button">
-                    New Session
-                  </Button>
-                </div>
-              </div>
-            )}
-          />
+          <SwarmToolbar readonly={scene().readonly} projectId={scene().projectId} />
         </div>
       </WorktreeModeProvider>
     </SessionContext.Provider>

@@ -24,6 +24,12 @@
   --prompt-gutter: max(var(--prompt-min-gutter), 2cqi);
 }
 
+/* Keep the transcript surface close to Cursor's light chat layout. */
+body.vscode-light .chat-view,
+body.vscode-high-contrast-light .chat-view {
+  background: #ffffff;
+}
+
 /* ============================================
    Sidebar Top Bar
    ============================================ */
@@ -96,10 +102,12 @@
   max-height: 45%;
   overflow: auto;
   overscroll-behavior: contain;
-  padding: 8px calc(var(--chat-gutter, 16px) + 4px);
-  border-bottom: 1px solid var(--border-weak-base, var(--vscode-widget-border));
+  padding: 8px calc(var(--chat-gutter, 16px) + 4px) 0;
   background: var(--background-base, var(--vscode-editor-background));
-  box-shadow: 0 4px 8px rgb(0 0 0 / 10%);
+}
+
+.message-list-sticky-prompt:has(.turn-todos) {
+  overflow: visible;
 }
 
 /* Rows that overflow Virtua's container must not change the scroll height

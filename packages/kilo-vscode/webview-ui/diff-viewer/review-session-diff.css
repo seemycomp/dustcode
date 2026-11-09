@@ -90,12 +90,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 4px;
   height: 24px;
   min-height: 0;
   box-sizing: border-box;
   white-space: normal;
-  padding-inline: 12px;
+  padding-inline: 4px;
   margin-block: 0;
   background: var(--background-stronger);
   color: var(--text-weak);
@@ -106,6 +106,7 @@
   height: 24px;
   min-height: 0;
   padding-block: 0;
+  padding-inline: 4px;
 }
 
 .session-review-hunk-actions {

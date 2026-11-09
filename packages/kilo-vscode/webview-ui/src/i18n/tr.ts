@@ -133,6 +133,9 @@ export const dict = {
   "revert.disabled.agentBusy": "Ajanın bitmesini bekleyin",
   "revert.error.body": "Depo kullanımda olabilir. Tekrar deneyin veya ayrıntılar için Dustcode günlüklerine bakın.",
   "command.session.compact": "Oturumu sıkıştır",
+  "command.session.compact.confirm": "Bu oturum sıkıştırılsın mı?",
+  "command.session.compact.no": "Hayır",
+  "command.session.compact.yes": "Evet",
   "command.session.export": "Oturum dökümünü dışa aktar",
 
   "dialog.provider.search.placeholder": "Sağlayıcı ara",

@@ -33,7 +33,7 @@
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 4px 8px;
-  padding: 6px;
+  padding: 0;
 }
 
 .session-changes-toggle[data-component="button"] {

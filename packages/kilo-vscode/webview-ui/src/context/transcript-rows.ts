@@ -156,7 +156,7 @@ function attachTiming(rows: TranscriptAssistantRow[], copied: string | undefined
 }
 
 function content(parts: Part[]) {
-  const text = parts.find((part) => part.type === "text" && !part.synthetic)
+  const text = parts.find((part) => part.type === "text" && (!part.synthetic || part.metadata?.wakeup === true))
   if (text?.type === "text" && text.text.trim()) return true
   return parts.some(
     (part) => part.type === "file" && (part.mime.startsWith("image/") || part.mime === "application/pdf"),
@@ -200,7 +200,7 @@ export function transcriptRows(
     const copied = copy(turn.assistant, parts, meta.live)
     const user = turn.partial ? [] : parts(turn.user.id)
 
-    if (!turn.partial && (!meta.queued || content(user))) {
+    if (!turn.partial && content(user)) {
       rows.push({
         ...meta,
         type: "user",

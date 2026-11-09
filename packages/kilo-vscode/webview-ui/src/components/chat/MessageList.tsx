@@ -596,6 +596,16 @@ export const MessageList: Component<MessageListProps> = (props) => {
   // Prompt rail: one tick per user prompt, positioned to the left of the
   // readable lane, opening a card of prompt/answer previews on hover.
   const items = createMemo(() => promptItems(rows()))
+  // Compaction and internal continuations have no displayed user prompt.
+  const anchors = createMemo(() => {
+    const result = new Map<string, string>()
+    let turn: string | undefined
+    for (const row of rows()) {
+      if (row.type === "user" && !row.queued) turn = row.turn
+      if (turn) result.set(row.turn, turn)
+    }
+    return result
+  })
   // Until the transcript is measured there is no height to cap against, and
   // rendering every prompt would spill ticks past the rail on long sessions.
   const entries = createMemo(() => railEntries(items(), capacity(height()), session.hasOlderMessages()))
@@ -692,12 +702,15 @@ export const MessageList: Component<MessageListProps> = (props) => {
         ? partition().virtual.at(handle.findItemIndex(offset))
         : undefined
     if (!row || row.message.sessionID !== sid) return setVisible(undefined)
-    const item = items().find((item) => item.turn === row.turn && !item.queued)
+    const turn = anchors().get(row.turn)
+    const item = items().find((item) => item.turn === turn && !item.queued)
     const original = item ? el.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(item.key)}"]`) : undefined
     const hidden = original ? original.getBoundingClientRect().bottom <= top + 1 : row.type !== "user"
     const key = hidden ? item?.key : undefined
     setVisible((prev) =>
-      prev?.sid === sid && prev.turn === row.turn && prev.sticky === key ? prev : { sid, turn: row.turn, sticky: key },
+      prev?.sid === sid && prev.turn === turn && prev.sticky === key
+        ? prev
+        : { sid, turn: turn ?? row.turn, sticky: key },
     )
   }
   let activeFrame: number | undefined

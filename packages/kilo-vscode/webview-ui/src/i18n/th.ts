@@ -133,6 +133,9 @@ export const dict = {
   "revert.disabled.agentBusy": "รอให้เอเจนต์ทำงานเสร็จ",
   "revert.error.body": "ที่เก็บข้อมูลอาจกำลังถูกใช้งาน ลองอีกครั้ง หรือดูรายละเอียดในบันทึกของ Dustcode",
   "command.session.compact": "บีบอัดเซสชัน",
+  "command.session.compact.confirm": "บีบอัดเซสชันนี้หรือไม่?",
+  "command.session.compact.no": "ไม่",
+  "command.session.compact.yes": "ใช่",
   "command.session.export": "ส่งออกบันทึกเซสชัน",
 
   "dialog.provider.search.placeholder": "ค้นหาผู้ให้บริการ",

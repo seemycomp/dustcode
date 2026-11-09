@@ -135,6 +135,9 @@ export const dict = {
   "revert.error.body":
     "リポジトリが使用中の可能性があります。もう一度お試しいただくか、詳細は Dustcode のログを確認してください。",
   "command.session.compact": "セッションを圧縮",
+  "command.session.compact.confirm": "このセッションを圧縮しますか？",
+  "command.session.compact.no": "いいえ",
+  "command.session.compact.yes": "はい",
   "command.session.export": "セッション記録をエクスポート",
 
   "dialog.provider.search.placeholder": "プロバイダーを検索",

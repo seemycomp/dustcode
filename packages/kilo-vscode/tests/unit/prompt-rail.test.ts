@@ -170,9 +170,10 @@ describe("promptItems", () => {
     })
   })
 
-  it("leaves both empty when neither prompt nor answer has text", () => {
+  it("leaves both previews empty for an unanswered image-only prompt", () => {
     const u1 = user("u1")
-    const rows = transcriptRows(messageTurns([u1]), lookup({}))
+    const parts: Part[] = [{ id: "image", messageID: "u1", type: "file", mime: "image/png", url: "data:," }]
+    const rows = transcriptRows(messageTurns([u1]), lookup({ u1: parts }))
 
     expect(promptItems(rows)[0]).toMatchObject({ prompt: "", answer: "" })
   })

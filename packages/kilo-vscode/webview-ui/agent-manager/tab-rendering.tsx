@@ -20,6 +20,7 @@ import { closeOthers } from "./close-others"
 import { closableRightOf, closeToRight } from "./close-to-right"
 import type { SessionInfo } from "../src/types/messages"
 import type { Activity } from "../src/utils/session-activity"
+import { running } from "../src/utils/session-activity"
 import { parseBindingTokens } from "../src/utils/keybind-tokens"
 
 interface FocusTabDeps {
@@ -90,7 +91,9 @@ export interface TabRenderDeps {
   selectSessionTab: (id: string, pending: boolean) => void
   sessionMiddleClick: (id: string, e: MouseEvent) => void
   sessionClose: (id: string) => void
-  sessionFork: (id: string) => void
+  sessionFork?: (id: string) => void
+  sessionNew?: () => void
+  sessionMove?: (id: string) => void
   isPinned: (id: string) => boolean
   togglePinned: (id: string) => void
   onTabKey: (id: string, event: KeyboardEvent) => void
@@ -177,6 +180,7 @@ function renderReviewTab(deps: TabRenderDeps): JSX.Element {
 function renderSessionTab(s: SessionInfo, deps: TabRenderDeps): JSX.Element {
   const pending = deps.isPending(s.id)
   const state = createMemo(() => deps.activityFor(s.id))
+  const actionable = () => !pending && !running(state()) && state() !== "waiting"
   const active = () =>
     !deps.terms.activeId() &&
     (pending ? s.id === deps.activePendingId() && !deps.currentSessionID() : s.id === deps.currentSessionID())
@@ -214,7 +218,23 @@ function renderSessionTab(s: SessionInfo, deps: TabRenderDeps): JSX.Element {
           ? () => closeToRight(s.id, deps)
           : undefined
       }
-      onFork={pending ? undefined : () => deps.sessionFork(s.id)}
+      showNewSession={!!deps.sessionNew}
+      onNewSession={() => deps.sessionNew?.()}
+      showMoveToWorktree={!!deps.sessionMove}
+      onMoveToWorktree={
+        actionable() && deps.sessionMove
+          ? () => {
+              if (actionable()) deps.sessionMove?.(s.id)
+            }
+          : undefined
+      }
+      onFork={
+        actionable() && deps.sessionFork
+          ? () => {
+              if (actionable()) deps.sessionFork?.(s.id)
+            }
+          : undefined
+      }
       pinned={deps.isPinned(s.id)}
       onTogglePin={pending ? undefined : () => deps.togglePinned(s.id)}
     />

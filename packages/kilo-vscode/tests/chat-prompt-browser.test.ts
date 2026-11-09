@@ -102,7 +102,12 @@ it("keeps prompts in the readable lane, clamps display, and pins live and virtua
       expect(thumbnail!.height).toBe(20)
       expect(Math.abs(bounds!.width + 26 - lane!.width)).toBeLessThanOrEqual(1)
       expect(Math.abs(thumbnail!.x - lane!.x)).toBeLessThanOrEqual(5)
-      const clamp = await bubble.evaluate((el) => {
+      const chrome = await sticky.evaluate((el) => {
+        const style = getComputedStyle(el)
+        return { padding: style.paddingBottom, border: style.borderBottomWidth, shadow: style.boxShadow }
+      })
+      expect(chrome).toEqual({ padding: "0px", border: "0px", shadow: "none" })
+      const clamp = await bubble.locator('[data-slot="user-message-content"]').evaluate((el) => {
         const style = getComputedStyle(el)
         return {
           whitespace: style.whiteSpace,
@@ -153,19 +158,98 @@ it("keeps prompts in the readable lane, clamps display, and pins live and virtua
         list.scrollTop += row.getBoundingClientRect().top - list.getBoundingClientRect().top
       })
       await check(sticky).toBeHidden()
+      const clipped = await user.locator('[data-slot="user-message-content"]').evaluate((el) => {
+        const style = getComputedStyle(el)
+        return {
+          height: el.clientHeight,
+          line: parseFloat(style.lineHeight),
+          padding: style.paddingBottom,
+          overflow: style.overflow,
+          clamp: style.webkitLineClamp,
+        }
+      })
+      expect(clipped.clamp).toBe("3")
+      expect(clipped.padding).toBe("0px")
+      expect(clipped.overflow).toBe("hidden")
+      expect(Math.abs(clipped.height - clipped.line * 3)).toBeLessThanOrEqual(1)
       expect(await list.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+
+      await page.goto(`${server.url}?internal`)
+      await check(list).toBeVisible()
+      for (const id of [30, 15]) {
+        await page.evaluate(
+          (id) => window.dispatchEvent(new CustomEvent("scrollToMessage", { detail: { id: `continuation-${id}` } })),
+          id,
+        )
+        const row = list.locator(`[data-message="continuation-${id}"]`).first()
+        await check(row).toBeAttached()
+        await row.evaluate((row) => {
+          const list = row.closest(".message-list")!
+          list.scrollTop += row.getBoundingClientRect().top - list.getBoundingClientRect().top + 16
+        })
+        await check(list.locator(`[data-message="internal-${id}"]`)).toHaveCount(0)
+        await check(sticky).toHaveAttribute("data-sticky-prompt", `user-${id}`)
+        await check(sticky).toContainText("Prompt line 1")
+      }
 
       await page.goto(`${server.url}?composer`)
       const input = page.locator("textarea.prompt-input")
       await check(input).toBeVisible()
+      const spacing = await input.evaluate((el) => {
+        const style = getComputedStyle(el)
+        const toolbar = el.closest(".prompt-input-container")!.querySelector(".prompt-input-hint")!
+        return {
+          height: el.clientHeight,
+          line: parseFloat(style.lineHeight),
+          padding: parseFloat(style.paddingTop) + parseFloat(style.paddingBottom),
+          gap: toolbar.getBoundingClientRect().top - el.getBoundingClientRect().bottom,
+        }
+      })
+      expect(Math.abs(spacing.height - spacing.line - spacing.padding)).toBeLessThanOrEqual(2)
+      expect(Math.abs(spacing.gap)).toBeLessThanOrEqual(1)
+      await expect(
+        page.locator(".session-changes-header").evaluate((el) => getComputedStyle(el).padding),
+      ).resolves.toBe("0px")
       await check(page.locator('[data-component="task-header"]')).toHaveCount(0)
       await check(page.getByRole("button", { name: "Context Usage", exact: true })).toHaveText("25,533")
+      const usage = page.getByRole("button", { name: "Context Usage", exact: true })
+      const panel = page.getByRole("region", { name: "Context Usage", exact: true })
+      const composer = page.locator(".prompt-input-container")
+      const before = await composer.boundingBox()
+      await usage.click()
+      await check(panel).toBeVisible()
+      expect(await panel.evaluate((el) => el.closest(".prompt-input-container") == null)).toBe(true)
+      expect(await composer.boundingBox()).toEqual(before)
+      const overlay = (await panel.boundingBox())!
+      expect(overlay.x).toBeGreaterThanOrEqual(0)
+      expect(overlay.x + overlay.width).toBeLessThanOrEqual(width)
+      await page.keyboard.press("Escape")
+      await check(panel).toBeHidden()
+      await check(composer.locator(":focus")).toHaveCount(1)
+      await usage.click()
+      await panel.getByRole("button", { name: "Hide context usage", exact: true }).click()
+      await check(panel).toBeHidden()
+      const compact = page.getByRole("button", { name: "Compact session", exact: true })
+      const confirm = page.getByRole("dialog", { name: "Compact session", exact: true })
+      await compact.click()
+      await check(confirm).toBeVisible()
+      await check(page.locator("body")).not.toHaveAttribute("data-compacted", "true")
+      await confirm.getByRole("button", { name: "No", exact: true }).click()
+      await check(confirm).toBeHidden()
+      await compact.click()
+      await page.keyboard.press("Escape")
+      await check(confirm).toBeHidden()
+      await check(composer.locator(":focus")).toHaveCount(1)
       for (const name of ["Compact session", "Search chat"]) {
         const button = page.getByRole("button", { name, exact: true })
         if (await button.isVisible()) await button.click()
         else {
           await page.getByRole("button", { name: "More actions", exact: true }).click()
           await page.getByRole("menuitem", { name, exact: true }).click()
+        }
+        if (name === "Compact session") {
+          await check(confirm).toBeVisible()
+          await confirm.getByRole("button", { name: "Yes", exact: true }).click()
         }
       }
       await check(page.locator("body")).toHaveAttribute("data-compacted", "true")
@@ -195,6 +279,85 @@ it("keeps prompts in the readable lane, clamps display, and pins live and virtua
       expect(await page.locator(".prompt-input-hint").evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
       await page.close()
     }
+
+    const tabs = await browser.newPage({ viewport: { width: 600, height: 850 } })
+    await tabs.goto(`${server.url}?composer&tabs`)
+    const other = tabs.getByRole("tab", { name: /Other session/ })
+    await check(other).toBeVisible()
+    await other.click({ button: "right" })
+    await check(tabs.getByRole("menuitem", { name: "New Session", exact: true })).toBeVisible()
+    await tabs.getByRole("menuitem", { name: "Fork Session", exact: true }).click()
+    await check(tabs.locator("body")).toHaveAttribute("data-forked", "other-session")
+    await check(tabs.getByRole("tab", { name: /Active session/ })).toHaveAttribute("aria-selected", "true")
+    await other.click({ button: "right" })
+    await tabs.getByRole("menuitem", { name: "Move to Worktree", exact: true }).click()
+    await check(tabs.locator("body")).toHaveAttribute("data-moved", "other-session")
+    await other.click({ button: "right" })
+    await tabs.getByRole("menuitem", { name: "New Session", exact: true }).click()
+    await check(tabs.getByRole("tab")).toHaveCount(3)
+    await tabs.goto(`${server.url}?composer&tabs-busy`)
+    await other.click({ button: "right" })
+    await check(tabs.getByRole("menuitem", { name: "Fork Session", exact: true })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    )
+    await check(tabs.getByRole("menuitem", { name: "Move to Worktree", exact: true })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    )
+    await tabs.close()
+
+    const todos = await browser.newPage({ viewport: { width: 420, height: 850 } })
+    await todos.goto(`${server.url}?todos`)
+    const todoList = todos.locator(".message-list")
+    await todoList.hover()
+    await todos.mouse.wheel(0, -1)
+    const sticky = todos.locator("[data-sticky-prompt]")
+    const tracker = sticky.locator(".turn-todos-toggle")
+    await check(sticky).toBeVisible()
+    await check(tracker).toBeVisible()
+    await check(tracker).toHaveText("1 of 3 To-dos Completed")
+    const measure = () =>
+      todoList.evaluate((el) => ({
+        height: el.scrollHeight,
+        top: el.scrollTop,
+        box: el.getBoundingClientRect().height,
+      }))
+    const before = await measure()
+    await tracker.click()
+    const panel = sticky.locator(".turn-todos-list")
+    await check(panel).toBeVisible()
+    await check(tracker).toHaveAttribute("aria-expanded", "true")
+    expect(await panel.evaluate((el) => getComputedStyle(el).position)).toBe("absolute")
+    expect(await measure()).toEqual(before)
+    expect((await tracker.boundingBox())!.y).toBeGreaterThan((await sticky.boundingBox())!.y)
+    await tracker.press("Escape")
+    await check(panel).toBeHidden()
+    await check(tracker).toBeFocused()
+    await todos.evaluate(() => window.dispatchEvent(new CustomEvent("scrollToMessage", { detail: { id: "user-30" } })))
+    const inline = todoList.locator('[data-message="user-30"] .turn-todos')
+    await check(inline).toBeVisible()
+    await check(inline.locator(".turn-todos-list")).toBeVisible()
+    expect(await inline.locator(".turn-todos-list").evaluate((el) => getComputedStyle(el).position)).toBe("static")
+    await inline.locator("button").click()
+    await check(inline.locator(".turn-todos-list")).toBeHidden()
+    await check(todoList.locator('[data-message="user-29"] .turn-todos')).toHaveCount(0)
+    await todos.setViewportSize({ width: 1000, height: 850 })
+    await todos.goto(`${server.url}?todos&complete`)
+    await todoList.hover()
+    await todos.mouse.wheel(0, -1)
+    await check(tracker).toHaveText("1 of 1 To-dos Completed")
+    await check(tracker).toHaveAttribute("aria-expanded", "false")
+    await tracker.click()
+    await check(panel).toContainText("Create test.txt with content test")
+    const completed = panel.locator('.turn-todos-row[data-status="completed"] > span')
+    expect(await completed.evaluate((el) => getComputedStyle(el).textDecorationLine)).toBe("line-through")
+    const box = (await panel.boundingBox())!
+    expect(box.x).toBeGreaterThanOrEqual(0)
+    expect(box.x + box.width).toBeLessThanOrEqual(1000)
+    await todos.getByTestId("refresh-parts").click()
+    await check(panel).toBeHidden()
+    await todos.close()
   } finally {
     await browser.close()
     await server.stop(true)

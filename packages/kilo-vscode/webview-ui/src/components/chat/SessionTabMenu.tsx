@@ -5,6 +5,10 @@ import { useLanguage } from "../../context/language"
 
 export const SessionTabMenu: ParentComponent<{
   showFork?: boolean
+  showNewSession?: boolean
+  showMoveToWorktree?: boolean
+  onNewSession?: () => void
+  onMoveToWorktree?: () => void
   onFork?: () => void
   onClose: () => void
   onCloseOthers?: () => void
@@ -32,14 +36,31 @@ export const SessionTabMenu: ParentComponent<{
               </>
             )}
           </Show>
+          <Show when={props.showNewSession}>
+            <ContextMenu.Item disabled={!props.onNewSession} onSelect={() => props.onNewSession?.()}>
+              <Icon name="plus" size="small" />
+              <ContextMenu.ItemLabel>{t("sidebar.session.newSession")}</ContextMenu.ItemLabel>
+            </ContextMenu.Item>
+          </Show>
           <Show when={props.showFork}>
             <ContextMenu.Item disabled={!props.onFork} onSelect={() => props.onFork?.()}>
               <Icon name="fork" size="small" />
               <ContextMenu.ItemLabel>{t("agentManager.tab.forkSession")}</ContextMenu.ItemLabel>
             </ContextMenu.Item>
-            <Show when={props.closeable !== false || props.onCloseOthers || props.onTogglePin}>
-              <ContextMenu.Separator />
-            </Show>
+          </Show>
+          <Show when={props.showMoveToWorktree}>
+            <ContextMenu.Item disabled={!props.onMoveToWorktree} onSelect={() => props.onMoveToWorktree?.()}>
+              <Icon name="branch" size="small" />
+              <ContextMenu.ItemLabel>{t("sidebar.session.moveToWorktree")}</ContextMenu.ItemLabel>
+            </ContextMenu.Item>
+          </Show>
+          <Show
+            when={
+              (props.showNewSession || props.showFork || props.showMoveToWorktree) &&
+              (props.closeable !== false || props.onCloseOthers || props.onCloseToRight || props.onTogglePin)
+            }
+          >
+            <ContextMenu.Separator />
           </Show>
           <Show when={props.onTogglePin}>
             <ContextMenu.Item onSelect={() => props.onTogglePin?.()}>
