@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { SessionAdmission } from "@opencode-ai/core/kilocode/session-admission"
 import * as Log from "@opencode-ai/core/util/log"
 import { Effect } from "effect"
 import { AppRuntime } from "../../../src/effect/app-runtime"
@@ -27,6 +28,22 @@ afterEach(async () => {
   await disposeAllInstances()
   await resetDatabase()
 })
+
+test("listener resolves session admission and serves health before accepting sessions", async () => {
+  Flag.KILO_SERVER_PASSWORD = undefined
+  delete process.env.KILO_SERVER_PASSWORD
+  const admission = await AppRuntime.runPromise(SessionAdmission.Service)
+  expect(typeof admission.work).toBe("function")
+
+  const listener = await Server.listen({ hostname: "127.0.0.1", port: 0 })
+  try {
+    const response = await fetch(new URL("/global/health", listener.url))
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ healthy: true })
+  } finally {
+    await withTimeout(listener.stop(true), 10_000, "timed out cleaning up startup listener")
+  }
+}, 20_000)
 
 test("listener aborts shared parent and subagent runners", async () => {
   Flag.KILO_SERVER_PASSWORD = undefined

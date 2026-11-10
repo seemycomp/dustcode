@@ -250,6 +250,10 @@ async function compile() {
 
 function cleanEnv(input: NodeJS.ProcessEnv) {
   const env = { ...input, HOME: homedir().trim() }
+  // Debug terminals auto-attach Node tools too; build subprocesses must be
+  // isolated from the debugger just like the editor process we launch later.
+  delete env.NODE_OPTIONS
+  delete env.VSCODE_INSPECTOR_OPTIONS
   for (const key of ["XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_STATE_HOME", "KILO_TEST_HOME"]) {
     const value = env[key]
     if (value !== undefined) env[key] = value.trim()
@@ -395,8 +399,6 @@ async function launch() {
   // Strip Electron/VS Code env vars so the spawned instance doesn't attach
   // to the current Electron process (e.g. when launched from a VS Code task).
   const env = cleanEnv(process.env)
-  // Packaged Electron rejects Node debug flags inherited from debug terminals.
-  delete env.NODE_OPTIONS
   if (kilo) {
     env.XDG_DATA_HOME = join(kilo, "data")
     env.XDG_CONFIG_HOME = join(kilo, "config")

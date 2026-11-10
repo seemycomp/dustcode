@@ -54,6 +54,29 @@ async function fixture() {
 }
 
 describe("extension launch build", () => {
+  test("does not forward debugger settings to build subprocesses", async () => {
+    const item = await fixture()
+    await Bun.write(
+      join(item.root, "build.ts"),
+      `await Bun.write("build-env.json", JSON.stringify({
+        options: process.env.NODE_OPTIONS ?? null,
+        inspector: process.env.VSCODE_INSPECTOR_OPTIONS ?? null,
+        project: process.env.DUSTCODE_LAUNCH_TEST,
+      })); await Bun.write("dist/extension.js", "built")`,
+    )
+    const result = item.run([], process.execPath, {
+      NODE_OPTIONS: "--trace-warnings",
+      VSCODE_INSPECTOR_OPTIONS: '{"autoAttachMode":"always"}',
+      DUSTCODE_LAUNCH_TEST: "preserved",
+    })
+    expect(result.exitCode).toBe(0)
+    expect(await Bun.file(join(item.root, "build-env.json")).json()).toEqual({
+      options: null,
+      inspector: null,
+      project: "preserved",
+    })
+  })
+
   test("does not forward Node debug options to the editor process", async () => {
     const item = await fixture()
     await Bun.write(join(item.root, "dist/extension.js"), "previous")

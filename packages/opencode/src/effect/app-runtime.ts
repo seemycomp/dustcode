@@ -56,6 +56,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 // kilocode_change start
 import { Notebook } from "@/kilocode/notebook/service"
 import { SessionDrain } from "@/kilocode/session/drain"
+import { SessionAdmission } from "@opencode-ai/core/kilocode/session-admission"
 import { AgentManager } from "@/kilocode/agent-manager/service"
 import { Wakeup } from "@/kilocode/wakeup"
 import { node as SessionTransferNode } from "@/kilocode/session-transfer/service" // kilocode_change
@@ -78,9 +79,10 @@ const kilo = LayerNode.group([
   ModelCache.node,
   AgentManager.node,
   Notebook.node,
+  SessionAdmission.node,
   SessionDrain.node,
   Wakeup.node,
-    SessionTransferNode, // kilocode_change
+  SessionTransferNode, // kilocode_change
   memory,
 ])
 // kilocode_change end

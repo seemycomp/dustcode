@@ -8,6 +8,7 @@ import { $ } from "bun"
 import path from "path"
 
 import { createClient } from "@hey-api/openapi-ts"
+import { format } from "./kilocode/format"
 
 const opencode = path.resolve(dir, "../../opencode")
 
@@ -125,7 +126,7 @@ if (!legacyPatched.includes(sandbox)) {
 }
 await Bun.write(legacyTypesPath, legacyPatched)
 
-await $`bun prettier --write src/gen src/v2`
+await format(dir)
 await $`rm -rf dist tsconfig.tsbuildinfo`
 await $`bun tsc`
 await $`rm openapi.json`
