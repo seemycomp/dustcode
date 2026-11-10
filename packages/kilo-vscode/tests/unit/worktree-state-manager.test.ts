@@ -26,6 +26,22 @@ describe("WorktreeStateManager", () => {
   })
 
   describe("worktree CRUD", () => {
+    it("transfers closed or live placement without publishing an intermediate Local assignment", () => {
+      const source = manager.addWorktree({ branch: "source", path: "/source", parentBranch: "main" })
+      const target = manager.addWorktree({ branch: "target", path: "/target", parentBranch: "main" })
+      manager.addSession("session", source.id)
+      manager.closeSession("session", null)
+      manager.setTabOrder(source.id, ["session", "other"])
+      manager.setPinnedTabs(source.id, ["session"])
+      const placements: Array<string | null | undefined> = []
+      manager.onDidChangePlacement(() => placements.push(manager.sessionPlacement("session")))
+      manager.transferSession("session", target.id)
+      expect(placements).toEqual([target.id])
+      expect(manager.sessionPlacement("session")).toBe(target.id)
+      expect(manager.getTabOrder()[source.id]).toEqual(["other"])
+      expect(manager.getPinnedTabs()[source.id]).toBeUndefined()
+      expect(manager.getPinnedTabs()[target.id]).toEqual(["session"])
+    })
     it("adds and retrieves worktrees", () => {
       const wt = manager.addWorktree({ branch: "fix-123", path: "/tmp/wt", parentBranch: "main" })
       expect(wt.id).toMatch(/^wt-/)
@@ -229,6 +245,33 @@ describe("WorktreeStateManager", () => {
       restored.addSession("ses-stopped", wt.id)
       expect(restored.isSessionClosed("ses-stopped")).toBe(false)
       await restored.flush()
+    })
+
+    it("persists pending transfer identity across reloads", async () => {
+      manager.setPendingTransfer({
+        operationID: "op-1",
+        projectID: "project",
+        sourceSessionID: "session",
+        sourceWorktreeId: null,
+        action: "move",
+        targetWorktreeId: "target",
+      })
+      await manager.flush()
+      const restored = new WorktreeStateManager(root, () => undefined)
+      await restored.load()
+      expect(restored.getPendingTransfers()).toEqual([
+        {
+          operationID: "op-1",
+          projectID: "project",
+          sourceSessionID: "session",
+          sourceWorktreeId: null,
+          action: "move",
+          targetWorktreeId: "target",
+        },
+      ])
+      restored.clearPendingTransfer("op-1")
+      await restored.flush()
+      expect(restored.getPendingTransfers()).toEqual([])
     })
 
     it("removes stopped-session records when their worktree is deleted", () => {

@@ -22,6 +22,7 @@ import { notebookUri } from "./services/autocomplete/continuedev/core/autocomple
 import { buildWebviewHtml, getWebviewFontSize, isCursorHost } from "./utils"
 import { saveImage } from "./kilo-provider/save-image"
 import { handleEditorAction } from "./kilo-provider/editor-actions"
+import { isNotFoundError } from "./kilo-provider/handlers/not-found"
 import { exportTranscript } from "./kilo-provider/export-transcript"
 import {
   TelemetryProxy,
@@ -1093,7 +1094,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     return this.opts.routeService?.trySessionDirectoryFor(ref)
   }
 
-  public async getSessionInfo(sessionId: string): Promise<Session | undefined> {
+  public async getSessionInfo(sessionId: string, directory?: string): Promise<Session | undefined> {
     if (this.connectionState !== "connected") await this.initializeConnection()
     const client = this.client
     if (!client) return
@@ -1103,13 +1104,15 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     // back to the active root would silently resolve the wrong project's
     // session. Require an exact route (qualified or unambiguous) instead.
     const routed = this.routeSessionDirectory(sessionId)
-    if (routed === null) return undefined
-    const directory = routed ?? this.getWorkspaceDirectory(sessionId)
-    return retry(() => client.session.get({ sessionID: sessionId, directory }, { throwOnError: true }))
+    if (directory === undefined && routed === null) return undefined
+    const dir = directory ?? routed ?? this.getWorkspaceDirectory(sessionId)
+    return retry(() => client.session.get({ sessionID: sessionId, directory: dir }, { throwOnError: true }))
       .then((result) => result.data)
       .catch((error: unknown) => {
+        if (isNotFoundError(error)) return undefined
         console.warn("[Dustcode] KiloProvider: Failed to resolve managed session:", error)
-        return undefined
+        if (directory === undefined) return undefined
+        throw error
       })
   }
 

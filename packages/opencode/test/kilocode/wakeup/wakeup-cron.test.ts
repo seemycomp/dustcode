@@ -6,6 +6,9 @@ import path from "path"
 import { Context, Effect, Layer } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { Database } from "@opencode-ai/core/database/database"
+import { SessionAdmission } from "@opencode-ai/core/kilocode/session-admission"
 import { EventV2 } from "@opencode-ai/core/event"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppRuntime } from "@/effect/app-runtime"
@@ -79,7 +82,18 @@ const recorderFire = Layer.effect(
 // Layer.fresh: without it Effect's in-test layer cache hands nested builds the
 // outer test's storage and Fire, so a "restart" would share the first process.
 const serviceLayer = <R>(dir: string, fire: Layer.Layer<Wakeup.Fire, never, R>, published: Published[] = []) =>
-  Layer.fresh(Wakeup.layer.pipe(Layer.provide(Layer.mergeAll(storageLayer(dir), fire, eventsLayer(published)))))
+  Layer.fresh(
+    Wakeup.layer.pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          storageLayer(dir),
+          fire,
+          eventsLayer(published),
+          AppNodeBuilder.build(SessionAdmission.node, [[Database.node, Database.layerFromPath(":memory:")]]),
+        ),
+      ),
+    ),
+  )
 
 const dirLayer = Layer.effect(
   TestDir,
@@ -174,9 +188,7 @@ describe("Wakeup cron", () => {
 
       const tasks: Wakeup.CronInfo[] = []
       for (let index = 0; index < 5; index++) {
-        tasks.push(
-          yield* wake.cronCreate({ sessionID, directory: dir, prompt: `job ${index}`, cron: "*/5 * * * *" }),
-        )
+        tasks.push(yield* wake.cronCreate({ sessionID, directory: dir, prompt: `job ${index}`, cron: "*/5 * * * *" }))
       }
 
       // Measure the jitter the service applied, rather than recomputing it.
@@ -387,9 +399,7 @@ describe("Wakeup cron", () => {
       // within the window when the test runs in late December.
       const far = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
       const expression = `0 0 ${far.getDate()} ${far.getMonth() + 1} *`
-      const err = yield* Effect.flip(
-        wake.cronCreate({ sessionID, directory: dir, prompt: "yearly", cron: expression }),
-      )
+      const err = yield* Effect.flip(wake.cronCreate({ sessionID, directory: dir, prompt: "yearly", cron: expression }))
 
       expect(err).toBeInstanceOf(Wakeup.InvalidSchedule)
       expect(yield* wake.cronList({ sessionID })).toEqual([])

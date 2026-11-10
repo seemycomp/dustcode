@@ -4845,6 +4845,12 @@ export type MemoryApiServerError = {
   }
 }
 
+export type SessionTransferError = {
+  message: string
+  code?: string
+  paths?: Array<string>
+}
+
 export type UnauthorizedError = {
   _tag: "UnauthorizedError"
   message: string
@@ -10859,7 +10865,9 @@ export type AuthRemoveData = {
   path: {
     providerID: string
   }
-  query?: never
+  query?: {
+    dispose?: boolean
+  }
   url: "/auth/{providerID}"
 }
 
@@ -10886,7 +10894,9 @@ export type AuthSetData = {
   path: {
     providerID: string
   }
-  query?: never
+  query?: {
+    dispose?: boolean
+  }
   url: "/auth/{providerID}"
 }
 
@@ -11064,7 +11074,9 @@ export type GlobalConfigGetResponse = GlobalConfigGetResponses[keyof GlobalConfi
 export type GlobalConfigUpdateData = {
   body?: Config
   path?: never
-  query?: never
+  query?: {
+    dispose?: boolean
+  }
   url: "/global/config"
 }
 
@@ -11684,6 +11696,7 @@ export type ExperimentalSessionListData = {
     roots?: boolean | "true" | "false"
     start?: number
     cursor?: number
+    cursorID?: string
     search?: string
     limit?: number
     archived?: boolean | "true" | "false"
@@ -11693,9 +11706,9 @@ export type ExperimentalSessionListData = {
 
 export type ExperimentalSessionListErrors = {
   /**
-   * Bad request
+   * BadRequest | InvalidRequestError
    */
-  400: BadRequestError
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
 }
 
 export type ExperimentalSessionListError = ExperimentalSessionListErrors[keyof ExperimentalSessionListErrors]
@@ -19676,6 +19689,153 @@ export type MemoryPurgeResponses = {
 }
 
 export type MemoryPurgeResponse = MemoryPurgeResponses[keyof MemoryPurgeResponses]
+
+export type KilocodeSessionTransferPreviewData = {
+  body?: {
+    operationID: string
+    action: "move" | "copy"
+    projectID: string
+    sourceSessionID: string
+    sourceDirectory: string
+    targetDirectory: string
+    selectedFiles?: Array<string>
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/session-transfer/preview"
+}
+
+export type KilocodeSessionTransferPreviewErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * SessionTransferError
+   */
+  409: SessionTransferError
+}
+
+export type KilocodeSessionTransferPreviewError =
+  KilocodeSessionTransferPreviewErrors[keyof KilocodeSessionTransferPreviewErrors]
+
+export type KilocodeSessionTransferPreviewResponses = {
+  /**
+   * Success
+   */
+  200: {
+    operationID: string
+    action: "move" | "copy"
+    sourceSessionID: string
+    sourceDirectory: string
+    targetDirectory: string
+    revision: string
+    fingerprint: string
+    files: Array<{
+      path: string
+      kind: string
+      sourceHash: string
+    }>
+  }
+}
+
+export type KilocodeSessionTransferPreviewResponse =
+  KilocodeSessionTransferPreviewResponses[keyof KilocodeSessionTransferPreviewResponses]
+
+export type KilocodeSessionTransferCommitData = {
+  body?: {
+    operationID: string
+    action?: "move" | "copy"
+    projectID?: string
+    sourceSessionID?: string
+    sourceDirectory?: string
+    targetDirectory?: string
+    selectedFiles?: Array<string>
+    revision?: string
+    fingerprint?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/session-transfer/commit"
+}
+
+export type KilocodeSessionTransferCommitErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * SessionTransferError
+   */
+  409: SessionTransferError
+}
+
+export type KilocodeSessionTransferCommitError =
+  KilocodeSessionTransferCommitErrors[keyof KilocodeSessionTransferCommitErrors]
+
+export type KilocodeSessionTransferCommitResponses = {
+  /**
+   * Success
+   */
+  200: {
+    operationID: string
+    sourceSessionID: string
+    sessionID: string
+    action: "move" | "copy"
+    directory: string
+  }
+}
+
+export type KilocodeSessionTransferCommitResponse =
+  KilocodeSessionTransferCommitResponses[keyof KilocodeSessionTransferCommitResponses]
+
+export type KilocodeSessionTransferStatusData = {
+  body?: never
+  path: {
+    operationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/session-transfer/status/{operationID}"
+}
+
+export type KilocodeSessionTransferStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * SessionTransferError
+   */
+  409: SessionTransferError
+}
+
+export type KilocodeSessionTransferStatusError =
+  KilocodeSessionTransferStatusErrors[keyof KilocodeSessionTransferStatusErrors]
+
+export type KilocodeSessionTransferStatusResponses = {
+  /**
+   * Success
+   */
+  200: {
+    operationID: string
+    sourceSessionID: string
+    sessionID: string
+    action: "move" | "copy"
+    directory: string
+  }
+}
+
+export type KilocodeSessionTransferStatusResponse =
+  KilocodeSessionTransferStatusResponses[keyof KilocodeSessionTransferStatusResponses]
 
 export type V2HealthGetData = {
   body?: never

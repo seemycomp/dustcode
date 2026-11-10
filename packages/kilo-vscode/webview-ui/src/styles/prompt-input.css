@@ -553,6 +553,13 @@
   scrollbar-gutter: stable;
 }
 
+/* Keep native selection readable while the visible text is painted by the
+   highlight overlay above the transparent textarea. */
+.prompt-input::selection {
+  color: var(--vscode-input-foreground, var(--text-base));
+  background: var(--vscode-editor-selectionBackground, var(--vscode-list-activeSelectionBackground));
+}
+
 .prompt-input:focus {
   border-color: var(--vscode-focusBorder);
 }

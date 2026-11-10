@@ -51,6 +51,128 @@ afterEach(async () => {
 })
 
 describe("global config refresh", () => {
+  test("persistence-only update writes and invalidates config without disposing instances", async () => {
+    await using global = await tmpdir()
+    await using workspace = await tmpdir({ config: { formatter: false, lsp: false } })
+    ;(Global.Path as { config: string }).config = global.path
+    await config(global.path, { indexing: { provider: "openrouter" } })
+    await disposeAllInstances()
+    const target = app()
+    expect(await provider(target, workspace.path)).toBe("openrouter")
+    const disposed: string[] = []
+    const off = registerDisposer(async (directory) => {
+      disposed.push(directory)
+    })
+    try {
+      const response = await target.request("/global/config?dispose=false", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ indexing: { provider: "kilo" } }),
+      })
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({ indexing: { provider: "kilo" } })
+      expect(await Bun.file(path.join(global.path, "kilo.json")).json()).toMatchObject({
+        indexing: { provider: "kilo" },
+      })
+      const persisted = await target.request("/global/config")
+      expect(await persisted.json()).toMatchObject({ indexing: { provider: "kilo" } })
+      expect(disposed).toEqual([])
+      const cleanup = await target.request("/global/dispose", { method: "POST" })
+      expect(cleanup.status).toBe(200)
+      expect(disposed).toContain(workspace.path)
+      expect(await provider(target, workspace.path)).toBe("kilo")
+    } finally {
+      off()
+    }
+  })
+
+  for (const method of ["PUT", "DELETE"]) {
+    test(`default auth ${method} waits for disposal before responding`, async () => {
+      await using workspace = await tmpdir({ config: { formatter: false, lsp: false } })
+      const target = app()
+      await provider(target, workspace.path)
+      const started = Promise.withResolvers<void>()
+      const release = Promise.withResolvers<void>()
+      const off = registerDisposer(async (directory) => {
+        if (directory !== workspace.path) return
+        started.resolve()
+        await release.promise
+      })
+      try {
+        const pending = target.request("/auth/save-latency-default", {
+          method,
+          ...(method === "PUT"
+            ? {
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ type: "api", key: "test-only" }),
+              }
+            : {}),
+        })
+        await started.promise
+        const early = await Promise.race([Promise.resolve(pending).then(() => true), Bun.sleep(10).then(() => false)])
+        expect(early).toBe(false)
+        release.resolve()
+        expect((await pending).status).toBe(200)
+      } finally {
+        release.resolve()
+        off()
+      }
+    })
+
+    test(`persistence-only auth ${method} acknowledges disk persistence without disposing instances`, async () => {
+      await using workspace = await tmpdir({ config: { formatter: false, lsp: false } })
+      const target = app()
+      await provider(target, workspace.path)
+      const file = path.join(Global.Path.data, "auth.json")
+      const id = "save-latency-test"
+      if (method === "DELETE") {
+        const response = await target.request(`/auth/${id}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ type: "api", key: "test-only" }),
+        })
+        expect(response.status).toBe(200)
+        await provider(target, workspace.path)
+      }
+      const disposed: string[] = []
+      const off = registerDisposer(async (directory) => {
+        disposed.push(directory)
+      })
+      try {
+        const response = await target.request(`/auth/${id}?dispose=false`, {
+          method,
+          ...(method === "PUT"
+            ? {
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ type: "api", key: "test-only" }),
+              }
+            : {}),
+        })
+        expect(response.status).toBe(200)
+        expect(await response.json()).toBe(true)
+        const saved = await Bun.file(file).json()
+        expect(saved[id]).toEqual(method === "PUT" ? { type: "api", key: "test-only" } : undefined)
+        expect(disposed).toEqual([])
+      } finally {
+        off()
+      }
+    })
+  }
+
+  for (const [method, url, body] of [
+    ["PATCH", "/global/config", { indexing: { provider: "kilo" } }],
+    ["PUT", "/auth/save-latency-invalid", { type: "api", key: "test-only" }],
+    ["DELETE", "/auth/save-latency-invalid", undefined],
+  ] as const) {
+    test(`${method} ${url} rejects an invalid disposal query`, async () => {
+      const response = await app().request(`${url}?dispose=invalid`, {
+        method,
+        ...(body ? { headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : {}),
+      })
+      expect(response.status).toBe(400)
+    })
+  }
+
   test("update reloads existing instance before responding", async () => {
     await using config = await tmpdir()
     await using workspace = await tmpdir({ config: { formatter: false, lsp: false } })

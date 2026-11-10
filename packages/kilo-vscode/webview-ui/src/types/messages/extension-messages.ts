@@ -999,6 +999,8 @@ export interface AgentManagerStateMessage {
   pinnedTabs?: Record<string, string[]>
   worktreeOrder?: string[]
   sessionsCollapsed?: boolean
+  historyExpanded?: Record<string, boolean>
+  historyInitialized?: boolean
   sidebarCollapsed?: boolean
   reviewDiffStyle?: "unified" | "split"
   reviewMarkdownRender?: boolean
@@ -1802,6 +1804,9 @@ export interface AgentManagerBrowserDevtoolsMessage {
 }
 
 export type ExtensionMessage =
+  | import("../../../../src/shared/agent-history").HistoryMessage
+  | import("../../../../src/shared/session-transfer").SessionTransferReply
+  | import("../../../../src/shared/agent-history").HistoryOpenFailed
   | {
       type: "diffViewer.review.result"
       requestId: string

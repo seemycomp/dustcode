@@ -1,0 +1,34 @@
+.am-transfer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  max-height: min(72vh, 680px);
+  overflow: auto;
+}
+
+.am-transfer p {
+  margin: 0;
+  color: var(--text-base);
+}
+
+.am-transfer-targets,
+.am-transfer-files {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.am-transfer-files {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.am-transfer-footer {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}

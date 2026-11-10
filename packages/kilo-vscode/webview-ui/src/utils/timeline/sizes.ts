@@ -26,6 +26,16 @@ export interface TimelineScroll {
   clientWidth: number
 }
 
+/** Content-only estimate; provider usage belongs to a whole request, not a part. */
+export function tokens(part: Part): number {
+  if (part.type === "text" || part.type === "reasoning") return Math.ceil(part.text.length / 4)
+  if (part.type !== "tool") return 0
+  const input = JSON.stringify(part.state.input)
+  const output =
+    part.state.status === "completed" ? part.state.output : part.state.status === "error" ? part.state.error : ""
+  return Math.ceil((input.length + output.length) / 4)
+}
+
 /** Keep following updates when the viewport is within one bar of the right edge. */
 export function pinned(scroll: TimelineScroll, slack = BAR_W): boolean {
   return scroll.scrollWidth - scroll.clientWidth - scroll.scrollLeft <= slack

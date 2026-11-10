@@ -17,6 +17,7 @@ import { copyEnvFiles } from "./env-copy"
 import { runWorktreeSetupScript } from "./setup-script-task"
 import { broken } from "./worktree-reconcile"
 import type { PanelContext } from "./host"
+import { resolvePlacement } from "./project/placement"
 
 export async function runLifecycleSetup(
   input: Parameters<typeof runWorktreeSetupScript>[0],
@@ -565,6 +566,7 @@ export async function closeLifecycleSession(
   sessionId: string,
 ): Promise<null> {
   const state = ctx.peekState()
+  const placement = resolvePlacement(ctx, sessionId) ?? ctx.sessions().find((session) => session.id === sessionId)
   const dir = state?.directoryFor(sessionId) ?? host.sessions.directories()?.get(sessionId) ?? ctx.root ?? process.cwd()
   await host.sessions.abort([sessionId])
   // Drop the session from state before stopping its processes. Process shutdown
@@ -572,6 +574,7 @@ export async function closeLifecycleSession(
   // any concurrent state push would restore the tab the user just closed,
   // because a webview with no remaining real tabs looks like a reload.
   host.sessions.forget(sessionId)
+  if (placement) state?.closeSession(sessionId, placement.worktreeId)
   state?.removeSession(sessionId)
   host.sessions.clearDirectory(sessionId)
   if (state) host.push()

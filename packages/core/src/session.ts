@@ -38,6 +38,8 @@ import { SessionRevert } from "./session/revert"
 import { Revert } from "@opencode-ai/schema/revert"
 import { FSUtil } from "./fs-util"
 import { SessionDurable, type SessionDurableEvent } from "@opencode-ai/schema/durable-event-manifest" // kilocode_change
+import { SessionAdmission } from "./kilocode/session-admission" // kilocode_change
+import { admit } from "./kilocode/session/admission" // kilocode_change
 
 export const RevertState = Revert.State
 export type RevertState = Revert.State
@@ -186,6 +188,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const database = yield* Database.Service
+    const admission = yield* SessionAdmission.Service // kilocode_change
     const db = database.db
     const events = yield* EventV2.Service
     const projects = yield* ProjectV2.Service
@@ -461,7 +464,7 @@ const layer = Layer.effect(
       },
     })
 
-    return result
+    return admit(result, admission) // kilocode_change
   }),
 )
 
@@ -490,5 +493,6 @@ export const node = makeGlobalNode({
     SessionStore.node,
     LocationServiceMap.node,
     SessionProjector.node,
+    SessionAdmission.node, // kilocode_change
   ],
 })

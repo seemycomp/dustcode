@@ -18,6 +18,14 @@
               "type": "string"
             },
             "required": true
+          },
+          {
+            "name": "dispose",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -79,6 +87,14 @@
               "type": "string"
             },
             "required": true
+          },
+          {
+            "name": "dispose",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -397,7 +413,16 @@
       "patch": {
         "tags": ["global"],
         "operationId": "global.config.update",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "dispose",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successfully updated global config",
@@ -1873,6 +1898,15 @@
             "required": false
           },
           {
+            "name": "cursorID",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": false
+          },
+          {
             "name": "search",
             "in": "query",
             "schema": {
@@ -1921,11 +1955,18 @@
             }
           },
           "400": {
-            "description": "Bad request",
+            "description": "BadRequest | InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
                 }
               }
             }
@@ -22443,6 +22484,386 @@
         ]
       }
     },
+    "/kilocode/session-transfer/preview": {
+      "post": {
+        "tags": ["sessionTransfer"],
+        "operationId": "kilocode.sessionTransfer.preview",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operationID": {
+                      "type": "string"
+                    },
+                    "action": {
+                      "type": "string",
+                      "enum": ["move", "copy"]
+                    },
+                    "sourceSessionID": {
+                      "type": "string"
+                    },
+                    "sourceDirectory": {
+                      "type": "string"
+                    },
+                    "targetDirectory": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "string"
+                    },
+                    "fingerprint": {
+                      "type": "string"
+                    },
+                    "files": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "sourceHash": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "kind", "sourceHash"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "operationID",
+                    "action",
+                    "sourceSessionID",
+                    "sourceDirectory",
+                    "targetDirectory",
+                    "revision",
+                    "fingerprint",
+                    "files"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "SessionTransferError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionTransferError"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Preview a session transfer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "operationID": {
+                    "type": "string"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": ["move", "copy"]
+                  },
+                  "projectID": {
+                    "type": "string"
+                  },
+                  "sourceSessionID": {
+                    "type": "string"
+                  },
+                  "sourceDirectory": {
+                    "type": "string"
+                  },
+                  "targetDirectory": {
+                    "type": "string"
+                  },
+                  "selectedFiles": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "operationID",
+                  "action",
+                  "projectID",
+                  "sourceSessionID",
+                  "sourceDirectory",
+                  "targetDirectory"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.sessionTransfer.preview({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/session-transfer/commit": {
+      "post": {
+        "tags": ["sessionTransfer"],
+        "operationId": "kilocode.sessionTransfer.commit",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operationID": {
+                      "type": "string"
+                    },
+                    "sourceSessionID": {
+                      "type": "string"
+                    },
+                    "sessionID": {
+                      "type": "string"
+                    },
+                    "action": {
+                      "type": "string",
+                      "enum": ["move", "copy"]
+                    },
+                    "directory": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["operationID", "sourceSessionID", "sessionID", "action", "directory"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "SessionTransferError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionTransferError"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Commit a session transfer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "operationID": {
+                    "type": "string"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": ["move", "copy"]
+                  },
+                  "projectID": {
+                    "type": "string"
+                  },
+                  "sourceSessionID": {
+                    "type": "string"
+                  },
+                  "sourceDirectory": {
+                    "type": "string"
+                  },
+                  "targetDirectory": {
+                    "type": "string"
+                  },
+                  "selectedFiles": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "revision": {
+                    "type": "string"
+                  },
+                  "fingerprint": {
+                    "type": "string"
+                  }
+                },
+                "required": ["operationID"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.sessionTransfer.commit({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/session-transfer/status/{operationID}": {
+      "get": {
+        "tags": ["sessionTransfer"],
+        "operationId": "kilocode.sessionTransfer.status",
+        "parameters": [
+          {
+            "name": "operationID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operationID": {
+                      "type": "string"
+                    },
+                    "sourceSessionID": {
+                      "type": "string"
+                    },
+                    "sessionID": {
+                      "type": "string"
+                    },
+                    "action": {
+                      "type": "string",
+                      "enum": ["move", "copy"]
+                    },
+                    "directory": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["operationID", "sourceSessionID", "sessionID", "action", "directory"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "SessionTransferError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionTransferError"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a session transfer result",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.sessionTransfer.status({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "tags": ["Kilo HttpApi"],
@@ -42947,6 +43368,25 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "SessionTransferError": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["message"],
+        "additionalProperties": false
+      },
       "UnauthorizedError": {
         "type": "object",
         "properties": {
@@ -62519,6 +62959,9 @@
     {
       "name": "memory",
       "description": "Kilo memory routes."
+    },
+    {
+      "name": "sessionTransfer"
     },
     {
       "name": "Kilo HttpApi",

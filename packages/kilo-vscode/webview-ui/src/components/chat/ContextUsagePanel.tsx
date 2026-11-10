@@ -23,7 +23,6 @@ export const ContextUsagePanel: Component<{ onClose: () => void }> = (props) => 
   })
   const [open, setOpen] = createSignal<TimelineCategory>()
   const summary = createMemo(() => groups(bars()))
-  const count = (value: number) => value.toLocaleString(language.locale())
 
   return (
     <section class="context-usage-panel" aria-label={language.t("prompt.action.contextUsage")}>
@@ -54,7 +53,7 @@ export const ContextUsagePanel: Component<{ onClose: () => void }> = (props) => 
         </div>
         <div class="context-usage-segments" aria-hidden="true">
           <For each={summary()}>
-            {(item) => <span style={{ "flex-grow": item.count, "background-color": palette[item.key] }} />}
+            {(item) => <span style={{ "flex-grow": item.tokens, "background-color": palette[item.key] }} />}
           </For>
         </div>
         <div class="context-usage-group-label">{language.t("context.usage.activity")}</div>
@@ -70,7 +69,9 @@ export const ContextUsagePanel: Component<{ onClose: () => void }> = (props) => 
                 >
                   <span class="context-usage-swatch" style={{ "background-color": palette[item.key] }} />
                   <span class="context-usage-group-name">{language.t(`context.usage.category.${item.key}`)}</span>
-                  <span class="context-usage-group-count">{count(item.count)}</span>
+                  <span class="context-usage-group-count">
+                    {language.t("context.usage.tokens", { count: formatCompactCount(item.tokens) })}
+                  </span>
                   <Icon name="chevron-down" size="small" />
                 </Button>
                 <Show when={open() === item.key}>

@@ -9,11 +9,13 @@ import * as SessionError from "@/server/routes/instance/httpapi/handlers/session
 import { BackgroundProcess } from "@/kilocode/background-process"
 import { Service as Notebook } from "@/kilocode/notebook/service"
 import { InvalidRequestError } from "@/server/routes/instance/httpapi/errors"
+import { SessionAdmission } from "@opencode-ai/core/kilocode/session-admission"
 
 export const sandboxHandlers = HttpApiBuilder.group(InstanceHttpApi, "sandbox", (handlers) =>
   Effect.gen(function* () {
     const session = yield* Session.Service
     const notebook = yield* Notebook
+    const admission = yield* SessionAdmission.Service
     const exists = (sessionID: SessionID) => SessionError.mapStorageNotFound(session.get(sessionID))
     const inactive = (sessionID: SessionID, family: readonly SandboxPolicy.Target[]) =>
       Effect.gen(function* () {
@@ -26,10 +28,10 @@ export const sandboxHandlers = HttpApiBuilder.group(InstanceHttpApi, "sandbox", 
     return handlers
       .handle("support", () => SandboxPolicy.configuredSupport())
       .handle("status", (ctx: { params: { sessionID: SessionID } }) =>
-        exists(ctx.params.sessionID).pipe(Effect.andThen(SandboxPolicy.status(ctx.params.sessionID))),
+        admission.work([ctx.params.sessionID], exists(ctx.params.sessionID).pipe(Effect.andThen(SandboxPolicy.status(ctx.params.sessionID)))),
       )
       .handle("toggle", (ctx: { params: { sessionID: SessionID } }) =>
-        SandboxPolicy.toggleGuarded(
+        admission.work([ctx.params.sessionID], SandboxPolicy.toggleGuarded(
           ctx.params.sessionID,
           (enabling, family) =>
             exists(ctx.params.sessionID).pipe(
@@ -51,7 +53,7 @@ export const sandboxHandlers = HttpApiBuilder.group(InstanceHttpApi, "sandbox", 
           SandboxActivation.family(ctx.params.sessionID),
           (family) =>
             exists(ctx.params.sessionID).pipe(Effect.andThen(inactive(ctx.params.sessionID, family))),
-        ),
+        )),
       )
   }),
 )

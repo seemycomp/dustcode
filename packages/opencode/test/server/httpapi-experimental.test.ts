@@ -268,6 +268,87 @@ describe("experimental HttpApi", () => {
     { git: true, config: { formatter: false, lsp: false } },
   )
 
+  // kilocode_change start - tie-safe metadata pagination through the real HTTP route
+  it.instance("walks tied session pages with paired continuation headers", () =>
+    Effect.gen(function* () {
+      const tmp = yield* TestInstance
+      const rows: Session.Info[] = []
+      for (const updated of [30, 20, 20, 20, 20, 20, 20, 20, 10]) {
+        const session = yield* createSession({ title: "paired history" })
+        yield* setSessionUpdated(session, updated)
+        rows.push({ ...session, time: { ...session.time, updated } })
+      }
+      const expected = rows.toSorted((a, b) => b.time.updated - a.time.updated || (a.id < b.id ? 1 : -1))
+      const ids: string[] = []
+      let cursor: Record<string, string> = {}
+      for (let n = 0; n < 5; n++) {
+        const response = yield* request(
+          `${ExperimentalPaths.session}?${new URLSearchParams({ directory: tmp.directory, roots: "true", archived: "true", limit: "2", ...cursor })}`,
+          tmp.directory,
+        )
+        expect(response.status).toBe(200)
+        const page = yield* json<Session.GlobalInfo[]>(response)
+        expect(page).toHaveLength(n === 4 ? 1 : 2)
+        ids.push(...page.map((item) => item.id))
+        if (n === 4) {
+          expect(response.headers["x-next-cursor"]).toBeUndefined()
+          expect(response.headers["x-next-cursor-id"]).toBeUndefined()
+          break
+        }
+        const tail = page.at(-1)!
+        expect(response.headers["x-next-cursor"]).toBe(String(tail.time.updated))
+        expect(response.headers["x-next-cursor-id"]).toBe(tail.id)
+        cursor = { cursor: response.headers["x-next-cursor"]!, cursorID: response.headers["x-next-cursor-id"]! }
+      }
+      expect(ids).toEqual(expected.map((item) => item.id))
+      expect(new Set(ids).size).toBe(rows.length)
+      const empty = yield* request(
+        `${ExperimentalPaths.session}?${new URLSearchParams({ directory: tmp.directory, search: "absent title" })}`,
+        tmp.directory,
+      )
+      expect(empty.status).toBe(200)
+      expect(yield* json(empty)).toEqual([])
+      expect(empty.headers["x-next-cursor"]).toBeUndefined()
+      expect(empty.headers["x-next-cursor-id"]).toBeUndefined()
+    }),
+  )
+
+  it.instance("rejects malformed ID cursors and timestamp pairing without changing numeric-only calls", () =>
+    Effect.gen(function* () {
+      const tmp = yield* TestInstance
+      const session = yield* createSession({ title: "cursor validation" })
+      yield* setSessionUpdated(session, 0)
+      const queries: Record<string, string>[] = [
+        { cursorID: session.id },
+        { cursor: "10", cursorID: "" },
+        { cursor: "10", cursorID: "invalid" },
+        { cursor: "NaN", cursorID: session.id },
+        { cursor: "Infinity", cursorID: session.id },
+        { cursor: "-1", cursorID: session.id },
+        { cursor: "1.5", cursorID: session.id },
+      ]
+      for (const query of queries) {
+        const response = yield* request(`${ExperimentalPaths.session}?${new URLSearchParams(query)}`, tmp.directory)
+        expect(response.status).toBe(400)
+      }
+      const paired = yield* request(
+        `${ExperimentalPaths.session}?${new URLSearchParams({ directory: tmp.directory, cursor: "0", cursorID: session.id })}`,
+        tmp.directory,
+      )
+      expect(paired.status).toBe(200)
+      expect(yield* json(paired)).toEqual([])
+      expect(paired.headers["x-next-cursor"]).toBeUndefined()
+      expect(paired.headers["x-next-cursor-id"]).toBeUndefined()
+      const legacy = yield* request(
+        `${ExperimentalPaths.session}?${new URLSearchParams({ directory: tmp.directory, cursor: "1" })}`,
+        tmp.directory,
+      )
+      expect(legacy.status).toBe(200)
+      expect((yield* json<Session.GlobalInfo[]>(legacy)).map((item) => item.id)).toEqual([session.id])
+    }),
+  )
+  // kilocode_change end
+
   testWorktreeMutations(
     "serves worktree mutations through the default server app",
     () =>

@@ -66,7 +66,7 @@ function modelKey(providerID: string, modelID: string) {
   return `${providerID}/${modelID}`
 }
 
-function rowKey(kind: "model" | "favorite", providerID: string, modelID: string) {
+function rowKey(kind: "model" | "favorite" | "most-used", providerID: string, modelID: string) {
   return `${kind}:${providerID}/${modelID}`
 }
 
@@ -321,12 +321,6 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
         autos.push(m)
         continue
       }
-      if (
-        !hasSearch() &&
-        mostUsed.some((item) => modelKey(item.providerID, item.id) === modelKey(m.providerID, m.id))
-      ) {
-        continue
-      }
       if (m.recommendedIndex !== undefined) {
         recommended.push(m)
         continue
@@ -386,7 +380,7 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
         key: MOST_USED_KEY,
         label: language.t("model.group.mostUsed"),
         rows: mostUsed.map((m) => ({
-          key: rowKey("model", m.providerID, m.id),
+          key: rowKey("most-used", m.providerID, m.id),
           kind: "model",
           model: m,
         })),
@@ -483,10 +477,14 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
   const activeKey = (m?: EnrichedModel | null) => {
     if (!m) return props.allowClear ? CLEAR_KEY : defaultKey()
     const favorite = favoriteKey(m)
+    const used = rowKey("most-used", m.providerID, m.id)
     const canon = canonicalKey(m)
     if (!hasSearch() && nodeMap().has(favorite)) return favorite
+    if (!hasSearch() && nodeMap().has(used)) return used
     if (nodeMap().has(canon)) return canon
-    const group = groups().find((group) => group.rows.some((row) => row.key === favorite || row.key === canon))
+    const group = groups().find((group) =>
+      group.rows.some((row) => row.key === favorite || row.key === used || row.key === canon),
+    )
     const heading = group && groupKey(group.key)
     return heading && nodeMap().has(heading) ? heading : defaultKey()
   }
@@ -815,10 +813,11 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
     if (!session) return
     interact()
     const canon = canonicalKey(model)
-    // When unfavoriting from the top duplicate, the favorite row will
-    // disappear — anchor to the canonical provider row instead so the
+    const duplicate = row.kind === "favorite" || row.key === rowKey("most-used", model.providerID, model.id)
+    // Toggling a favorite removes its Favorites or Most used copy.
+    // Anchor to the canonical provider row instead so the
     // scroll restore finds an element that still exists after rerender.
-    const key = row.kind === "favorite" ? canon : row.key
+    const key = duplicate ? canon : row.key
     const idx = nodeIndex().get(key)
     setAnchor({
       key,
@@ -826,7 +825,7 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
       scroll: listRef?.scrollTop ?? 0,
     })
     session.toggleFavorite(model.providerID, model.id)
-    if (row.kind !== "favorite") return
+    if (!duplicate) return
     const group = groups().find((group) => group.rows.some((row) => row.key === canon))
     if (group) setCollapsed((prev) => new Set([...prev].filter((key) => key !== group.key)))
     const next = nodeMap().has(canon) ? canon : activeKey(model)

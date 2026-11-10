@@ -23,6 +23,22 @@ import type { TerminalDestination } from "./terminal-destination"
 import type { ScriptTerminalView } from "./ScriptTerminalManager"
 import type { BrowserFeedbackData } from "../shared/browser-feedback"
 import type { ImageAttachment } from "../../webview-ui/src/hooks/useImageAttachments"
+import type { SessionTransferRequest, SessionTransferReply } from "../shared/session-transfer"
+import type {
+  HistoryRequest,
+  HistoryMessage,
+  HistoryOpen,
+  HistoryOpenFailed,
+  SetHistoryExpanded,
+} from "../shared/agent-history"
+export type {
+  HistoryRow,
+  HistoryRequest,
+  HistoryMessage,
+  HistoryOpen,
+  HistoryOpenFailed,
+  SetHistoryExpanded,
+} from "../shared/agent-history"
 import type {
   BrowserCursor,
   BrowserFrame,
@@ -161,6 +177,8 @@ interface StateMessage {
   pinnedTabs?: Record<string, string[]>
   worktreeOrder?: string[]
   sessionsCollapsed?: boolean
+  historyExpanded?: Record<string, boolean>
+  historyInitialized?: boolean
   sidebarCollapsed?: boolean
   reviewDiffStyle?: "unified" | "split"
   reviewMarkdownRender?: boolean
@@ -539,6 +557,9 @@ interface RunStatusMessage extends RunStatus {
 
 /** All messages the Agent Manager extension sends to the webview. */
 export type AgentManagerOutMessage =
+  | SessionTransferReply
+  | HistoryMessage
+  | HistoryOpenFailed
   | WorktreeDeletedMessage
   | import("../shared/pr-comment-actions").PRCommentResult
   | WorktreeActivityMessage
@@ -723,6 +744,7 @@ interface OpenLocallyIn {
 
 interface AddSessionToWorktreeIn {
   type: "agentManager.addSessionToWorktree"
+  projectId?: string
   worktreeId: string
   sessionId?: string
 }
@@ -736,6 +758,7 @@ interface OpenSessionLocallyIn {
 
 interface CloseSessionIn {
   type: "agentManager.closeSession"
+  projectId?: string
   sessionId: string
 }
 
@@ -853,12 +876,14 @@ interface RequestBranchesIn {
 
 interface SetTabOrderIn {
   type: "agentManager.setTabOrder"
+  projectId?: string
   key: string
   order: string[]
 }
 
 interface SetPinnedTabsIn {
   type: "agentManager.setPinnedTabs"
+  projectId?: string
   key: string
   ids: string[]
 }
@@ -1165,6 +1190,7 @@ interface ClearSessionIn {
 
 interface ForkSessionIn {
   type: "agentManager.forkSession"
+  projectId?: string
   sessionId: string
   worktreeId?: string
   messageId?: string
@@ -1315,6 +1341,9 @@ interface BrowserRequestIn {
 
 /** All messages the Agent Manager expects from the webview (onMessage input). */
 export type AgentManagerInMessage =
+  | HistoryRequest
+  | HistoryOpen
+  | SetHistoryExpanded
   | import("../shared/pr-comment-actions").PRCommentRequest
   | import("../../webview-ui/src/types/messages/agent-manager").BaseUpdateRequest
   | CreateWorktreeIn
@@ -1336,6 +1365,7 @@ export type AgentManagerInMessage =
   | CleanOrphanDirectoriesIn
   | RevealPathIn
   | PromoteSessionIn
+  | SessionTransferRequest
   | OpenLocallyIn
   | OpenSessionLocallyIn
   | AddSessionToWorktreeIn

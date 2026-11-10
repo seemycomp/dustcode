@@ -448,8 +448,14 @@ export async function saveCustomProvider(
   }
 
   const refresh = async () => {
-    // Config and auth writes already invalidate backend state. Refresh the UI
-    // independently so catalog/bootstrap failures cannot turn a saved edit into an error.
+    // Acknowledge persistence before tearing down instances, then reload only
+    // after that barrier so the UI cannot republish stale provider state.
+    try {
+      await ctx.client.global.dispose({ throwOnError: true })
+    } catch (error) {
+      console.warn(`[Dustcode] Disposal after custom provider save (${id}) failed:`, error)
+      return
+    }
     await Promise.all([
       refreshConfig(ctx, setCachedConfig).catch((error: unknown) => {
         console.warn(`[Dustcode] Config refresh after custom provider save (${id}) failed:`, error)
@@ -472,6 +478,7 @@ export async function saveCustomProvider(
           provider: { [id]: patch },
           disabled_providers: nextDisabled,
         },
+        dispose: false,
       },
       { throwOnError: true },
     )
@@ -480,10 +487,13 @@ export async function saveCustomProvider(
 
     try {
       if (auth.mode === "set") {
-        await ctx.client.auth.set({ providerID: id, auth: { type: "api", key: auth.key } }, { throwOnError: true })
+        await ctx.client.auth.set(
+          { providerID: id, auth: { type: "api", key: auth.key }, dispose: false },
+          { throwOnError: true },
+        )
       }
       if (auth.mode === "clear") {
-        await ctx.client.auth.remove({ providerID: id }, { throwOnError: true })
+        await ctx.client.auth.remove({ providerID: id, dispose: false }, { throwOnError: true })
       }
     } catch (error) {
       postError(ctx, requestId, providerID, "connect", ctx.getErrorMessage(error) || "Failed to save custom provider")

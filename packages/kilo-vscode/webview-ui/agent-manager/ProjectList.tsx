@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, type Component } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, untrack, type Component } from "solid-js"
 import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { TooltipKeybind } from "@kilocode/kilo-ui/tooltip"
 import type {
@@ -28,6 +28,7 @@ import { createProjectStore, type ProjectStore } from "./project/store"
 import { createWorktreeDelete, type WorktreeDelete } from "./worktree-delete"
 import type { ModeRouter } from "./mode-router"
 import { CaffeinationButton } from "./CaffeinationButton"
+import type { HistoryMenuActions } from "./HistorySessionMenu"
 
 const place = (state: AgentManagerStateMessage, session: ProjectSessionInfo, local: string) => {
   const wt = state.worktrees.find((item) => item.id === session.worktreeId)
@@ -59,6 +60,7 @@ interface Props {
   blocked: (projectId: string, id: string) => boolean
   activityFor: (projectId: string, worktreeId: string | null) => Activity
   sessionActivity: (id: string) => Activity
+  historyActions?: HistoryMenuActions
   bindings: Record<string, string>
   t: LanguageContextValue["t"]
   onSearchRef: (ref: SidebarSearchMenuRef) => void
@@ -77,9 +79,17 @@ export const ProjectList: Component<Props> = (props) => {
     vscode.postMessage({ type: "agentManager.activateSelection", target, restore })
   }
   const stores = new Map<string, ProjectStore>()
+  const [clock, setClock] = createSignal(Date.now())
+  const interval = setInterval(() => setClock(Date.now()), 60_000)
+  const [acknowledged, acknowledge] = createSignal<AgentManagerSidebarTarget>()
+  let initialized = false
   const store = (id: string) => {
     if (!props.projects.some((project) => project.id === id)) return
-    if (props.store) return props.store(id)
+    if (props.store) {
+      const value = props.store(id)
+      stores.set(id, value)
+      return value
+    }
     const existing = stores.get(id)
     if (existing) return existing
     const value = createProjectStore(id)
@@ -89,6 +99,58 @@ export const ProjectList: Component<Props> = (props) => {
   createEffect(() => {
     if (props.store) return
     for (const [id, state] of Object.entries(props.states)) store(id)?.applyState(state)
+  })
+  const revalidate = () => {
+    for (const value of stores.values()) value.history.revalidate()
+  }
+  const unsubscribe = vscode.onMessage((message) => {
+    if (message.type === "agentManager.history" || message.type === "agentManager.historyOpenFailed")
+      store(message.projectId)?.history.receive(message)
+    if (message.type === "agentManager.selectionActivated") acknowledge(message.target)
+    if (
+      (message.type === "connectionState" && message.state === "connected") ||
+      (message.type === "webviewActiveChanged" && message.active)
+    )
+      revalidate()
+  })
+  window.addEventListener("focus", revalidate)
+  onCleanup(() => {
+    clearInterval(interval)
+    unsubscribe()
+    window.removeEventListener("focus", revalidate)
+    for (const value of stores.values()) value.history.dispose()
+  })
+  createEffect(() => {
+    const ids = new Set(props.projects.map((project) => project.id))
+    for (const [id, value] of stores) {
+      if (ids.has(id)) continue
+      value.history.dispose()
+      stores.delete(id)
+    }
+  })
+  createEffect(() => {
+    if (initialized) return
+    const target = acknowledged()
+    if (!target || props.selectedProject !== target.projectId) return
+    const state = props.states[target.projectId]
+    const value = store(target.projectId)
+    if (!state || !value) return
+    const session = target.kind === "session" ? state.sessions.find((item) => item.id === target.sessionId) : undefined
+    if (target.kind === "session" && !session) return
+    const worktreeId = target.kind === "worktree" ? target.worktreeId : (session?.worktreeId ?? null)
+    initialized = true
+    untrack(() => {
+      if (value.historyInitialized()) return
+      value.setHistoryInitialized(true)
+      value.setHistoryExpanded((prev) => ({ ...prev, [worktreeId ?? "local"]: prev[worktreeId ?? "local"] ?? true }))
+      vscode.postMessage({
+        type: "agentManager.setHistoryExpanded",
+        projectId: target.projectId,
+        worktreeId,
+        expanded: true,
+        initialize: true,
+      })
+    })
   })
   const deletion = createWorktreeDelete({
     store,
@@ -322,6 +384,9 @@ export const ProjectList: Component<Props> = (props) => {
           selectedProject={props.selectedProject}
           selection={props.selection}
           currentSessionID={props.currentSessionID}
+          clock={clock}
+          sessionActivity={props.sessionActivity}
+          historyActions={props.historyActions}
           bindings={props.bindings}
           t={props.t}
           onSelectLocal={(projectId) => select({ projectId, kind: "local" })}

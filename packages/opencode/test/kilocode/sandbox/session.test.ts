@@ -6,6 +6,7 @@ import { describe, expect, test } from "bun:test"
 import { Deferred, Effect, Exit, Layer } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Database } from "@opencode-ai/core/database/database"
+import { SessionAdmission } from "@opencode-ai/core/kilocode/session-admission"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { BackgroundJob } from "@/background/job"
@@ -37,6 +38,7 @@ const it = testEffect(
       Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: false })),
       Layer.provide(AppNodeBuilder.build(BackgroundJob.node)),
       Layer.provide(AppNodeBuilder.build(Database.node)),
+      Layer.provide(AppNodeBuilder.build(SessionAdmission.node)),
       Layer.provide(AppNodeBuilder.build(EventV2Bridge.node)),
       Layer.provide(AppNodeBuilder.build(SessionV2.node, [[SessionExecution.node, SessionExecution.noopLayer]])), // kilocode_change
     ),

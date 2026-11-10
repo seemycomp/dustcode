@@ -4,6 +4,7 @@ type Schema = {
   anyOf?: Schema[]
   const?: string
   default?: unknown
+  description?: string
   enum?: string[]
   items?: Schema
   minimum?: number
@@ -35,12 +36,20 @@ type Spec = {
   components?: {
     schemas?: Record<string, Schema>
   }
-  paths?: Record<string, Partial<Record<"get" | "post" | "put" | "patch", Operation>>>
+  paths?: Record<string, Partial<Record<"get" | "post" | "put" | "patch" | "delete", Operation>>>
 }
 
 export function matchLegacyKiloOpenApi(input: Record<string, unknown>) {
   rebrand(input)
   const spec = input as Spec
+  for (const operation of [
+    spec.paths?.["/global/config"]?.patch,
+    spec.paths?.["/auth/{providerID}"]?.put,
+    spec.paths?.["/auth/{providerID}"]?.delete,
+  ]) {
+    const dispose = operation?.parameters?.find((param) => param.in === "query" && param.name === "dispose")
+    if (dispose) dispose.schema = { type: "boolean", description: dispose.schema?.description }
+  }
   const rules = spec.paths?.["/config/rules"]?.get?.parameters?.find(
     (param) => param.in === "query" && param.name === "scope",
   )

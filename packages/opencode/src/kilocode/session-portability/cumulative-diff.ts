@@ -3,6 +3,7 @@ import { Snapshot } from "@/snapshot"
 import { Storage } from "@/storage/storage"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import type { SessionID } from "@/session/schema"
+import { diffKey } from "@/kilocode/session-transfer/epoch"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder" // kilocode_change
 
 export type PortableDiff = Snapshot.FileDiff & {
@@ -43,7 +44,10 @@ export function appendSessionDiffs(input: { existing: PortableDiff[]; next: Port
 }
 
 export function readSessionDiffBase(storage: Storage.Interface, id: SessionID | string) {
-  return storage.read<PortableDiff[]>(baseKey(id)).pipe(Effect.catch(() => Effect.succeed([] as PortableDiff[])))
+  return Effect.gen(function* () {
+    const key = yield* diffKey(id as SessionID, true)
+    return yield* storage.read<PortableDiff[]>(key).pipe(Effect.catch(() => Effect.succeed([] as PortableDiff[])))
+  })
 }
 
 export function cumulativeSessionDiff(storage: Storage.Interface, id: SessionID | string, local: PortableDiff[]) {
@@ -58,18 +62,23 @@ const runtime = makeRuntime(Storage.Service, AppNodeBuilder.build(Storage.node))
  * Carry a source session's cumulative diff base onto a freshly forked session, so imported/cumulative
  * diffs survive the fork. Returns a plain Effect with no Storage requirement.
  */
-export function carryForkDiff(sourceID: SessionID | string, targetID: SessionID | string): Effect.Effect<void> {
-  return Effect.promise(() =>
-    runtime.runPromise((storage) =>
-      Effect.gen(function* () {
-        const local = yield* storage
-          .read<PortableDiff[]>(["session_diff", String(sourceID)])
-          .pipe(Effect.orElseSucceed((): PortableDiff[] => []))
-        const base = yield* cumulativeSessionDiff(storage, sourceID, local)
-        if (base.length === 0) return
-        yield* storage.write(baseKey(targetID), base).pipe(Effect.ignore)
-        yield* storage.write(["session_diff", String(targetID)], base).pipe(Effect.ignore)
-      }),
-    ),
-  )
+export function carryForkDiff(sourceID: SessionID | string, targetID: SessionID | string) {
+  return Effect.gen(function* () {
+    const source = yield* diffKey(sourceID as SessionID)
+    const basis = yield* diffKey(sourceID as SessionID, true)
+    yield* Effect.promise(() =>
+      runtime.runPromise((storage) =>
+        Effect.gen(function* () {
+          const local = yield* storage.read<PortableDiff[]>(source).pipe(Effect.orElseSucceed((): PortableDiff[] => []))
+          const previous = yield* storage
+            .read<PortableDiff[]>(basis)
+            .pipe(Effect.orElseSucceed((): PortableDiff[] => []))
+          const base = mergeSessionDiffs({ base: previous, local })
+          if (base.length === 0) return
+          yield* storage.write(baseKey(targetID), base).pipe(Effect.ignore)
+          yield* storage.write(["session_diff", String(targetID)], base).pipe(Effect.ignore)
+        }),
+      ),
+    )
+  })
 }

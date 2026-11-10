@@ -6,6 +6,8 @@ import { GoalLink } from "@/kilocode/session/goal/link"
 import { GoalState } from "@/kilocode/session/goal/state"
 import { Effect, Layer } from "effect"
 import { Fire, type Info } from "./schema"
+import { KiloRunner } from "@/kilocode/effect/runner"
+import { SessionDrain } from "@/kilocode/session/drain"
 
 const log = Log.create({ service: "wakeup" })
 
@@ -88,8 +90,10 @@ async function resume(info: Info, inst?: InstanceContext, inPlace = false, kind?
       }
       // Fork the turn so the firing timer never blocks on the model running.
       await AppRuntime.runPromise(
-        SessionPrompt.Service.use((svc) =>
-          Effect.forkDetach(
+        Effect.gen(function* () {
+          const svc = yield* SessionPrompt.Service
+          const drain = yield* SessionDrain.Service
+          return yield* KiloRunner.fork(Effect.forkDetach(
             svc
               .prompt({
                 sessionID: info.sessionID,
@@ -104,8 +108,8 @@ async function resume(info: Info, inst?: InstanceContext, inPlace = false, kind?
                 ],
               })
               .pipe(Effect.catchCause((cause) => Effect.logError("wakeup prompt failed", { id: info.id, cause }))),
-          ),
-        ),
+          ), drain.hold(info.sessionID))
+        }),
       )
     }
     // An overdue wake fires from `adopt` while its directory's instance is still

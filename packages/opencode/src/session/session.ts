@@ -45,6 +45,8 @@ import { KiloSessionEvent } from "@/kilocode/session/event"
 import { SessionExport } from "@/kilocode/session-export"
 import * as SandboxPolicy from "@/kilocode/sandbox/policy"
 import { carryForkDiff } from "@/kilocode/session-portability/cumulative-diff" // kilocode_change
+import { admit } from "@/kilocode/session/admission"
+import { SessionAdmission } from "@opencode-ai/core/kilocode/session-admission"
 // kilocode_change end
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
 import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
@@ -335,6 +337,7 @@ export type GlobalListInput = {
   roots?: boolean
   start?: number
   cursor?: number
+  cursorID?: string // kilocode_change - optional timestamp tiebreaker
   search?: string
   limit?: number
   archived?: boolean
@@ -586,7 +589,7 @@ export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" 
 export const layer: Layer.Layer<
   Service,
   never,
-  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service
+  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service | SessionAdmission.Service // kilocode_change
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -595,6 +598,7 @@ export const layer: Layer.Layer<
     const background = yield* BackgroundJob.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const admission = yield* SessionAdmission.Service // kilocode_change
 
     // kilocode_change start - inherited sandbox policy source
     const createNext = Effect.fn("Session.createNext")(function* (input: {
@@ -657,7 +661,10 @@ export const layer: Layer.Layer<
       // kilocode_change start - initialize inherited state before session.created subscribers run
       KiloSession.register({ id: result.id, parentID: result.parentID, platform: input.platform })
       const source = input.sourceID ?? result.parentID
-      if (source) yield* SandboxPolicy.inherit(source, result.id, input.sandboxFallback, input.sourceDirectory)
+      if (source)
+        yield* SandboxPolicy.inherit(source, result.id, input.sandboxFallback, input.sourceDirectory).pipe(
+          Effect.provideService(Database.Service, database),
+        )
       // kilocode_change end
 
       result.metadata = GoalState.project(result.id, result.metadata) // kilocode_change
@@ -843,7 +850,9 @@ export const layer: Layer.Layer<
       const original = yield* get(input.sessionID)
       const title = getForkedTitle(original.title)
       // kilocode_change start - forks into another directory cannot read the source confinement from the new dir, so carry it over explicitly
-      const sandboxFallback = yield* SandboxPolicy.peek(original.directory, input.sessionID)
+      const sandboxFallback = yield* SandboxPolicy.peek(original.directory, input.sessionID).pipe(
+        Effect.provideService(Database.Service, database),
+      )
       // kilocode_change end
       // kilocode_change start - historical forks must use the model from retained context, not a later source-session selection
       const msgs = yield* messages({ sessionID: input.sessionID })
@@ -911,7 +920,7 @@ export const layer: Layer.Layer<
       }
       yield* writer.flush // kilocode_change
       // kilocode_change - preserve imported/cumulative diffs when forking (self-contained Storage runtime keeps this shared file off the legacy Storage layer)
-      yield* carryForkDiff(input.sessionID, session.id)
+      yield* carryForkDiff(input.sessionID, session.id).pipe(Effect.provideService(Database.Service, database)) // kilocode_change
       // kilocode_change start - fork terminal task children under the new parent and remap their references
       yield* KiloSession.remapChildren({
         sessionID: session.id,
@@ -1106,7 +1115,8 @@ export const layer: Layer.Layer<
       return Option.none<SessionV1.WithParts>()
     })
 
-    return Service.of({
+    // kilocode_change start - public mutations participate in transfer admission
+    const service = Service.of({
       list,
       listGlobal,
       create,
@@ -1135,6 +1145,8 @@ export const layer: Layer.Layer<
       updatePartDelta,
       findMessage,
     })
+    return admit(service, admission) // kilocode_change
+    // kilocode_change end
   }),
 )
 
@@ -1230,6 +1242,7 @@ export function listGlobal(input?: {
   roots?: boolean
   start?: number
   cursor?: number
+  cursorID?: string
   search?: string
   limit?: number
   archived?: boolean
@@ -1244,7 +1257,7 @@ export const fork = kiloSessionFork
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node],
+  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node, SessionAdmission.node], // kilocode_change
 })
 
 export * as Session from "./session"

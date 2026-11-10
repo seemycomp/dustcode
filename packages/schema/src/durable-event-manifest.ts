@@ -5,6 +5,7 @@ import { Schema } from "effect" // kilocode_change
 import { SessionEvent } from "./session-event"
 import { SessionV1 } from "./session-v1"
 import { PromptPromoted } from "./kilocode/durable-event" // kilocode_change - released storage key
+import { Imported, Retained } from "./kilocode/session-transfer" // kilocode_change
 
 // kilocode_change start - retain the released prompt promotion event for history and replay
 const definitions = Event.inventory(...SessionEvent.DurableDefinitions, PromptPromoted)
@@ -22,4 +23,5 @@ export const SessionDurable = {
 export const Durable = Event.durable([
   ...SessionV1.Event.Definitions.filter((definition) => definition.durable !== undefined),
   ...definitions, // kilocode_change
+  Imported, Retained, // kilocode_change - replayable native transfer imports remain internal, not V1 protocol events
 ])

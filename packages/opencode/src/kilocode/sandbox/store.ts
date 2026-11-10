@@ -14,6 +14,7 @@ export namespace SandboxStore {
     allowedHosts: string[]
     writablePaths: string[]
     version: number
+    epoch?: string
   }
 
   export const root = path.join(realpathSync.native(path.dirname(Global.Path.state)), "kilo-sandbox-policy")
@@ -39,6 +40,7 @@ export namespace SandboxStore {
       Number.isSafeInteger(state.version) &&
       Number(state.version) >= 0
     if (!base) return false
+    if (state.epoch !== undefined && typeof state.epoch !== "string") return false
     if (state.allowedHosts !== undefined && !Array.isArray(state.allowedHosts)) return false
     if (state.writablePaths !== undefined && !Array.isArray(state.writablePaths)) return false
     if (Array.isArray(state.allowedHosts) && state.allowedHosts.some((value) => typeof value !== "string")) return false
@@ -64,6 +66,7 @@ export namespace SandboxStore {
       allowedHosts: (state.allowedHosts as string[] | undefined) ?? [],
       writablePaths: (state.writablePaths as string[] | undefined) ?? [],
       version: state.version as number,
+      ...(typeof state.epoch === "string" ? { epoch: state.epoch } : {}),
     } satisfies Snapshot
   }
 

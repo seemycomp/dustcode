@@ -16,6 +16,12 @@ import { canonicalizePath, projectIdFor, resolveProjectRoot, samePath } from "./
 import type { SidebarTarget, SessionRef } from "./route"
 import { cloneProject, createProject, defaultParent, onboard, type Onboarding } from "./onboarding"
 import { runner } from "./prepare"
+import type { AgentHistory } from "../history"
+import { sessionToWebview } from "../../kilo-provider-utils"
+import type { HistoryOpen } from "../../shared/agent-history"
+import type { KiloClient } from "@kilocode/sdk/v2/client"
+import { handleTransfer } from "./transfer"
+import type { SessionProvider } from "../host"
 
 const pending = new WeakSet<ProjectMessageDeps>()
 const selections = new WeakMap<ProjectMessageDeps, symbol>()
@@ -25,6 +31,7 @@ export function routeProjectSession(
   sessions:
     | {
         setSessionDirectory(id: string, directory: string): void
+        clearSessionDirectory?(id: string): void
         registerSessionRoute?(ref: SessionRef, directory: string, generation: number): void
       }
     | undefined,
@@ -32,13 +39,27 @@ export function routeProjectSession(
   sessionId: string,
   directory: string,
   generation: number,
+  clear = false,
 ): void {
   if (!sessions) return
-  sessions.setSessionDirectory(sessionId, directory)
+  if (clear) sessions.clearSessionDirectory?.(sessionId)
+  if (!clear) sessions.setSessionDirectory(sessionId, directory)
   sessions.registerSessionRoute?.({ projectId, sessionId }, directory, generation)
 }
 
 export interface ProjectMessageDeps {
+  history?: AgentHistory
+  transfer?: {
+    client: (directory: string) => Promise<KiloClient>
+    sessions: () => SessionProvider | undefined
+    closeBrowser: (id: string) => void
+    create: (
+      ctx: ProjectContext,
+      source: string,
+      branch?: string,
+    ) => Promise<import("../WorktreeStateManager").Worktree>
+    reconnect?: () => Promise<void>
+  }
   registry: ProjectRegistry
   contexts: ProjectContexts
   /** Show a folder picker; resolves undefined when cancelled. */
@@ -70,8 +91,33 @@ export interface ProjectMessageDeps {
   log: (...args: unknown[]) => void
 }
 
+async function handleHistoryMessage(m: AgentManagerInMessage, deps: ProjectMessageDeps): Promise<boolean> {
+  if (m.type === "agentManager.requestHistory") {
+    await deps.history?.request(m)
+    return true
+  }
+  if (m.type === "agentManager.openHistorySession") {
+    await openHistory(m, deps)
+    return true
+  }
+  if (m.type === "agentManager.setHistoryExpanded") {
+    const ctx = deps.contexts.resolve(m.projectId)
+    const state = ctx?.peekState()
+    if (!ctx || !state || (m.worktreeId !== null && !state.getWorktree(m.worktreeId))) return true
+    state.setHistoryExpanded(m.worktreeId, m.expanded, m.initialize)
+    deps.pushState?.(ctx)
+    return true
+  }
+  return false
+}
+
 /** Handle a project-management message. Returns true when the message was consumed. */
 export async function handleProjectMessage(m: AgentManagerInMessage, deps: ProjectMessageDeps): Promise<boolean> {
+  if (m.type === "agentManager.sessionTransfer") {
+    await handleTransfer(m, deps)
+    return true
+  }
+  if (await handleHistoryMessage(m, deps)) return true
   if (m.type === "openSettingsPanel") {
     deps.openSettings(m.tab, m.projectId)
     return true
@@ -139,6 +185,33 @@ export async function handleProjectMessage(m: AgentManagerInMessage, deps: Proje
     return true
   }
   return false
+}
+
+async function openHistory(request: HistoryOpen, deps: ProjectMessageDeps): Promise<void> {
+  const token = Symbol()
+  selections.set(deps, token)
+  try {
+    if (!deps.history) throw new Error("History is unavailable.")
+    const { ctx, info, directory } = await deps.history.validate(request)
+    if (selections.get(deps) !== token) return
+    const state = ctx.peekState()
+    if (!state) throw new Error("The project is not ready.")
+    if (!state.getSession(info.id)) state.addSession(info.id, request.worktreeId)
+    deps.routeSession?.(ctx.id, info.id, directory, ctx.generation)
+    ctx.upsertSession({ ...sessionToWebview(info), parentID: null, worktreeId: request.worktreeId })
+    deps.pushState?.(ctx)
+    deps.post({ type: "agentManager.projectSessions", projectId: ctx.id, sessions: [...ctx.sessions()] })
+    finish({ projectId: ctx.id, kind: "session", sessionId: info.id }, deps)
+  } catch (err) {
+    if (selections.get(deps) !== token) return
+    deps.post({
+      type: "agentManager.historyOpenFailed",
+      projectId: request.projectId,
+      worktreeId: request.worktreeId,
+      requestId: request.requestId,
+      error: err instanceof Error ? err.message : "Could not open this conversation.",
+    })
+  }
 }
 
 async function activateSelection(requested: SidebarTarget, deps: ProjectMessageDeps, restore = false): Promise<void> {
@@ -324,6 +397,7 @@ async function removeProject(id: string, deps: ProjectMessageDeps): Promise<void
   const active = deps.contexts.active()?.id === id
   await deps.registry.remove(id)
   await deps.contexts.remove(id)
+  deps.history?.pauseProject(id)
   deps.push()
   if (!active) return
   const next = deps.contexts.active()
@@ -358,5 +432,6 @@ async function setExpanded(id: string, expanded: boolean, deps: ProjectMessageDe
     }
   }
   if (!expanded) deps.contexts.collapse(id)
+  if (!expanded) deps.history?.pauseProject(id)
   deps.push()
 }

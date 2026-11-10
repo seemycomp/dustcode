@@ -442,6 +442,15 @@
   font-weight: 600;
 }
 
+.model-selector-item.active .model-selector-item-provider-tag,
+.model-selector-item.active .model-selector-star {
+  color: inherit;
+}
+
+.model-selector-item.active .model-selector-item-provider-tag {
+  opacity: 0.85;
+}
+
 .model-selector-item-left {
   display: flex;
   align-items: center;
@@ -556,6 +565,11 @@
   opacity: 1;
 }
 
+.model-selector-item.active .model-selector-star:hover,
+.model-selector-item.active .model-selector-star--active {
+  color: inherit;
+}
+
 .model-selector-star--preview {
   opacity: 1;
 }
@@ -636,17 +650,41 @@
   text-transform: capitalize;
 }
 
+.mode-switcher-trigger-badge,
+.mode-switcher-item-badge {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--mode-color) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mode-color) 14%, transparent);
+  color: var(--mode-color);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mode-switcher-trigger-badge {
+  max-width: 100%;
+  padding: 2px 7px;
+}
+
+.mode-switcher-trigger-badge .mode-switcher-trigger-label {
+  color: inherit;
+}
+
 .mode-switcher-list {
   overflow-y: auto;
 }
 
 .mode-switcher-item {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 12px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 4px 8px;
   cursor: pointer;
-  font-size: var(--font-size-base);
+  font-size: var(--kilo-font-size-12);
 }
 
 .mode-switcher-item:hover {
@@ -667,18 +705,35 @@
   color: var(--text-on-interactive-base, var(--vscode-list-activeSelectionForeground));
 }
 
+.mode-switcher-item-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.mode-switcher-item-badge {
+  max-width: 100%;
+  padding: 2px 7px;
+}
+
 .mode-switcher-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 500;
 }
 
 .mode-switcher-item-desc {
-  display: block;
-  font-size: var(--kilo-font-size-11);
-  color: var(--text-weak, var(--vscode-descriptionForeground));
-  max-width: 100%;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  display: none;
+}
+
+.mode-switcher-item-check {
+  flex-shrink: 0;
+  color: inherit;
+  font-size: var(--kilo-font-size-13);
+  font-weight: 700;
 }
 
 .mode-switcher-item.selected .mode-switcher-item-name {

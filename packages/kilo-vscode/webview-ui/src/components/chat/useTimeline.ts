@@ -3,7 +3,7 @@ import type { AssistantMessage as SDKAssistantMessage, Part as SDKPart } from "@
 import { useSession } from "../../context/session"
 import { visibleParts } from "../../context/session-queue"
 import { category, color, label, type TimelineCategory } from "../../utils/timeline/colors"
-import { sizes } from "../../utils/timeline/sizes"
+import { sizes, tokens } from "../../utils/timeline/sizes"
 import { isRenderable } from "../../utils/transcript-parts"
 
 export interface TimelineBar {
@@ -15,6 +15,7 @@ export interface TimelineBar {
   msgId: string
   partId: string
   category: TimelineCategory
+  tokens: number
 }
 
 export function useTimeline() {
@@ -46,6 +47,7 @@ export function useTimeline() {
         msgId: entry.msg.id,
         partId: entry.part.id,
         category: category(entry.part),
+        tokens: tokens(entry.part),
       }),
     )
   })

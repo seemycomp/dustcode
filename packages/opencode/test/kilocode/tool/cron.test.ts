@@ -5,6 +5,9 @@ import os from "os"
 import path from "path"
 import { Effect, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { Database } from "@opencode-ai/core/database/database"
+import { SessionAdmission } from "@opencode-ai/core/kilocode/session-admission"
 import { EventV2 } from "@opencode-ai/core/event"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Agent } from "@/agent/agent"
@@ -74,7 +77,16 @@ function makeLayer(dir: string) {
   )
   return Layer.mergeAll(
     Layer.succeed(InstanceRef, { directory: dir, worktree: dir, project: {} as any }),
-    Wakeup.layer.pipe(Layer.provide(Layer.mergeAll(storage, fire, events))),
+    Wakeup.layer.pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          storage,
+          fire,
+          events,
+          AppNodeBuilder.build(SessionAdmission.node, [[Database.node, Database.layerFromPath(":memory:")]]),
+        ),
+      ),
+    ),
     Layer.succeed(Agent.Service, agents),
     Layer.succeed(Truncate.Service, truncate),
   )
@@ -104,10 +116,7 @@ async function run<T>(fn: (tools: Tools, wake: Wakeup.Interface) => Effect.Effec
         const create = yield* CronCreateTool
         const list = yield* CronListTool
         const remove = yield* CronDeleteTool
-        return yield* fn(
-          { create: yield* create.init(), list: yield* list.init(), remove: yield* remove.init() },
-          wake,
-        )
+        return yield* fn({ create: yield* create.init(), list: yield* list.init(), remove: yield* remove.init() }, wake)
       }).pipe(Effect.provide(makeLayer(dir))),
     )
   } finally {

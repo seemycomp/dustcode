@@ -10,6 +10,7 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi" // kilocode_change - HttpApiSchema for the bodyless upgrade payload
 import semver from "semver"
 import { described } from "./metadata"
+import { PersistenceQuery } from "@/kilocode/server/httpapi/groups/persistence" // kilocode_change
 
 const GlobalHealth = Schema.Struct({
   healthy: Schema.Literal(true),
@@ -111,6 +112,7 @@ export const GlobalApi = HttpApi.make("global").add(
         }),
       ),
       HttpApiEndpoint.patch("configUpdate", GlobalPaths.config, {
+        query: PersistenceQuery, // kilocode_change
         payload: ConfigV1.Info,
         success: described(ConfigV1.Info, "Successfully updated global config"),
         error: HttpApiError.BadRequest,

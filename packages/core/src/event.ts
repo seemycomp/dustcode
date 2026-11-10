@@ -135,7 +135,7 @@ export interface Interface {
   // kilocode_change start
   readonly publishAll: (
     entries: readonly { readonly definition: Definition; readonly data: Data<Definition> }[],
-    options?: PublishOptions,
+    options?: PublishOptions & { readonly check?: Effect.Effect<void> },
   ) => Effect.Effect<void>
   // kilocode_change end
   readonly subscribe: <D extends Definition>(definition: D) => Stream.Stream<Payload<D>>

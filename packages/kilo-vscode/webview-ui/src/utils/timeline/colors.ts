@@ -30,7 +30,7 @@ export type TimelineCategory = "text" | "reasoning" | "read" | "write" | "tool" 
 
 export interface TimelineGroup {
   key: TimelineCategory
-  count: number
+  tokens: number
 }
 
 // ── File operation detection ─────────────────────────────────────────
@@ -81,10 +81,13 @@ export function category(part: Part): TimelineCategory {
   return "tool"
 }
 
-export function groups(items: { category: TimelineCategory }[]): TimelineGroup[] {
+export function groups(items: { category: TimelineCategory; tokens: number }[]): TimelineGroup[] {
   const counts = new Map<TimelineCategory, number>()
-  for (const item of items) counts.set(item.category, (counts.get(item.category) ?? 0) + 1)
-  return [...counts].map(([key, count]) => ({ key, count }))
+  for (const item of items) {
+    if (item.tokens <= 0) continue
+    counts.set(item.category, (counts.get(item.category) ?? 0) + item.tokens)
+  }
+  return [...counts].map(([key, tokens]) => ({ key, tokens }))
 }
 
 // ── Label for tooltip ────────────────────────────────────────────────

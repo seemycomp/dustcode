@@ -18,6 +18,7 @@ import { SandboxPreference } from "./preference"
 import * as SandboxState from "./state"
 import { SandboxConfig } from "./config"
 import { SandboxStore } from "./store"
+import * as TransferEpoch from "@/kilocode/session-transfer/epoch"
 
 export type Snapshot = SandboxStore.Snapshot
 export type Target = { id: SessionID; directory: string }
@@ -280,9 +281,13 @@ export function profile(
 
 const read = Effect.fn("SandboxPolicy.read")(function* (directory: string, sessionID: SessionID) {
   const id = key(directory, sessionID)
-  const current = snapshots.get(id)
-  if (current) return current
+  const epoch = yield* TransferEpoch.read(sessionID)
+  // Session metadata can select an epoch, but can never supply confinement authority.
   const stored = yield* Effect.promise(() => SandboxStore.read(directory, sessionID))
+  if (epoch && canonical(epoch.directory) === canonical(directory)) {
+    if (stored?.epoch !== epoch.operationID) return yield* Effect.die(new Error("Transfer confinement authority is unavailable; refusing execution"))
+    synced.set(id, revision)
+  }
   if (stored) snapshots.set(id, stored)
   return stored
 })
@@ -467,6 +472,17 @@ export const peek = Effect.fn("SandboxPolicy.peek")(function* (directory: string
   return yield* read(directory, sessionID)
 })
 
+/** Inspect source confinement without seeding or modifying its persisted authority. */
+export const capture = Effect.fn("SandboxPolicy.capture")(function* (directory: string, sessionID: SessionID, persisted?: string) {
+  const current = yield* read(directory, sessionID)
+  if (current) return current
+  if (persisted && canonical(persisted) !== canonical(directory)) {
+    const original = yield* read(persisted, sessionID)
+    if (original) return original
+  }
+  return yield* resolveInitial(directory, sessionID)
+})
+
 function intersect(parent: Snapshot, child: Snapshot) {
   const paths = child.writablePaths.filter((value) => parent.writablePaths.includes(value))
   if (parent.mode === "deny" || child.mode === "deny") {
@@ -488,6 +504,13 @@ function intersect(parent: Snapshot, child: Snapshot) {
   }
 }
 
+/** Stage protected destination authority while transfer admission excludes execution. */
+export const relocate = Effect.fn("SandboxPolicy.relocate")(function* (directory: string, sessionID: SessionID, source: Snapshot, epoch: string) {
+  const stored = yield* Effect.promise(() => SandboxStore.read(directory, sessionID))
+  const next: Snapshot = { ...source, ...(stored ? { enabled: source.enabled || stored.enabled, ...intersect(source, stored) } : {}), epoch }
+  yield* Effect.promise(() => SandboxStore.write(directory, sessionID, next))
+})
+
 const inheritSnapshot = Effect.fn("SandboxPolicy.inheritSnapshot")(function* (
   directory: string,
   parent: Snapshot,
@@ -498,6 +521,7 @@ const inheritSnapshot = Effect.fn("SandboxPolicy.inheritSnapshot")(function* (
   const next: Snapshot = child
     ? {
         enabled: parent.enabled || child.enabled,
+        ...(child.epoch ? { epoch: child.epoch } : {}),
         ...intersect(parent, child),
         version: child.version + 1,
       }

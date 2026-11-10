@@ -88,9 +88,18 @@ if (location.search.includes("internal")) {
       { ...messages.at(index)!, id: reply, parentID: id, time: { created: i * 100 + 70 } },
     )
     parts[id] =
-      i === 15
+      i === 15 || location.search.includes("compaction")
         ? [{ id: `part-${id}`, messageID: id, type: "compaction", auto: true }]
-        : [{ id: `part-${id}`, messageID: id, type: "text", text: "Internal continuation", synthetic: true }]
+        : [
+            {
+              id: `part-${id}`,
+              messageID: id,
+              type: "text",
+              text: "Internal continuation",
+              synthetic: true,
+              metadata: location.search.includes("background") ? { background: true } : undefined,
+            },
+          ]
     parts[reply] = [{ id: `part-${reply}`, messageID: reply, type: "text", text: answer }]
   }
 }
@@ -116,6 +125,23 @@ if (location.search.includes("todos")) {
               { content: "Verify the floating list", status: "pending" },
             ],
       },
+    },
+  })
+}
+
+if (location.search.includes("updates")) {
+  parts["assistant-29"]!.push({
+    id: "previous-todos",
+    type: "tool",
+    tool: "todowrite",
+    callID: "previous-todo-call",
+    messageID: "assistant-29",
+    sessionID: sid,
+    state: {
+      status: "completed",
+      input: {},
+      output: "Updated todos",
+      metadata: { todos: [{ content: "Previous independent plan", status: "pending" }] },
     },
   })
 }
@@ -154,6 +180,34 @@ function App() {
         >
           Refresh parts
         </button>
+        <Show when={location.search.includes("updates")}>
+          <button
+            data-testid="finish-todos"
+            onClick={() => {
+              const part = parts["assistant-30"]?.find((part) => part.type === "tool" && part.tool === "todowrite")
+              if (part?.type !== "tool" || part.state.status !== "completed") return
+              const items = part.state.metadata?.todos
+              if (!Array.isArray(items)) return
+              const id = location.search.includes("internal") ? "continuation-30" : "assistant-30"
+              parts[id] = [
+                ...(parts[id] ?? []),
+                {
+                  ...part,
+                  id: "todo-final",
+                  messageID: id,
+                  state: {
+                    ...part.state,
+                    metadata: { todos: items.map((item) => ({ ...item, status: "completed" })) },
+                  },
+                },
+              ]
+              refresh((value) => value + 1)
+            }}
+            style={{ position: "fixed", right: "20px", bottom: "60px", "z-index": 20 }}
+          >
+            Finish todos
+          </button>
+        </Show>
         <div class="chat-view" style={{ height: "100vh" }}>
           <Show when={location.search.includes("composer")} fallback={<MessageList />}>
             <TaskHeader />

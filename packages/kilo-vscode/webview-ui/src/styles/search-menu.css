@@ -25,6 +25,18 @@
 .search-menu [data-slot="list-item"][data-active="true"],
 .search-menu [data-slot="list-item"][data-selected="true"] {
   background: color-mix(in srgb, var(--text-base) 10%, transparent);
+  color: var(--text-base);
+}
+
+.search-menu [data-slot="list-item"][data-active="true"] .search-menu-icon,
+.search-menu [data-slot="list-item"][data-selected="true"] .search-menu-icon,
+.search-menu [data-slot="list-item"][data-active="true"] .search-menu-title,
+.search-menu [data-slot="list-item"][data-selected="true"] .search-menu-title,
+.search-menu [data-slot="list-item"][data-active="true"] .search-menu-meta,
+.search-menu [data-slot="list-item"][data-selected="true"] .search-menu-meta,
+.search-menu [data-slot="list-item"][data-active="true"] .search-menu-status,
+.search-menu [data-slot="list-item"][data-selected="true"] .search-menu-status {
+  color: inherit;
 }
 
 .search-menu-row {

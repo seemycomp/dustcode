@@ -4,6 +4,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { isDisposing, registerBeforeDisposer } from "@/kilocode/effect/instance-registry"
 import { capture, type InstanceContext } from "@/kilocode/instance"
 import type { SessionID } from "@/session/schema"
+import { SessionAdmission } from "@opencode-ai/core/kilocode/session-admission"
 
 type Entry = {
   id: SessionID
@@ -28,6 +29,7 @@ export class Service extends Context.Service<Service, Interface>()("@kilo/Sessio
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const admission = yield* SessionAdmission.Service
     const active = new Map<string, State>()
     const instances = new WeakMap<InstanceContext, State>()
     let stopped = false
@@ -93,12 +95,21 @@ export const layer = Layer.effect(
 
     const hold = Effect.fn("SessionDrain.hold")(function* (id: SessionID) {
       const data = yield* state
+      const release = yield* admission.lease([id], {
+        directory: yield* InstanceState.directory,
+        workspaceID: yield* InstanceState.workspaceID,
+      })
+      if (data.closed) {
+        release()
+        return yield* Effect.interrupt
+      }
       const value = entry(data, id)
       update(data, value, 1)
       let held = true
-      return () => {
+      return (): void => {
         if (!held) return
         held = false
+        release()
         if (!data.closed) update(data, value, -1)
       }
     })
@@ -153,5 +164,5 @@ export const layer = Layer.effect(
   }),
 )
 
-export const node = LayerNode.make({ service: Service, layer, deps: [] })
+export const node = LayerNode.make({ service: Service, layer, deps: [SessionAdmission.node] })
 export * as SessionDrain from "./drain"

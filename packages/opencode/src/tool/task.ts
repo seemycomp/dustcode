@@ -26,6 +26,8 @@ import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import * as SandboxPolicy from "@/kilocode/sandbox/policy" // kilocode_change
 import { Database } from "@opencode-ai/core/database/database"
+import { InstanceRef } from "@/effect/instance-ref" // kilocode_change
+import { InstanceState } from "@/effect/instance-state" // kilocode_change
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -211,7 +213,6 @@ export const TaskTool = Tool.define(
       // kilocode_change start - refresh current parent restrictions when resuming an existing task session
       const fallback = SandboxPolicy.fallback(cfg)
       if (session) {
-        yield* SandboxPolicy.inherit(ctx.sessionID, session.id, fallback)
         const permission = KiloTask.refresh(session.permission ?? [], childPermission)
         session.permission = permission
         yield* sessions.setPermission({ sessionID: session.id, permission })
@@ -230,9 +231,13 @@ export const TaskTool = Tool.define(
         }))
       // kilocode_change end
       // kilocode_change start - rebuild in-memory ancestry and inherit confinement after creation/resume
+      const origin = yield* InstanceState.context
+      const location = parent.metadata?.["kilocode.transfer"] ? { ...origin, directory: nextSession.directory, worktree: nextSession.directory } : origin
       KiloSession.register({ id: nextSession.id, parentID: ctx.sessionID, platform })
       yield* drain.link(nextSession.id, ctx.sessionID)
-      yield* SandboxPolicy.inherit(ctx.sessionID, nextSession.id, fallback).pipe(
+      yield* SandboxPolicy.inherit(ctx.sessionID, nextSession.id, fallback, origin.directory).pipe(
+        Effect.provideService(InstanceRef, location),
+        Effect.provideService(Database.Service, database), // kilocode_change
         Effect.provideService(Config.Service, config),
       )
       // kilocode_change end
@@ -298,6 +303,7 @@ export const TaskTool = Tool.define(
           // kilocode_change end
         },
         Effect.ensuring(KiloTaskBackgroundProcess.finish(nextSession.id)),
+        (work) => work.pipe(Effect.provideService(InstanceRef, location)), // kilocode_change
       ) // kilocode_change - transfer inherited processes when the child run ends
 
       // kilocode_change start - inject completed background task results into the parent session

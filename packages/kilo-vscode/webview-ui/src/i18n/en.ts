@@ -279,7 +279,7 @@ export const dict = {
   "context.usage.full": "{{percentage}}% Full",
   "context.usage.current": "Current context",
   "context.usage.tokens": "{{count}} tokens",
-  "context.usage.activity": "Session activity · item counts",
+  "context.usage.activity": "Session activity · estimated tokens",
   "context.usage.empty": "No session activity yet.",
   "context.usage.category.text": "Responses",
   "context.usage.category.reasoning": "Reasoning",

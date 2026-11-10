@@ -6,7 +6,7 @@
  * interface abstracts all platform capabilities.
  */
 
-import type { Host, Disposable } from "../host"
+import type { Host, Disposable, SessionProvider } from "../host"
 import type { GitOps } from "../GitOps"
 import { ProjectRegistry } from "./registry"
 import type { ProjectContext, ProjectInitResult } from "./context"
@@ -14,6 +14,14 @@ import { ProjectContexts, type ProjectSnapshot } from "./contexts"
 import type { ProjectMessageDeps } from "./messages"
 import { createSettingsHandler, type SettingsHandler } from "./settings"
 import { poolHome } from "../pool/home"
+import { AgentHistory } from "../history"
+import { createTransferTarget } from "./transfer-target"
+import { reconnectTransfers } from "./transfer"
+import { pickSetupTask } from "../setup-script-task"
+import type { ScriptTerminalManager } from "../ScriptTerminalManager"
+import type { RunTask } from "../SetupScriptRunner"
+import type { TerminalDestination } from "../terminal-destination"
+import type { KiloClient } from "@kilocode/sdk/v2/client"
 
 export interface ProjectWiring {
   registry: ProjectRegistry
@@ -52,6 +60,14 @@ export function createProjectWiring(opts: {
   post: (message: import("../types").AgentManagerOutMessage) => void
   /** Route one session to a directory inside a project (override + project route). */
   routeSession?: (projectId: string, sessionId: string, directory: string, generation: number) => void
+  sessions?: () => SessionProvider | undefined
+  connection?: {
+    onStateChange(listener: (state: string) => void): () => void
+    getClientAsync?: (directory: string) => Promise<KiloClient>
+  }
+  setup?: { manager: ScriptTerminalManager; run: RunTask }
+  destination?: () => TerminalDestination
+  closeBrowser?: (id: string) => void
 }): ProjectWiring {
   const registry = new ProjectRegistry(
     { read: () => opts.host.readProjects(), write: (value) => opts.host.writeProjects(value) },
@@ -74,6 +90,7 @@ export function createProjectWiring(opts: {
     },
   })
   const messages: ProjectMessageDeps = {
+    history: new AgentHistory({ contexts, ready: opts.ready, sessions: () => opts.sessions?.(), post: opts.post }),
     registry,
     contexts,
     pickFolder: (input) => opts.host.pickFolder(input),
@@ -92,6 +109,33 @@ export function createProjectWiring(opts: {
     openSettings: (tab, projectId) => opts.host.openSettings(tab, projectId),
     log: opts.log,
   }
+  if (opts.setup && opts.destination && opts.closeBrowser && opts.connection?.getClientAsync)
+    messages.transfer = {
+      client: (dir) => opts.connection!.getClientAsync!(dir),
+      sessions: () => opts.sessions?.(),
+      closeBrowser: opts.closeBrowser,
+      reconnect: () => reconnectTransfers(messages),
+      create: (ctx, source, branch) =>
+        createTransferTarget(ctx, {
+          source,
+          branch,
+          run: (id) =>
+            pickSetupTask({
+              destination: opts.destination!(),
+              worktreeId: id,
+              projectId: ctx.id,
+              manager: opts.setup!.manager,
+              trusted: () => opts.host.isTrusted(),
+              log: (message) => opts.log(message),
+              vscode: opts.setup!.run,
+            }),
+          // Transfer provisioning must not emit ordinary worktree-setup events; those
+          // events are selection-affecting for normal creation flows.
+          post: () => {},
+          push: () => opts.pushState(ctx),
+          log: opts.log,
+        }),
+    }
   const settings = createSettingsHandler({
     contexts,
     open: (path) => opts.host.openDocument(path),
@@ -109,6 +153,12 @@ export function createProjectWiring(opts: {
       }
     }),
   ]
+  const reconnect = opts.connection?.onStateChange((state) => {
+    if (state === "connected") {
+      messages.history?.reconnect()
+      void messages.transfer?.reconnect?.()
+    }
+  })
   return {
     registry,
     contexts,
@@ -119,6 +169,8 @@ export function createProjectWiring(opts: {
       projects: contexts.snapshots(),
     }),
     dispose: () => {
+      reconnect?.()
+      messages.history?.dispose()
       for (const listener of listeners) listener.dispose()
     },
   }

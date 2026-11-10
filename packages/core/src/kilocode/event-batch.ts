@@ -30,6 +30,7 @@ export function make(input: {
         .transaction(
           () =>
             Effect.gen(function* () {
+              if (options?.check) yield* options.check
               for (const entry of entries) {
                 const event: Payload = {
                   id: options?.id ?? Event.ID.create(),

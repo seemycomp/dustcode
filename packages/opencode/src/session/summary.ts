@@ -7,6 +7,8 @@ import { Session } from "./session"
 import { SessionID, MessageID } from "./schema"
 import { appendSessionDiffs, readSessionDiffBase } from "@/kilocode/session-portability/cumulative-diff" // kilocode_change
 import { Storage } from "@/storage/storage" // kilocode_change
+import { diffKey as transferDiffKey } from "@/kilocode/session-transfer/epoch" // kilocode_change
+import { Database } from "@opencode-ai/core/database/database" // kilocode_change
 import { Config } from "@/config/config"
 
 function unquoteGitPath(input: string) {
@@ -81,6 +83,7 @@ const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const config = yield* Config.Service
     const storage = yield* Storage.Service // kilocode_change
+    const database = yield* Database.Service // kilocode_change
 
     const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: { messages: SessionV1.WithParts[] }) {
       let from: string | undefined
@@ -119,7 +122,7 @@ const layer = Layer.effect(
       const local = base.length > 0 && target?.info.role === "user" ? yield* computeDiff({ messages }) : []
       const diffs =
         base.length > 0
-          ? yield* storage.read<Snapshot.FileDiff[]>(["session_diff", input.sessionID]).pipe(
+          ? yield* storage.read<Snapshot.FileDiff[]>(yield* transferDiffKey(input.sessionID)).pipe(
               Effect.orElseSucceed((): Snapshot.FileDiff[] => base),
               Effect.map((existing) =>
                 appendSessionDiffs({ existing: existing.length > 0 ? existing : base, next: local }),
@@ -135,7 +138,7 @@ const layer = Layer.effect(
           files: diffs.length,
         },
       })
-      yield* storage.write(["session_diff", input.sessionID], diffs).pipe(Effect.ignore) // kilocode_change
+      yield* storage.write(yield* transferDiffKey(input.sessionID), diffs).pipe(Effect.ignore) // kilocode_change
       yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: diffs })
 
       if (!target || target.info.role !== "user") return
@@ -144,19 +147,26 @@ const layer = Layer.effect(
       yield* sessions.updateMessage(target.info)
     })
 
-    const diff = Effect.fn("SessionSummary.diff")(function* (input: DiffInput) { // kilocode_change - full-content detail input
+    const diff = Effect.fn("SessionSummary.diff")(function* (input: DiffInput) {
+      // kilocode_change - full-content detail input
       // kilocode_change start - authoritative full-content detail for one file (editor diff tabs)
       if (input.full && input.file) {
         const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
         const messages = input.messageID
           ? all.filter(
-              (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
+              (m) =>
+                m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
             )
           : all
         let from: string | undefined
         let to: string | undefined
         for (const item of messages) {
-          if (!from) for (const part of item.parts) if (part.type === "step-start" && part.snapshot) { from = part.snapshot; break }
+          if (!from)
+            for (const part of item.parts)
+              if (part.type === "step-start" && part.snapshot) {
+                from = part.snapshot
+                break
+              }
           for (const part of item.parts) if (part.type === "step-finish" && part.snapshot) to = part.snapshot
         }
         if (!from || !to) return []
@@ -167,7 +177,7 @@ const layer = Layer.effect(
       // kilocode_change start - retain cumulative diffs for legacy TUI and VS Code consumers
       if (!input.messageID) {
         const diffs = yield* storage
-          .read<Snapshot.FileDiff[]>(["session_diff", input.sessionID])
+          .read<Snapshot.FileDiff[]>(yield* transferDiffKey(input.sessionID))
           .pipe(Effect.catch(() => Effect.succeed([] as Snapshot.FileDiff[])))
         const next = diffs.map((item) => {
           const file = item.file === undefined ? undefined : unquoteGitPath(item.file)
@@ -176,7 +186,7 @@ const layer = Layer.effect(
           return { ...item, ...(file === undefined ? {} : { file }), ...(oversized ? { patch: "" } : {}) }
         })
         if (next.some((item, index) => item !== diffs[index])) {
-          yield* storage.write(["session_diff", input.sessionID], next).pipe(Effect.ignore)
+          yield* storage.write(yield* transferDiffKey(input.sessionID), next).pipe(Effect.ignore)
         }
         return next
       }
@@ -194,7 +204,13 @@ const layer = Layer.effect(
       })
     })
 
-    return Service.of({ summarize, diff, computeDiff })
+    // kilocode_change start
+    return Service.of({
+      summarize: (input) => summarize(input).pipe(Effect.provideService(Database.Service, database)),
+      diff: (input) => diff(input).pipe(Effect.provideService(Database.Service, database)),
+      computeDiff,
+    })
+    // kilocode_change end
   }),
 )
 
@@ -209,7 +225,7 @@ export type DiffInput = Schema.Schema.Type<typeof DiffInput>
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node, Storage.node], // kilocode_change
+  deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node, Storage.node, Database.node], // kilocode_change
 })
 
 export * as SessionSummary from "./summary"

@@ -58,6 +58,10 @@ function createCtx(existing: ExistingGlobal = { disabled_providers: [] }, merged
         authStatus: async () => ({ data: { authenticated: false } }),
       },
       global: {
+        dispose: async () => {
+          calls.dispose += 1
+          return { data: true }
+        },
         config: {
           get: async () => ({ data: existing }),
           update: async (input: { config: Record<string, unknown> }) => {
@@ -283,6 +287,61 @@ describe("connectProvider", () => {
 })
 
 describe("saveCustomProvider", () => {
+  for (const auth of ["preserve", "set", "clear"] as const) {
+    it(`acknowledges persisted edits before one disposal barrier with ${auth} credentials`, async () => {
+      const { ctx, calls, setCachedConfig } = createCtx()
+      const entered = Promise.withResolvers<void>()
+      const released = Promise.withResolvers<void>()
+      ctx.client.global.dispose = async () => {
+        calls.dispose++
+        entered.resolve()
+        await released.promise
+        return { data: true } as never
+      }
+
+      const pending = saveCustomProvider(
+        ctx,
+        "req",
+        "myprovider",
+        createProvider(),
+        auth === "set" ? "sk-test" : undefined,
+        auth !== "preserve",
+        null,
+        setCachedConfig,
+      )
+      await entered.promise
+      const posts = [...calls.posts]
+      const cached = [...calls.cached]
+      const refresh = calls.refresh
+      released.resolve()
+      await pending
+
+      expect(calls.config.at(0)).toMatchObject({ dispose: false })
+      expect(calls.set).toEqual(
+        auth === "set" ? [{ providerID: "myprovider", auth: { type: "api", key: "sk-test" }, dispose: false }] : [],
+      )
+      expect(calls.remove).toEqual(auth === "clear" ? [{ providerID: "myprovider", dispose: false }] : [])
+      expect(posts).toEqual([{ type: "providerConnected", requestId: "req", providerID: "myprovider" }])
+      expect(cached).toEqual([])
+      expect(refresh).toBe(0)
+      expect(calls.dispose).toBe(1)
+      expect(calls.refresh).toBe(1)
+    })
+  }
+
+  it("does not refresh stale state or report save failure when post-save disposal fails", async () => {
+    const { ctx, calls, setCachedConfig } = createCtx()
+    ctx.client.global.dispose = async () => {
+      throw new Error("Disposal unavailable")
+    }
+
+    await saveCustomProvider(ctx, "req", "myprovider", createProvider(), undefined, false, null, setCachedConfig)
+
+    expect(calls.posts).toEqual([{ type: "providerConnected", requestId: "req", providerID: "myprovider" }])
+    expect(calls.cached).toEqual([])
+    expect(calls.refresh).toBe(0)
+  })
+
   for (const stage of ["config", "providers"] as const) {
     it(`acknowledges persisted credentials before the ${stage} refresh finishes`, async () => {
       const { ctx, calls, setCachedConfig } = createCtx()
@@ -315,19 +374,19 @@ describe("saveCustomProvider", () => {
       released.resolve()
       await pending
 
-      expect(credentials).toEqual([{ providerID: "myprovider", auth: { type: "api", key: "sk-test" } }])
+      expect(credentials).toEqual([{ providerID: "myprovider", auth: { type: "api", key: "sk-test" }, dispose: false }])
       expect(posts).toContainEqual({ type: "providerConnected", requestId: "req", providerID: "myprovider" })
       expect(calls.cached).toHaveLength(1)
     })
   }
 
   for (const changed of [false, true]) {
-    it(`does not dispose again after backend config/auth invalidation (key changed: ${changed})`, async () => {
+    it(`batches config and auth invalidation into one disposal (key changed: ${changed})`, async () => {
       const { ctx, calls, setCachedConfig } = createCtx()
 
       await saveCustomProvider(ctx, "req", "myprovider", createProvider(), "sk-test", changed, null, setCachedConfig)
 
-      expect(calls.dispose).toBe(0)
+      expect(calls.dispose).toBe(1)
       expect(calls.refresh).toBe(1)
     })
   }
@@ -396,6 +455,7 @@ describe("saveCustomProvider", () => {
       message: "Credential write failed",
     })
     expect(calls.posts).not.toContainEqual({ type: "providerConnected", requestId: "req", providerID: "myprovider" })
+    expect(calls.dispose).toBe(1)
   })
 
   it("does not acknowledge success or write credentials when config persistence fails", async () => {
@@ -407,6 +467,7 @@ describe("saveCustomProvider", () => {
     await saveCustomProvider(ctx, "req", "myprovider", createProvider(), "sk-test", true, null, setCachedConfig)
 
     expect(calls.set).toEqual([])
+    expect(calls.dispose).toBe(0)
     expect(calls.refresh).toBe(0)
     expect(calls.posts).toEqual([
       {
@@ -452,7 +513,7 @@ describe("saveCustomProvider", () => {
     await saveCustomProvider(ctx, "req", "myprovider", createProvider(), undefined, true, null, setCachedConfig)
 
     expect(calls.set).toHaveLength(0)
-    expect(calls.remove).toEqual([{ providerID: "myprovider" }])
+    expect(calls.remove).toEqual([{ providerID: "myprovider", dispose: false }])
   })
 
   it("stores a changed api key", async () => {
@@ -461,7 +522,7 @@ describe("saveCustomProvider", () => {
     await saveCustomProvider(ctx, "req", "myprovider", createProvider(), " sk-test ", true, null, setCachedConfig)
 
     expect(calls.remove).toHaveLength(0)
-    expect(calls.set).toEqual([{ providerID: "myprovider", auth: { type: "api", key: "sk-test" } }])
+    expect(calls.set).toEqual([{ providerID: "myprovider", auth: { type: "api", key: "sk-test" }, dispose: false }])
   })
 
   it("preserves opaque existing variant options through the save boundary", async () => {

@@ -7,6 +7,7 @@ import type { SessionID } from "@/session/schema"
 import { KiloSessionMessageOrder } from "@/kilocode/session/message-order"
 import { KiloSessionPrompt } from "@/kilocode/session/prompt"
 import { KiloSessionPromptQueue } from "@/kilocode/session/prompt-queue"
+import { KiloRunner } from "@/kilocode/effect/runner"
 
 /** Max title-generation attempts per session before the placeholder stays. */
 const MAX_ATTEMPTS = 4
@@ -167,6 +168,7 @@ export namespace KiloSessionTitle {
     sessions: Session.Interface
     database: Database.Interface
     generate: Generate
+    lease: Effect.Effect<() => void>
   }) {
     return Effect.gen(function* () {
       const titled = yield* input.sessions.get(input.sessionID).pipe(Effect.orDie)
@@ -183,14 +185,17 @@ export namespace KiloSessionTitle {
       const finalUser = KiloSessionMessageOrder.latest(history).user
       if (!finalUser || !shouldGenerate({ sessionID: input.sessionID, history })) return
 
-      yield* input
-        .generate({
-          session: titled,
-          history,
-          providerID: finalUser.model.providerID,
-          modelID: finalUser.model.modelID,
-        })
-        .pipe(Effect.ignore, Effect.forkIn(input.scope))
+      yield* KiloRunner.fork(
+        input
+          .generate({
+            session: titled,
+            history,
+            providerID: finalUser.model.providerID,
+            modelID: finalUser.model.modelID,
+          })
+          .pipe(Effect.ignore, Effect.forkIn(input.scope)),
+        input.lease,
+      )
     })
   }
 }

@@ -218,6 +218,12 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     const session = Effect.fn("ExperimentalHttpApi.session")(function* (ctx: { query: typeof SessionListQuery.Type }) {
       const limit = ctx.query.limit ?? 100
       // kilocode_change start
+      if (
+        ctx.query.cursorID !== undefined &&
+        (ctx.query.cursor === undefined || !Number.isSafeInteger(ctx.query.cursor) || ctx.query.cursor < 0)
+      ) {
+        return yield* Effect.fail(new HttpApiError.BadRequest({}))
+      }
       const state = yield* InstanceState.context
       const projectID = ctx.query.worktrees && !ctx.query.projectID ? state.project.id : ctx.query.projectID
       const roots = ctx.query.worktrees ? yield* WorktreeFamily.list() : undefined
@@ -234,6 +240,7 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
         roots: ctx.query.roots,
         start: ctx.query.start,
         cursor: ctx.query.cursor,
+        cursorID: ctx.query.cursorID, // kilocode_change
         search: ctx.query.search,
         limit: limit + 1,
         archived: ctx.query.archived,
@@ -246,12 +253,15 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
           })
         : all
       const list = result.length > limit ? result.slice(0, limit) : result
+      const tail = list.at(-1)
       // kilocode_change end
       return HttpServerResponse.jsonUnsafe(list, {
         headers:
-          result.length > limit && list.length > 0 // kilocode_change
-            ? { "x-next-cursor": String(list[list.length - 1].time.updated) }
+          // kilocode_change start - emit both raw continuation coordinates together
+          result.length > limit && tail
+            ? { "x-next-cursor": String(tail.time.updated), "x-next-cursor-id": tail.id }
             : undefined,
+        // kilocode_change end
       })
     })
 

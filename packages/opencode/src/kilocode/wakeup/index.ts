@@ -7,6 +7,7 @@ import { SessionID } from "@/session/schema"
 import { Storage } from "@/storage/storage"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { SessionAdmission } from "@opencode-ai/core/kilocode/session-admission"
 import { WakeupEvent } from "@opencode-ai/schema/kilocode/wakeup-event"
 import { Context, Effect, Fiber, Layer, Option, Semaphore } from "effect"
 import { fireLayer, text as wakeupText } from "./resume"
@@ -70,6 +71,7 @@ export namespace Wakeup {
       const storage = yield* Storage.Service
       const fire = yield* Fire
       const events = yield* EventV2Bridge.Service
+      const admission = yield* SessionAdmission.Service
       // Timers live in the service scope, so tearing the layer down stops them.
       const scope = yield* Effect.scope
       const timers = new Map<ID, Fiber.Fiber<void>>()
@@ -102,8 +104,7 @@ export namespace Wakeup {
         }),
       )
 
-      const read = (target: string[]) =>
-        storage.read<Info>(target).pipe(Effect.catch(() => Effect.succeed(undefined)))
+      const read = (target: string[]) => storage.read<Info>(target).pipe(Effect.catch(() => Effect.succeed(undefined)))
 
       const readCron = (target: string[]) =>
         storage.read<CronInfo>(target).pipe(Effect.catch(() => Effect.succeed(undefined)))
@@ -141,8 +142,8 @@ export namespace Wakeup {
         return undefined
       })
 
-      const fireNow = (info: Info, inPlace = false) =>
-        Effect.gen(function* () {
+      const fireNow: (info: Info, inPlace?: boolean) => Effect.Effect<void> = Effect.fnUntraced(
+        function* (info: Info, inPlace = false) {
           if (firing.has(info.id)) return
           firing.add(info.id)
           // The guard release belongs only to the branch that acquired it: an
@@ -160,15 +161,14 @@ export namespace Wakeup {
               .run(info, { inPlace })
               .pipe(Effect.catchCause((cause) => Effect.logError("wakeup fire failed", { id: info.id, cause })))
           }).pipe(Effect.ensuring(Effect.sync(() => firing.delete(info.id))))
-        })
+        },
+        (work, info) => admission.work([info.sessionID], work, { directory: info.directory }),
+      )
 
       const arm = (info: Info) =>
         Effect.gen(function* () {
           const delay = Math.max(0, info.dueAt - Date.now())
-          const fiber = yield* Effect.forkIn(
-            Effect.sleep(`${delay} millis`).pipe(Effect.andThen(fireNow(info))),
-            scope,
-          )
+          const fiber = yield* Effect.forkIn(Effect.sleep(`${delay} millis`).pipe(Effect.andThen(fireNow(info))), scope)
           timers.set(info.id, fiber)
         })
 
@@ -195,8 +195,8 @@ export namespace Wakeup {
           return updated
         })
 
-      const fireCron = (task: CronInfo, inPlace = false): Effect.Effect<void> =>
-        Effect.gen(function* () {
+      const fireCron: (task: CronInfo, inPlace?: boolean) => Effect.Effect<void> = Effect.fnUntraced(
+        function* (task: CronInfo, inPlace = false) {
           if (cronFiring.has(task.id)) {
             // A fire outlasted its interval: the occurrence that just came due
             // is skipped, not replayed, but the schedule must not stall. Arm the
@@ -225,7 +225,9 @@ export namespace Wakeup {
               )
               .pipe(Effect.catchCause((cause) => Effect.logError("cron fire failed", { id: task.id, cause })))
           }).pipe(Effect.ensuring(Effect.sync(() => cronFiring.delete(task.id))))
-        })
+        },
+        (work, task) => admission.work([task.sessionID], work, { directory: task.directory }),
+      )
 
       const armCron = (task: CronInfo): Effect.Effect<void> =>
         Effect.gen(function* () {
@@ -286,73 +288,76 @@ export namespace Wakeup {
         return futureDue(directory === undefined ? infos : infos.filter((info) => info.directory === directory))
       })
 
-      const schedule = Effect.fn("Wakeup.schedule")(function* (input: Input) {
-        return yield* gate.withPermits(1)(
-          Effect.gen(function* () {
-            const now = Date.now()
-            const dueAt = yield* schema.resolve(input, now)
-            // Count only wakeups that still parse: an unreadable file must not
-            // hold a slot, and the count and the write must be one critical section.
-            const pending = yield* list({ sessionID: input.sessionID })
-            if (pending.length >= MAX_PER_SESSION) {
-              return yield* new TooMany({ message: `A session can hold at most ${MAX_PER_SESSION} pending wakeups` })
-            }
-            const info: Info = {
-              id: ID.ascending(),
-              sessionID: input.sessionID,
-              directory: input.directory,
-              prompt: input.prompt,
-              reason: input.reason,
-              agent: input.agent,
-              dueAt,
-              created: now,
-            }
-            yield* storage.write(key(info), info).pipe(Effect.orDie)
-            entries.set(info.id, info)
-            yield* arm(info)
-            yield* announce(info.sessionID)
-            return info
-          }),
-        )
-      })
+      const schedule = Effect.fn("Wakeup.schedule")(
+        function* (input: Input) {
+          return yield* gate.withPermits(1)(
+            Effect.gen(function* () {
+              const now = Date.now()
+              const dueAt = yield* schema.resolve(input, now)
+              // Count only wakeups that still parse: an unreadable file must not
+              // hold a slot, and the count and the write must be one critical section.
+              const pending = yield* list({ sessionID: input.sessionID })
+              if (pending.length >= MAX_PER_SESSION) {
+                return yield* new TooMany({ message: `A session can hold at most ${MAX_PER_SESSION} pending wakeups` })
+              }
+              const info: Info = {
+                id: ID.ascending(),
+                sessionID: input.sessionID,
+                directory: input.directory,
+                prompt: input.prompt,
+                reason: input.reason,
+                agent: input.agent,
+                dueAt,
+                created: now,
+              }
+              yield* storage.write(key(info), info).pipe(Effect.orDie)
+              entries.set(info.id, info)
+              yield* arm(info)
+              yield* announce(info.sessionID)
+              return info
+            }),
+          )
+        },
+        (work, input) => admission.work([input.sessionID], work, { directory: input.directory }),
+      )
 
-      const cronCreate = Effect.fn("Wakeup.cronCreate")(function* (input: CronInput) {
-        return yield* cronGate.withPermits(1)(
-          Effect.gen(function* () {
-            const now = Date.now()
-            const cron = input.cron != null && input.cron !== "" ? input.cron : undefined
-            const when = input.when != null && input.when !== "" ? input.when : undefined
-            const delay = input.delay != null && input.delay !== "" ? input.delay : undefined
-            const expression = cron ?? when ?? delay
-            if (expression === undefined) {
-              return yield* new InvalidTime({ message: "Provide exactly one of cron, when or delay" })
-            }
-            const forms = [cron, when, delay].filter((value) => value !== undefined).length
-            if (forms !== 1) {
-              return yield* new InvalidTime({ message: "Provide exactly one of cron, when or delay" })
-            }
-            const recurring = cron !== undefined
-            if (cron !== undefined) {
-              const reason = schema.validate(cron)
-              if (reason) return yield* new InvalidSchedule({ message: `Invalid cron expression: ${reason}` })
-            }
-            // Count only records that still parse, in the same critical section
-            // as the write, so concurrent creators cannot both pass the cap.
-            const held = yield* cronList({ sessionID: input.sessionID })
-            if (held.length >= MAX_CRON_PER_SESSION) {
-              return yield* new TooManyCron({
-                message: `A session can hold at most ${MAX_CRON_PER_SESSION} scheduled tasks`,
-              })
-            }
-            const id = ID.ascending()
-            const expiresAt = now + CRON_TTL_MS
-            // A one-shot keeps the 10-second `resolve` minimum; a cron schedule
-            // is minute-granular through the expression engine. The expiry
-            // check reads the schedule's own next window, before jitter, so a
-            // boundary schedule is accepted or rejected the same way for every
-            // id; the jitter is then clamped so it can never fire past expiry.
-            const base =
-              recurring
+      const cronCreate = Effect.fn("Wakeup.cronCreate")(
+        function* (input: CronInput) {
+          return yield* cronGate.withPermits(1)(
+            Effect.gen(function* () {
+              const now = Date.now()
+              const cron = input.cron != null && input.cron !== "" ? input.cron : undefined
+              const when = input.when != null && input.when !== "" ? input.when : undefined
+              const delay = input.delay != null && input.delay !== "" ? input.delay : undefined
+              const expression = cron ?? when ?? delay
+              if (expression === undefined) {
+                return yield* new InvalidTime({ message: "Provide exactly one of cron, when or delay" })
+              }
+              const forms = [cron, when, delay].filter((value) => value !== undefined).length
+              if (forms !== 1) {
+                return yield* new InvalidTime({ message: "Provide exactly one of cron, when or delay" })
+              }
+              const recurring = cron !== undefined
+              if (cron !== undefined) {
+                const reason = schema.validate(cron)
+                if (reason) return yield* new InvalidSchedule({ message: `Invalid cron expression: ${reason}` })
+              }
+              // Count only records that still parse, in the same critical section
+              // as the write, so concurrent creators cannot both pass the cap.
+              const held = yield* cronList({ sessionID: input.sessionID })
+              if (held.length >= MAX_CRON_PER_SESSION) {
+                return yield* new TooManyCron({
+                  message: `A session can hold at most ${MAX_CRON_PER_SESSION} scheduled tasks`,
+                })
+              }
+              const id = ID.ascending()
+              const expiresAt = now + CRON_TTL_MS
+              // A one-shot keeps the 10-second `resolve` minimum; a cron schedule
+              // is minute-granular through the expression engine. The expiry
+              // check reads the schedule's own next window, before jitter, so a
+              // boundary schedule is accepted or rejected the same way for every
+              // id; the jitter is then clamped so it can never fire past expiry.
+              const base = recurring
                 ? yield* Effect.try({
                     try: () => schema.next(expression, now),
                     catch: (cause) =>
@@ -361,33 +366,35 @@ export namespace Wakeup {
                       }),
                   })
                 : yield* schema.resolve({ when, delay }, now)
-            // A first window past the TTL would arm and retain the task without
-            // it ever firing before expiry, holding a session slot. Refuse it.
-            if (base > expiresAt) {
-              return yield* new InvalidSchedule({
-                message: `Next occurrence ${new Date(base).toISOString()} is beyond this task's 7-day expiry`,
-              })
-            }
-            const dueAt = recurring ? Math.min(base + schema.jitter(id), expiresAt) : base
-            const task: CronInfo = {
-              id,
-              sessionID: input.sessionID,
-              directory: input.directory,
-              prompt: input.prompt,
-              agent: input.agent,
-              schedule: expression,
-              recurring,
-              dueAt,
-              expiresAt,
-              created: now,
-            }
-            yield* storage.write(cronKey(task), task).pipe(Effect.orDie)
-            cronEntries.set(task.id, task)
-            yield* armCron(task)
-            return task
-          }),
-        )
-      })
+              // A first window past the TTL would arm and retain the task without
+              // it ever firing before expiry, holding a session slot. Refuse it.
+              if (base > expiresAt) {
+                return yield* new InvalidSchedule({
+                  message: `Next occurrence ${new Date(base).toISOString()} is beyond this task's 7-day expiry`,
+                })
+              }
+              const dueAt = recurring ? Math.min(base + schema.jitter(id), expiresAt) : base
+              const task: CronInfo = {
+                id,
+                sessionID: input.sessionID,
+                directory: input.directory,
+                prompt: input.prompt,
+                agent: input.agent,
+                schedule: expression,
+                recurring,
+                dueAt,
+                expiresAt,
+                created: now,
+              }
+              yield* storage.write(cronKey(task), task).pipe(Effect.orDie)
+              cronEntries.set(task.id, task)
+              yield* armCron(task)
+              return task
+            }),
+          )
+        },
+        (work, input) => admission.work([input.sessionID], work, { directory: input.directory }),
+      )
 
       // Drop the persisted wait for a cancelled id so drive cannot re-suspend
       // a recurring task that no longer exists (D5). Session is optional: the
@@ -551,7 +558,7 @@ export namespace Wakeup {
   export const node = LayerNode.make({
     service: Service,
     layer: defaultLayer,
-    deps: [Storage.node, EventV2Bridge.node],
+    deps: [Storage.node, EventV2Bridge.node, SessionAdmission.node],
   })
 }
 

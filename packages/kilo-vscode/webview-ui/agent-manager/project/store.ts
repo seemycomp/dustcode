@@ -1,7 +1,9 @@
-import { createSignal, type Accessor, type Setter } from "solid-js"
+import { createMemo, createSignal, type Accessor, type Setter } from "solid-js"
+import { createStore } from "solid-js/store"
 import { isTerminalTabId } from "../../src/utils/terminal-tab-id"
 import { mergeTransientTabs } from "../tab-order"
 import { PENDING_PREFIX, REVIEW_TAB_ID } from "../tab-ids"
+import { createHistoryState } from "../history-state"
 import type {
   AgentManagerStateMessage,
   LocalGitStats,
@@ -52,6 +54,18 @@ function field<T>(initial: T): [Accessor<T>, Setter<T>] {
  */
 export function createProjectStore(id: string, opts: { tabs?: string[] } = {}) {
   const tabs = createStoreTabs(opts.tabs)
+  const history = createHistoryState(id)
+  const [historyExpandedStore, setHistoryExpandedStore] = createStore<Record<string, boolean>>({})
+  const historyExpanded = createMemo(() => ({ ...historyExpandedStore }))
+  const historyOpen = (key: string) => historyExpandedStore[key] === true
+  const setHistoryExpanded = (
+    value: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>),
+  ) => {
+    const next = typeof value === "function" ? value(historyExpanded()) : value
+    for (const key of Object.keys(historyExpanded())) if (!(key in next)) setHistoryExpandedStore(key, false)
+    for (const [key, open] of Object.entries(next)) setHistoryExpandedStore(key, open)
+  }
+  const [historyInitialized, setHistoryInitialized] = field(false)
 
   /** Last visible tab per sidebar context ("local" or a worktree id). */
   const [memory, setMemory] = createSignal<Record<string, string>>({})
@@ -94,6 +108,9 @@ export function createProjectStore(id: string, opts: { tabs?: string[] } = {}) {
     setWorktreeHealth(state.worktreeHealth ?? {})
     setOrphanDirectories(state.orphanDirectories ?? [])
     setSections(state.sections ?? [])
+    if (state.historyExpanded) setHistoryExpanded(state.historyExpanded)
+    if (state.historyInitialized !== undefined) setHistoryInitialized(state.historyInitialized)
+    history.prune(new Set(state.worktrees.map((wt) => wt.id)))
     if (state.tabOrder) {
       const incoming = state.tabOrder
       setTabOrder((previous) => ({
@@ -131,6 +148,12 @@ export function createProjectStore(id: string, opts: { tabs?: string[] } = {}) {
   return {
     id,
     tabs,
+    history,
+    historyExpanded,
+    historyOpen,
+    setHistoryExpanded,
+    historyInitialized,
+    setHistoryInitialized,
     applyState,
     tabMemory,
     sessionRestore,

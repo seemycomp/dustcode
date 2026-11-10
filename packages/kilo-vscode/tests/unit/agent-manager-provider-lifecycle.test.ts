@@ -6,6 +6,7 @@ import type { KiloClient, SessionStatus } from "@kilocode/sdk/v2/client"
 import { ProjectContext } from "../../src/agent-manager/project/context"
 import {
   createLifecycleWorktree,
+  closeLifecycleSession,
   deleteLifecycleWorktree,
   removeStaleLifecycleWorktree,
   type LifecycleHost,
@@ -132,6 +133,31 @@ describe("Agent Manager worktree deletion lifecycle", () => {
   })
 
   const deleteWorktree = async () => deleteLifecycleWorktree(ctx, host, state.getWorktrees()[0]!.id)
+
+  it("records managed placement before tab removal even when live metadata points elsewhere", async () => {
+    const wt = state.getWorktrees().at(0)!
+    state.addSession("closed", wt.id)
+    ctx.upsertSession({
+      id: "closed",
+      worktreeId: null,
+      parentID: null,
+      title: "Closed",
+      createdAt: "",
+      updatedAt: "",
+      revert: null,
+      summary: null,
+    })
+    const observed: Array<string | null | undefined> = []
+    const unsubscribe = state.onDidChangePlacement(() => {
+      if (!state.getSession("closed")) observed.push(state.sessionPlacement("closed"))
+    })
+    await closeLifecycleSession(ctx, host, "closed")
+    unsubscribe()
+    expect(observed).toEqual([wt.id])
+    expect(state.getSession("closed")).toBeUndefined()
+    expect(state.sessionPlacement("closed")).toBe(wt.id)
+    expect(client.experimental.controlPlane.moveSession).not.toHaveBeenCalled()
+  })
 
   it("does not boot the interactive directory until the setup script finishes", async () => {
     await ctx.ensureReady(async () => ({ ok: true, refsFixed: 0 }))

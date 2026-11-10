@@ -15,6 +15,7 @@ import type { ProjectContext, ProjectInitResult } from "./context"
 import type { Session } from "@kilocode/sdk/v2/client"
 import type { ProjectRef, SessionRef, WorktreeRef } from "./route"
 import { sessionToWebview } from "../../kilo-provider-utils"
+import { resolvePlacement } from "./placement"
 
 export type { ProjectSessionView } from "./session-view"
 import type { ProjectSessionView } from "./session-view"
@@ -128,7 +129,9 @@ export async function reconcileProject(
     root: ctx.root,
     dir: manager.worktreesDir,
     rows: () => state.getWorktrees().map((wt) => ({ id: wt.id, path: wt.path, branch: wt.branch })),
-    sessions: (id) => state.getSessions(id).length,
+    // Directory discovery is not a complete database history query. An absent directory and branch
+    // cannot prove that its conversations are gone, so leave removal to an explicit user action.
+    sessions: (id) => Math.max(1, [...state.sessionPlacements().values()].filter((ref) => ref === id).length),
     registered: () => manager.registeredPaths(),
     dirs: () => manager.worktreeDirs(),
     exists: (target) =>
@@ -180,12 +183,16 @@ export function registerProjectSessions(
   const state = ctx.peekState()
   if (!state || !sessions) return
   registerProjectRoutes(ctx, sessions)
-  for (const session of state.getSessions()) {
-    const worktree = session.worktreeId ? state.getWorktree(session.worktreeId) : undefined
-    const dir = worktree?.path ?? ctx.root
-    sessions.setSessionDirectory(session.id, dir)
-    sessions.trackSession(session.id)
-    sessions.registerSessionRoute?.({ projectId: ctx.id, sessionId: session.id }, dir, ctx.generation)
+  const placements =
+    state.sessionPlacements?.() ??
+    new Map([...state.getSessions()].map((session) => [session.id, session.worktreeId] as const))
+  for (const [id] of placements) {
+    const placement = resolvePlacement(ctx, id)
+    if (!placement) continue
+    const dir = placement.directory
+    sessions.setSessionDirectory(id, dir)
+    if (state.getSessions().some((session) => session.id === id)) sessions.trackSession(id)
+    sessions.registerSessionRoute?.({ projectId: ctx.id, sessionId: id }, dir, ctx.generation)
   }
 }
 
@@ -205,12 +212,9 @@ export function projectDirectories(ctx: ProjectContext): string[] {
 /**
  * Collect live root sessions for this project by listing exactly {@link ProjectContext.root}
  * and each of its worktree directories through the SessionProvider. Each
- * returned session is registered with the directory it was listed from before
- * being included, so downstream backend requests route to the correct
- * directory-scoped Instance. Managed placement is preserved separately by
- * {@link registerProjectSessions}, which runs first and pins persisted managed
- * sessions to their worktree paths; re-registering a managed session here with
- * the same worktree path is a no-op.
+ * returned session is registered with its effective placement, preserving
+ * managed and closed-session overrides even when the backend still stores
+ * the old directory. Discovery never reassigns a conversation.
  *
  * A failed directory listing (e.g. backend not connected, missing worktree)
  * resolves to [] and never erases results from the other directories, so one
@@ -251,16 +255,16 @@ export async function collectProjectSessions(
   if (!ctx.isCurrent(generation)) return []
   const seen = new Set<string>()
   const out: ProjectSessionView[] = []
-  for (const { dir, worktreeId, items } of byDir) {
+  for (const { items } of byDir) {
     for (const s of items) {
       if (s.parentID !== undefined && s.parentID !== null) continue
       if (seen.has(s.id)) continue
+      const placement = resolvePlacement(ctx, s.id, s.directory)
+      if (!placement) continue
+      const { directory: dir, worktreeId } = placement
       seen.add(s.id)
       sessions.setSessionDirectory(s.id, dir)
-      // Register an exact route for every live session. Re-registering a
-      // managed session (already routed by registerProjectSessions) with the
-      // same directory is a no-op; a different directory would mean the
-      // session moved worktrees, and the latest registration wins.
+      // The source listing is metadata, not authority to undo an explicit assignment.
       sessions.registerSessionRoute?.({ projectId: ctx.id, sessionId: s.id }, dir, generation)
       if (worktreeId) {
         sessions.registerWorktreeRoute?.({ projectId: ctx.id, worktreeId }, dir, generation)

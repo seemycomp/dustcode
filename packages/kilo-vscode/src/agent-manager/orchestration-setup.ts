@@ -7,6 +7,7 @@ import type { WorktreeStateManager } from "./WorktreeStateManager"
 import type { WorktreeStats, LocalStats } from "./GitStatsPoller"
 import type { PRStatus } from "./types"
 import { initContextState } from "./project/init"
+import { resolvePlacement } from "./project/placement"
 
 export interface OrchestrationBridgeDeps {
   connectionService: KiloConnectionService
@@ -71,10 +72,13 @@ export function createOrchestrationBridge(deps: OrchestrationBridgeDeps): AgentM
         const state = ctx.peekState()
         const stored = state?.getSession(id)
         const live = ctx.sessions().find((session) => session.id === id)
-        const wt = live?.worktreeId ? state?.getWorktree(live.worktreeId) : undefined
+        const placement =
+          resolvePlacement(ctx, id) ??
+          (live?.worktreeId ? resolvePlacement(ctx, id, state?.getWorktree(live.worktreeId)?.path) : undefined)
+        const wt = placement?.worktreeId ? state?.getWorktree(placement.worktreeId) : undefined
         if (wt && !stored) deps.routeSession(id, wt.path)
         await deps.projectScope.run(ctx, () => deps.closeSession(id))
-        state?.closeSession(id, wt?.id ?? stored?.worktreeId ?? null)
+        state?.closeSession(id, placement?.worktreeId ?? null)
         await state?.flush()
         ctx.removeLiveSession(id)
       } else {

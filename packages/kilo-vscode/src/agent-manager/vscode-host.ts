@@ -26,6 +26,7 @@ import { TelemetryProxy, type TelemetryEventName } from "../services/telemetry"
 import type { AutoApproveController } from "../commands/toggle-auto-approve"
 import type { RemoteStatusService } from "../services/RemoteStatusService"
 import type { CaffeinationService } from "../services/caffeination"
+import { fetchSessionPage } from "../kilo-provider/session-page"
 
 const INTRO_KEY = "kilo.agentManager.introDismissed"
 const PR_MERGE_METHODS_KEY = "agentManager.prMergeMethod"
@@ -188,8 +189,10 @@ export class VscodeHost implements Host {
       setSessionDirectory: (id, dir) => provider.setSessionDirectory(id, dir),
       clearSessionDirectory: (id) => provider.clearSessionDirectory(id),
       getSessionDirectories: () => provider.getSessionDirectories(),
-      getSessionInfo: (id) => provider.getSessionInfo(id),
+      getSessionInfo: (id, directory) => provider.getSessionInfo(id, directory),
       listSessions: (dir) => this.listProjectSessions(dir),
+      listSessionPage: async ({ directory, ...input }) =>
+        fetchSessionPage(await this.connectionService.getClientAsync(directory), { dir: directory, ...input }),
       trackSession: (id) => provider.trackSession(id),
       refreshSessions: () => provider.refreshSessions(),
       registerSession: (s) => provider.registerSession(s, false, opts.sessionProject?.()),

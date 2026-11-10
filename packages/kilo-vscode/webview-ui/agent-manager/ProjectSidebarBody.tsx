@@ -39,6 +39,8 @@ import { rootSessions } from "./project/session-filter"
 import { createWorktreeCompletion } from "./worktree-completion"
 import { worktreeDropReference } from "./worktree-references"
 import { beginPromptMentionDrop, endPromptMentionDrop } from "../src/utils/prompt-mention-drop"
+import { WorktreeHistory } from "./WorktreeHistory"
+import type { HistoryMenuActions } from "./HistorySessionMenu"
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent)
 
@@ -57,6 +59,9 @@ interface Props {
   selectedProject?: string
   selection?: string
   currentSessionID?: () => string | undefined
+  clock: () => number
+  sessionActivity?: (id: string) => Activity
+  historyActions?: HistoryMenuActions
   bindings: Record<string, string>
   t: LanguageContextValue["t"]
   onSelectLocal: (projectId: string) => void
@@ -249,157 +254,184 @@ export const ProjectSidebarBody: Component<Props> = (props) => {
   const unpin = (wt: WorktreeState) => {
     if (wt.pinned) post({ type: "agentManager.setWorktreePinned", worktreeId: wt.id, pinned: false })
   }
+  const current = (worktreeId: string, id: string) =>
+    active() && props.selection === worktreeId && props.currentSessionID?.() === id
 
   const renderWorktree = (worktree: WorktreeState, idx: () => number, list: WorktreeState[]) => {
     const label = () => firstOrderedTitle(sessions(worktree.id), store.tabOrder()[worktree.id], worktree.branch)
+    const display = () => worktree.label || label()
     const subtitle = () => (label() !== worktree.branch ? worktree.branch : undefined)
     const values = () => row(worktree.id)
     const sortable = createSortable(scope("worktree", worktree.id))
     void sortable
     return (
-      <div use:sortable class={`am-wt-sortable ${sortable.isActiveDraggable ? "am-wt-dragging" : ""}`}>
-        <WorktreeItem
-          completed={completion.completed(worktree.id)}
-          onCompletionEnd={() => completion.release(worktree.id)}
-          worktree={worktree}
-          sidebarId={`${props.project.id}:${worktree.id}`}
-          label={worktree.label || label()}
-          subtitle={worktree.label ? (worktree.label !== worktree.branch ? worktree.branch : undefined) : subtitle()}
-          active={active() && props.selection === worktree.id}
-          pendingDelete={
-            props.deletion.pending()?.projectId === props.project.id &&
-            props.deletion.pending()?.worktreeId === worktree.id
-          }
-          busy={props.busy(worktree.id)}
-          activity={props.activityFor(worktree.id)}
-          blocked={props.blocked(worktree.id)}
-          stale={
-            state()?.staleWorktreeIds?.includes(worktree.id) === true ||
-            actionable(state()?.worktreeHealth?.[worktree.id])
-          }
-          health={state()?.worktreeHealth?.[worktree.id]}
-          stats={props.stats?.[worktree.id]}
-          shortcut={values().shortcut}
-          navHint={values().navHint}
-          sessions={store.managedSessions().filter((session) => session.worktreeId === worktree.id).length}
-          grouped={isGrouped(worktree)}
-          groupStart={isGroupStart(worktree, idx(), list)}
-          groupEnd={isGroupEnd(worktree, idx(), list)}
-          groupSize={worktree.groupId ? sorted().filter((item) => item.groupId === worktree.groupId).length : 0}
-          renaming={renaming() === worktree.id}
-          renameValue={name()}
-          closeKeybind={values().closeKeybind}
-          openKeybind={values().openKeybind}
-          pr={props.prs?.[worktree.id] ?? undefined}
-          runStatus={runs()[worktree.id]}
-          sections={sections()}
-          currentSectionId={worktree.sectionId}
-          onMoveToSection={(sectionId) => {
-            post({ type: "agentManager.moveToSection", worktreeIds: [worktree.id], sectionId })
-            unpinForMove(worktree, sectionId)
-          }}
-          onMoveToNewSection={() => {
-            unpin(worktree)
-            props.onCreateSection([worktree.id])
-          }}
-          pinned={worktree.pinned}
-          onTogglePin={() =>
-            post({ type: "agentManager.setWorktreePinned", worktreeId: worktree.id, pinned: !worktree.pinned })
-          }
-          onClick={() => props.onSelectWorktree(props.project.id, worktree.id)}
-          onCancelDelete={props.deletion.cancel}
-          onDelete={(event) => {
-            event.stopPropagation()
-            props.deletion.confirm(props.project.id, worktree.id)
-          }}
-          onStartRename={(value) => {
-            setName(value)
-            setRenaming(worktree.id)
-          }}
-          onRenameInput={setName}
-          onCommitRename={() => commitRename(worktree.id)}
-          onCancelRename={cancelRename}
-          onRemoveStale={() => {
-            post({ type: "agentManager.removeStaleWorktree", worktreeId: worktree.id })
-            props.deletion.select(props.project.id, worktree.id)
-          }}
-          onRemoveKeepSessions={() => {
-            post({ type: "agentManager.removeStaleWorktree", worktreeId: worktree.id, keepSessions: true })
-            props.deletion.select(props.project.id, worktree.id)
-          }}
-          onRestore={() => post({ type: "agentManager.restoreWorktree", worktreeId: worktree.id })}
-          onUpdateBase={() =>
-            updateBase(
-              worktree.id,
-              props.project.id,
-              state()?.sessions.find(
-                (item) => item.worktreeId === worktree.id && item.id === props.currentSessionID?.(),
-              )?.id,
-            )
-          }
-          onCopyPath={() => navigator.clipboard.writeText(worktree.path)}
-          onOpen={() => post({ type: "agentManager.openWorktree", worktreeId: worktree.id })}
-          onOpenComments={() => props.onOpenComments?.(props.project.id, worktree.id)}
-          onOpenPR={() => props.onOpenPR?.(props.project.id, worktree.id)}
-        />
-      </div>
+      <WorktreeHistory
+        git={state()?.isGitRepo}
+        activity={props.sessionActivity}
+        actions={props.historyActions}
+        store={store}
+        worktreeId={worktree.id}
+        label={display()}
+        clock={props.clock}
+        disabled={completion.completed(worktree.id)}
+        active={(id) => current(worktree.id, id)}
+      >
+        <div use:sortable class={`am-wt-sortable ${sortable.isActiveDraggable ? "am-wt-dragging" : ""}`}>
+          <WorktreeItem
+            completed={completion.completed(worktree.id)}
+            onCompletionEnd={() => completion.release(worktree.id)}
+            worktree={worktree}
+            sidebarId={`${props.project.id}:${worktree.id}`}
+            label={display()}
+            subtitle={worktree.label ? (worktree.label !== worktree.branch ? worktree.branch : undefined) : subtitle()}
+            active={active() && props.selection === worktree.id}
+            pendingDelete={
+              props.deletion.pending()?.projectId === props.project.id &&
+              props.deletion.pending()?.worktreeId === worktree.id
+            }
+            busy={props.busy(worktree.id)}
+            activity={props.activityFor(worktree.id)}
+            blocked={props.blocked(worktree.id)}
+            stale={
+              state()?.staleWorktreeIds?.includes(worktree.id) === true ||
+              actionable(state()?.worktreeHealth?.[worktree.id])
+            }
+            health={state()?.worktreeHealth?.[worktree.id]}
+            stats={props.stats?.[worktree.id]}
+            shortcut={values().shortcut}
+            navHint={values().navHint}
+            sessions={store.managedSessions().filter((session) => session.worktreeId === worktree.id).length}
+            grouped={isGrouped(worktree)}
+            groupStart={isGroupStart(worktree, idx(), list)}
+            groupEnd={isGroupEnd(worktree, idx(), list)}
+            groupSize={worktree.groupId ? sorted().filter((item) => item.groupId === worktree.groupId).length : 0}
+            renaming={renaming() === worktree.id}
+            renameValue={name()}
+            closeKeybind={values().closeKeybind}
+            openKeybind={values().openKeybind}
+            pr={props.prs?.[worktree.id] ?? undefined}
+            runStatus={runs()[worktree.id]}
+            sections={sections()}
+            currentSectionId={worktree.sectionId}
+            onMoveToSection={(sectionId) => {
+              post({ type: "agentManager.moveToSection", worktreeIds: [worktree.id], sectionId })
+              unpinForMove(worktree, sectionId)
+            }}
+            onMoveToNewSection={() => {
+              unpin(worktree)
+              props.onCreateSection([worktree.id])
+            }}
+            pinned={worktree.pinned}
+            onTogglePin={() =>
+              post({ type: "agentManager.setWorktreePinned", worktreeId: worktree.id, pinned: !worktree.pinned })
+            }
+            onClick={() => props.onSelectWorktree(props.project.id, worktree.id)}
+            onCancelDelete={props.deletion.cancel}
+            onDelete={(event) => {
+              event.stopPropagation()
+              props.deletion.confirm(props.project.id, worktree.id)
+            }}
+            onStartRename={(value) => {
+              setName(value)
+              setRenaming(worktree.id)
+            }}
+            onRenameInput={setName}
+            onCommitRename={() => commitRename(worktree.id)}
+            onCancelRename={cancelRename}
+            onRemoveStale={() => {
+              post({ type: "agentManager.removeStaleWorktree", worktreeId: worktree.id })
+              props.deletion.select(props.project.id, worktree.id)
+            }}
+            onRemoveKeepSessions={() => {
+              post({ type: "agentManager.removeStaleWorktree", worktreeId: worktree.id, keepSessions: true })
+              props.deletion.select(props.project.id, worktree.id)
+            }}
+            onRestore={() => post({ type: "agentManager.restoreWorktree", worktreeId: worktree.id })}
+            onUpdateBase={() =>
+              updateBase(
+                worktree.id,
+                props.project.id,
+                state()?.sessions.find(
+                  (item) => item.worktreeId === worktree.id && item.id === props.currentSessionID?.(),
+                )?.id,
+              )
+            }
+            onCopyPath={() => navigator.clipboard.writeText(worktree.path)}
+            onOpen={() => post({ type: "agentManager.openWorktree", worktreeId: worktree.id })}
+            onOpenComments={() => props.onOpenComments?.(props.project.id, worktree.id)}
+            onOpenPR={() => props.onOpenPR?.(props.project.id, worktree.id)}
+          />
+        </div>
+      </WorktreeHistory>
     )
   }
 
   return (
     <div class="am-project-body" data-project-body={props.project.id}>
-      <button
-        class="am-local-item"
-        classList={{ "am-local-item-active": active() && props.selection === "local" }}
-        data-sidebar-id={`${props.project.id}:local`}
-        onClick={() => props.onSelectLocal(props.project.id)}
+      <WorktreeHistory
+        git={state()?.isGitRepo}
+        activity={props.sessionActivity}
+        actions={props.historyActions}
+        store={store}
+        worktreeId={null}
+        label={props.t("agentManager.local")}
+        clock={props.clock}
+        active={(id) => active() && props.selection === "local" && props.currentSessionID?.() === id}
       >
-        <LocalActivity state={localState()} label={props.t(label(localState()))} />
-        <div class="am-local-text">
-          <span class="am-local-label">{props.t("agentManager.local")}</span>
-          <Show when={props.local === undefined}>
-            <span class="am-local-branch-skeleton" />
-          </Show>
-          <Show when={props.local?.branch}>
-            <span class="am-local-branch">{props.local!.branch}</span>
-          </Show>
-        </div>
-        <div class="am-wt-actions-cell">
-          <Show when={props.local === undefined}>
-            <StatsSkeleton />
-          </Show>
-          <Show
-            when={
-              props.local && (props.local.additions || props.local.deletions || props.local.ahead || props.local.behind)
-            }
-          >
-            <div class="am-worktree-stats">
-              <Show when={props.local!.behind}>
-                <span class="am-worktree-behind">↓{props.local!.behind}</span>
-              </Show>
-              <Show when={props.local!.ahead}>
-                <span class="am-worktree-commits">↑{props.local!.ahead}</span>
-              </Show>
-              <Show when={props.local!.additions}>
-                <span class="am-stat-additions">+{props.local!.additions}</span>
-              </Show>
-              <Show when={props.local!.deletions}>
-                <span class="am-stat-deletions">−{props.local!.deletions}</span>
-              </Show>
-            </div>
-          </Show>
-          <div class="am-wt-hover-actions">
-            <Show when={props.shortcutMap?.().get(`${props.project.id}:local`)}>
-              {(shortcut) => (
-                <span class="am-shortcut-badge">
-                  {isMac ? "⌘" : "Ctrl+"}
-                  {shortcut()}
-                </span>
-              )}
+        <button
+          class="am-local-item"
+          classList={{ "am-local-item-active": active() && props.selection === "local" }}
+          data-sidebar-id={`${props.project.id}:local`}
+          onClick={() => props.onSelectLocal(props.project.id)}
+        >
+          <LocalActivity state={localState()} label={props.t(label(localState()))} />
+          <div class="am-local-text">
+            <span class="am-local-label">{props.t("agentManager.local")}</span>
+            <Show when={props.local === undefined}>
+              <span class="am-local-branch-skeleton" />
+            </Show>
+            <Show when={props.local?.branch}>
+              <span class="am-local-branch">{props.local!.branch}</span>
             </Show>
           </div>
-        </div>
-      </button>
+          <div class="am-wt-actions-cell">
+            <Show when={props.local === undefined}>
+              <StatsSkeleton />
+            </Show>
+            <Show
+              when={
+                props.local &&
+                (props.local.additions || props.local.deletions || props.local.ahead || props.local.behind)
+              }
+            >
+              <div class="am-worktree-stats">
+                <Show when={props.local!.behind}>
+                  <span class="am-worktree-behind">↓{props.local!.behind}</span>
+                </Show>
+                <Show when={props.local!.ahead}>
+                  <span class="am-worktree-commits">↑{props.local!.ahead}</span>
+                </Show>
+                <Show when={props.local!.additions}>
+                  <span class="am-stat-additions">+{props.local!.additions}</span>
+                </Show>
+                <Show when={props.local!.deletions}>
+                  <span class="am-stat-deletions">−{props.local!.deletions}</span>
+                </Show>
+              </div>
+            </Show>
+            <div class="am-wt-hover-actions">
+              <Show when={props.shortcutMap?.().get(`${props.project.id}:local`)}>
+                {(shortcut) => (
+                  <span class="am-shortcut-badge">
+                    {isMac ? "⌘" : "Ctrl+"}
+                    {shortcut()}
+                  </span>
+                )}
+              </Show>
+            </div>
+          </div>
+        </button>
+      </WorktreeHistory>
 
       <div class="am-section">
         <div class="am-worktree-list">

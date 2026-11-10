@@ -5,6 +5,9 @@ import os from "os"
 import path from "path"
 import { Context, Effect, Exit, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { Database } from "@opencode-ai/core/database/database"
+import { SessionAdmission } from "@opencode-ai/core/kilocode/session-admission"
 import { EventV2 } from "@opencode-ai/core/event"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -69,7 +72,18 @@ const recorderFire = Layer.effect(
 // Layer.fresh: without it Effect's in-test layer cache hands nested builds the
 // outer test's storage and Fire, so a "restart" would share the first process.
 const serviceLayer = <R>(dir: string, fire: Layer.Layer<Wakeup.Fire, never, R>, published: Published[] = []) =>
-  Layer.fresh(Wakeup.layer.pipe(Layer.provide(Layer.mergeAll(storageLayer(dir), fire, eventsLayer(published)))))
+  Layer.fresh(
+    Wakeup.layer.pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          storageLayer(dir),
+          fire,
+          eventsLayer(published),
+          AppNodeBuilder.build(SessionAdmission.node, [[Database.node, Database.layerFromPath(":memory:")]]),
+        ),
+      ),
+    ),
+  )
 
 const dirLayer = Layer.effect(
   TestDir,
@@ -459,7 +473,9 @@ describe("Wakeup", () => {
         ),
       ).toContain("Requested when:")
       expect(Wakeup.clampNotice({ delay: "1h" }, now + 3_600_000, now)).toBeUndefined()
-      expect(Wakeup.clampNotice({ when: new Date(now + 3_600_000).toISOString() }, now + 3_600_000, now)).toBeUndefined()
+      expect(
+        Wakeup.clampNotice({ when: new Date(now + 3_600_000).toISOString() }, now + 3_600_000, now),
+      ).toBeUndefined()
     }),
   )
 

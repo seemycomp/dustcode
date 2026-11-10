@@ -233,6 +233,12 @@ import type {
   KilocodeSessionImportSessionResponses,
   KilocodeSessionModelUsageErrors,
   KilocodeSessionModelUsageResponses,
+  KilocodeSessionTransferCommitErrors,
+  KilocodeSessionTransferCommitResponses,
+  KilocodeSessionTransferPreviewErrors,
+  KilocodeSessionTransferPreviewResponses,
+  KilocodeSessionTransferStatusErrors,
+  KilocodeSessionTransferStatusResponses,
   KilocodeSnapshotPrepareErrors,
   KilocodeSnapshotPrepareResponses,
   KilocodeTeardownWorktreeErrors,
@@ -706,10 +712,21 @@ export class Auth extends HeyApiClient {
   public remove<ThrowOnError extends boolean = false>(
     parameters: {
       providerID: string
+      dispose?: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "providerID" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "query", key: "dispose" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).delete<AuthRemoveResponses, AuthRemoveErrors, ThrowOnError>({
       url: "/auth/{providerID}",
       ...options,
@@ -725,6 +742,7 @@ export class Auth extends HeyApiClient {
   public set<ThrowOnError extends boolean = false>(
     parameters: {
       providerID: string
+      dispose?: boolean
       auth?: Auth3
     },
     options?: Options<never, ThrowOnError>,
@@ -735,6 +753,7 @@ export class Auth extends HeyApiClient {
         {
           args: [
             { in: "path", key: "providerID" },
+            { in: "query", key: "dispose" },
             { key: "auth", map: "body" },
           ],
         },
@@ -1064,6 +1083,7 @@ export class Session extends HeyApiClient {
       roots?: boolean | "true" | "false"
       start?: number
       cursor?: number
+      cursorID?: string
       search?: string
       limit?: number
       archived?: boolean | "true" | "false"
@@ -1083,6 +1103,7 @@ export class Session extends HeyApiClient {
             { in: "query", key: "roots" },
             { in: "query", key: "start" },
             { in: "query", key: "cursor" },
+            { in: "query", key: "cursorID" },
             { in: "query", key: "search" },
             { in: "query", key: "limit" },
             { in: "query", key: "archived" },
@@ -1549,11 +1570,22 @@ export class Config extends HeyApiClient {
    */
   public update<ThrowOnError extends boolean = false>(
     parameters?: {
+      dispose?: boolean
       config?: Config4
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ key: "config", map: "body" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "dispose" },
+            { key: "config", map: "body" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).patch<GlobalConfigUpdateResponses, GlobalConfigUpdateErrors, ThrowOnError>({
       url: "/global/config",
       ...options,
@@ -8566,6 +8598,148 @@ export class SessionImport extends HeyApiClient {
   }
 }
 
+export class SessionTransfer extends HeyApiClient {
+  /**
+   * Preview a session transfer
+   */
+  public preview<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      operationID: string
+      action: "move" | "copy"
+      projectID: string
+      sourceSessionID: string
+      sourceDirectory: string
+      targetDirectory: string
+      selectedFiles?: Array<string>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "operationID" },
+            { in: "body", key: "action" },
+            { in: "body", key: "projectID" },
+            { in: "body", key: "sourceSessionID" },
+            { in: "body", key: "sourceDirectory" },
+            { in: "body", key: "targetDirectory" },
+            { in: "body", key: "selectedFiles" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeSessionTransferPreviewResponses,
+      KilocodeSessionTransferPreviewErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/session-transfer/preview",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Commit a session transfer
+   */
+  public commit<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      operationID: string
+      action?: "move" | "copy"
+      projectID?: string
+      sourceSessionID?: string
+      sourceDirectory?: string
+      targetDirectory?: string
+      selectedFiles?: Array<string>
+      revision?: string
+      fingerprint?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "operationID" },
+            { in: "body", key: "action" },
+            { in: "body", key: "projectID" },
+            { in: "body", key: "sourceSessionID" },
+            { in: "body", key: "sourceDirectory" },
+            { in: "body", key: "targetDirectory" },
+            { in: "body", key: "selectedFiles" },
+            { in: "body", key: "revision" },
+            { in: "body", key: "fingerprint" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeSessionTransferCommitResponses,
+      KilocodeSessionTransferCommitErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/session-transfer/commit",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get a session transfer result
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters: {
+      operationID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "operationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeSessionTransferStatusResponses,
+      KilocodeSessionTransferStatusErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/session-transfer/status/{operationID}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Kilocode extends HeyApiClient {
   /**
    * Resume an interrupted session
@@ -9125,6 +9299,11 @@ export class Kilocode extends HeyApiClient {
   private _sessionImport?: SessionImport
   get sessionImport(): SessionImport {
     return (this._sessionImport ??= new SessionImport({ client: this.client }))
+  }
+
+  private _sessionTransfer?: SessionTransfer
+  get sessionTransfer(): SessionTransfer {
+    return (this._sessionTransfer ??= new SessionTransfer({ client: this.client }))
   }
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { category, groups } from "../../webview-ui/src/utils/timeline/colors"
 import type { Part } from "../../webview-ui/src/types/messages"
+import { tokens } from "../../webview-ui/src/utils/timeline/sizes"
 
 describe("timeline categories", () => {
   const parts: Part[] = [
@@ -22,17 +23,45 @@ describe("timeline categories", () => {
     expect(parts.map(category)).toEqual(["text", "reasoning", "read", "write", "error", "tool", "success"])
   })
 
-  it("summarizes categories without merging identically colored text and reasoning", () => {
-    const bars = [...parts, parts[0]!].map((part) => ({ category: category(part), partId: part.id }))
-    expect(groups(bars).map((group) => [group.key, group.count])).toEqual([
-      ["text", 2],
-      ["reasoning", 1],
-      ["read", 1],
-      ["write", 1],
-      ["error", 1],
-      ["tool", 1],
-      ["success", 1],
+  it("sums token weights instead of counting bars and omits zero-token categories", () => {
+    expect(
+      groups([
+        { category: "text", tokens: 10 },
+        { category: "text", tokens: 90 },
+        { category: "reasoning", tokens: 20 },
+        { category: "read", tokens: 200 },
+        { category: "success", tokens: 0 },
+      ]).map((group) => [group.key, group.tokens]),
+    ).toEqual([
+      ["text", 100],
+      ["reasoning", 20],
+      ["read", 200],
     ])
-    expect(bars.filter((bar) => bar.category === "read").map((bar) => bar.partId)).toEqual(["read"])
+  })
+
+  it("estimates text and reasoning content and counts nested tool input, output and errors", () => {
+    expect(tokens({ id: "text", type: "text", text: "a".repeat(40) })).toBe(10)
+    expect(tokens({ id: "thought", type: "reasoning", text: "a".repeat(80) })).toBe(20)
+    const input = { nested: { content: "a".repeat(400) } }
+    expect(
+      tokens({
+        id: "read",
+        type: "tool",
+        tool: "read",
+        state: {
+          status: "completed",
+          input,
+          output: "b".repeat(40),
+          title: "read",
+        },
+      }),
+    ).toBe(Math.ceil((JSON.stringify(input).length + 40) / 4))
+    expect(tokens(parts.at(4)!)).toBeGreaterThan(tokens(parts.at(5)!))
+    expect(tokens({ id: "empty", type: "text", text: "" })).toBe(0)
+  })
+
+  it("does not count whole-request step usage again as content", () => {
+    expect(tokens({ id: "step", type: "step-finish", tokens: { input: 21000, output: 27 } })).toBe(0)
+    expect(groups([])).toEqual([])
   })
 })

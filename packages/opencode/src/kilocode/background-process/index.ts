@@ -195,6 +195,7 @@ export namespace BackgroundProcess {
     processes: Map<ID, Active>
     shared: Shared
   }
+  const states = new Set<State>()
 
   type Probe = "owned" | "gone" | "foreign" | "unknown" | "terminating"
 
@@ -208,7 +209,7 @@ export namespace BackgroundProcess {
     return { key: `scope:${hash}`, dir: `scope-${hash}` }
   }
 
-  function root(shared: Shared) {
+  function root(shared: Pick<Shared, "dir">) {
     return path.join(Global.Path.state, "background-process", shared.dir)
   }
 
@@ -1178,6 +1179,7 @@ export namespace BackgroundProcess {
           const current = shared.get(scope.key) ?? { ...scope, processes: new Map<ID, Active>() }
           shared.set(scope.key, current)
           const state: State = { ctx, dir: ctx.directory, processes: new Map(), shared: current }
+          states.add(state)
           yield* Effect.promise(() => adopt(state))
           yield* Effect.addFinalizer(() =>
             Effect.promise(async () => {
@@ -1187,6 +1189,7 @@ export namespace BackgroundProcess {
                 ),
               )
               state.processes.clear()
+              states.delete(state)
             }),
           )
           return state
@@ -1251,6 +1254,26 @@ export namespace BackgroundProcess {
       .map((active) => clone(active.info))
       .filter((info) => !input?.sessionID || info.sessionID === input.sessionID || info.lifetime === "persistent")
       .toSorted((a, b) => a.time.started - b.time.started || a.id.localeCompare(b.id))
+  }
+
+  /** Transfer preflight must not adopt processes or initialize directory state. */
+  export function inspect(ctx: InstanceContext) {
+    return Effect.tryPromise(async () => {
+      const dir = root(scoped(ctx))
+      const files = await readdir(dir).catch((err) => {
+        if (code(err) === "ENOENT") return []
+        throw err
+      })
+      const found = new Map<ID, Info>()
+      for (const file of files.filter((file) => file.endsWith(".json"))) {
+        const record = Schema.decodeUnknownSync(Persisted)(JSON.parse(await readFile(path.join(dir, file), "utf8")))
+        found.set(record.info.id, clone(record.info))
+      }
+      for (const state of states) {
+        for (const active of values(state)) found.set(active.info.id, clone(active.info))
+      }
+      return [...found.values()]
+    })
   }
 
   export async function get(id: ID) {

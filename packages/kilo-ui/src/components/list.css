@@ -44,6 +44,7 @@
 
     &:active {
       background-color: var(--surface-interactive-base);
+      color: var(--text-on-interactive-base, var(--text-strong));
     }
   }
 

@@ -342,6 +342,31 @@ it("keeps prompts in the readable lane, clamps display, and pins live and virtua
     await inline.locator("button").click()
     await check(inline.locator(".turn-todos-list")).toBeHidden()
     await check(todoList.locator('[data-message="user-29"] .turn-todos')).toHaveCount(0)
+    for (const query of ["", "&internal", "&internal&background", "&internal&compaction"]) {
+      await todos.goto(`${server.url}?todos&updates${query}`)
+      await todoList.hover()
+      await todos.mouse.wheel(0, -1)
+      await check(tracker).toHaveText("1 of 3 To-dos Completed")
+      await todos.getByTestId("finish-todos").click()
+      await check(tracker).toHaveText("3 of 3 To-dos Completed")
+      await tracker.click()
+      await check(panel.locator('.turn-todos-row[data-status="completed"]')).toHaveCount(3)
+      for (const item of await panel.locator(".turn-todos-row > span").all()) {
+        expect(await item.evaluate((el) => getComputedStyle(el).textDecorationLine)).toBe("line-through")
+      }
+      await tracker.press("Escape")
+      await todos.evaluate(() =>
+        window.dispatchEvent(new CustomEvent("scrollToMessage", { detail: { id: "assistant-30" } })),
+      )
+      await check(inline.locator("button")).toHaveText("3 of 3 To-dos Completed")
+      await check(inline.locator('.turn-todos-row[data-status="completed"]')).toHaveCount(3)
+      await todos.evaluate(() =>
+        window.dispatchEvent(new CustomEvent("scrollToMessage", { detail: { id: "assistant-29" } })),
+      )
+      const previous = todoList.locator('[data-message="user-29"] .turn-todos')
+      await check(previous.locator("button")).toHaveText("0 of 1 To-dos Completed")
+      await check(previous.locator('.turn-todos-row[data-status="pending"]')).toHaveText("Previous independent plan")
+    }
     await todos.setViewportSize({ width: 1000, height: 850 })
     await todos.goto(`${server.url}?todos&complete`)
     await todoList.hover()

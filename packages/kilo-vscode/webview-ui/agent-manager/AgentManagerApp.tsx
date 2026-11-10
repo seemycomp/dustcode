@@ -68,6 +68,7 @@ import { ProviderShell } from "../src/context/provider-shell"
 import { ChatView } from "../src/components/chat"
 import HistoryView from "../src/components/history/HistoryView"
 import { NewWorktreeDialog } from "./NewWorktreeDialog"
+import { SessionTransferDialog } from "./SessionTransferDialog"
 import { createIntro } from "./intro/AgentManagerIntro"
 import { createShortcutHints } from "./ShortcutHints"
 import { useBaseUpdate } from "./update-from-base"
@@ -165,7 +166,14 @@ import {
   resolveVscodeTerminalRequest,
 } from "./terminal"
 import { createEmbeddedTerminalReader } from "./terminal/output"
-import { focusCurrentTab, renderTab, renderTerminalLayer, renderNewTabButton } from "./tab-rendering"
+import {
+  focusCurrentTab,
+  renderTab,
+  renderTerminalLayer,
+  renderNewTabButton,
+  type TabRenderDeps,
+} from "./tab-rendering"
+import type { HistoryMenuActions } from "./HistorySessionMenu"
 import { useTabScroll } from "./tab-scroll"
 import { DiffPanelCache } from "./DiffPanelCache"
 import { createPRNavigation, PRPanelHost } from "./pr/PRPanelHost"
@@ -253,9 +261,11 @@ const AgentManagerContent: Component = () => {
   const [restricted, setRestricted] = createSignal(false)
 
   const [currentProjectId, setCurrentProjectId] = createSignal<string | undefined>()
+  let historyDraft: string | undefined
   const [projectStates, setProjectStates] = createSignal<Record<string, AgentManagerStateMessage>>({})
   const activeProjectId = () => projectList().find((p) => p.active)?.id ?? currentProjectId()
   const activateSelection = (target: AgentManagerSidebarTarget, restore?: boolean) => {
+    historyDraft = undefined
     saveTabMemory()
     comments.cancel()
     vscode.postMessage({ type: "agentManager.activateSelection", target, restore })
@@ -1526,7 +1536,12 @@ const AgentManagerContent: Component = () => {
         // Managed state is the placement authority; the live listing can briefly
         // keep a stale worktree tag after a session moved back to local.
         managed: (projectId) => projectStates()[projectId]?.sessions ?? projectLive.sessions()[projectId] ?? [],
-        local: () => selectLocal(),
+        local: (projectId) => {
+          selectLocal()
+          if (historyDraft !== projectId) return
+          historyDraft = undefined
+          addPendingTab()
+        },
         worktree: (projectId, worktreeId) => selectWorktree(worktreeId),
         focusLocal: focusLocalSession,
         managedSession: focusManagedSession,
@@ -1832,6 +1847,11 @@ const AgentManagerContent: Component = () => {
     if (!sel || sel === LOCAL) return vscode.postMessage(msg)
     vscode.postMessage({ ...msg, worktreeId: sel })
   }
+  const closeDraft = (id: string) => {
+    closedDrafts.add(id)
+    if (session.isSubmitting(id) || isPendingSend(id)) discardPendingDraft(id)
+    queueMicrotask(() => deletePendingDraft(id))
+  }
   const handleCloseTab = (sessionId: string, notify = true) => {
     freezeTabs()
     const pending = isPending(sessionId)
@@ -1859,11 +1879,7 @@ const AgentManagerContent: Component = () => {
       if (!pending) closedSet().add(sessionId)
       setLocalSessionIDs((prev) => prev.filter((id) => id !== sessionId))
     }
-    if (pending) {
-      closedDrafts.add(sessionId)
-      if (session.isSubmitting(sessionId) || isPendingSend(sessionId)) discardPendingDraft(sessionId)
-      queueMicrotask(() => deletePendingDraft(sessionId))
-    }
+    if (pending) closeDraft(sessionId)
     if (notify) vscode.postMessage({ type: "agentManager.closeSession", sessionId })
     tabFocus.restore()
   }
@@ -2053,54 +2069,114 @@ const AgentManagerContent: Component = () => {
     confirmDelete?.(project, sel)
   }
 
-  const renderTabById = (id: string) =>
-    renderTab(id, {
-      terms,
-      REVIEW_TAB_ID,
-      tabIds,
-      kb,
-      reviewActive,
-      currentSessionID: () => session.currentSessionID(),
-      activePendingId,
-      visibleTabId,
-      isPending,
-      activityFor: (id) => session.activityFor(id),
-      stateLabel: (state) => t(label(state)),
-      tabLookup,
-      adjacentHint,
-      activateTerminal: termHandlers.activate,
-      deactivateTerminal: termHandlers.deactivate,
-      closeTerminal: (id) => tabFocus.run(() => termHandlers.closeTerminal(id)),
-      terminalMiddleClick: (id, event) => tabFocus.middle(event, () => termHandlers.middleClick(id, event)),
-      closeReview: closeReviewTab,
-      reviewMiddleClick: handleReviewTabMouseDown,
-      selectReviewTab: () => setReviewActive(true),
-      selectSessionTab,
-      sessionMiddleClick: handleTabMouseDown,
-      sessionClose: handleCloseTab,
-      get sessionFork() {
-        return !readOnly() && !settingUpSelection() && activeProjectId() === currentProjectId()
-          ? handleForkSession
-          : undefined
-      },
-      get sessionNew() {
-        return !readOnly() && !settingUpSelection() && activeProjectId() === currentProjectId()
-          ? handleAddSession
-          : undefined
-      },
-      get sessionMove() {
-        return selection() === LOCAL && isGitRepo() && activeProjectId() === currentProjectId()
-          ? (sessionId: string) => {
-              if (isPending(sessionId) || !localSessionIDs().includes(sessionId)) return
-              vscode.postMessage({ type: "agentManager.promoteSession", projectId: currentProjectId(), sessionId })
-            }
-          : undefined
-      },
-      ...tabState.tab,
-      onTabKey: tabFocus.key,
-      reviewLabel: t("session.tab.review"),
-      reviewTooltip: t("command.review.toggle"),
-    })
+  const tabDeps = (): TabRenderDeps => ({
+    terms,
+    REVIEW_TAB_ID,
+    tabIds,
+    kb,
+    reviewActive,
+    currentSessionID: () => session.currentSessionID(),
+    activePendingId,
+    visibleTabId,
+    isPending,
+    activityFor: (id) => session.activityFor(id),
+    stateLabel: (state) => t(label(state)),
+    tabLookup,
+    adjacentHint,
+    activateTerminal: termHandlers.activate,
+    deactivateTerminal: termHandlers.deactivate,
+    closeTerminal: (id) => tabFocus.run(() => termHandlers.closeTerminal(id)),
+    terminalMiddleClick: (id, event) => tabFocus.middle(event, () => termHandlers.middleClick(id, event)),
+    closeReview: closeReviewTab,
+    reviewMiddleClick: handleReviewTabMouseDown,
+    selectReviewTab: () => setReviewActive(true),
+    selectSessionTab,
+    sessionMiddleClick: handleTabMouseDown,
+    sessionClose: handleCloseTab,
+    get sessionFork() {
+      return !readOnly() && !settingUpSelection() && activeProjectId() === currentProjectId()
+        ? handleForkSession
+        : undefined
+    },
+    get sessionNew() {
+      return !readOnly() && !settingUpSelection() && activeProjectId() === currentProjectId()
+        ? handleAddSession
+        : undefined
+    },
+    get sessionMove() {
+      return isGitRepo() && activeProjectId() === currentProjectId()
+        ? (sessionId: string, create?: boolean) => {
+            const project = currentProjectId()
+            if (isPending(sessionId) || !project) return
+            openTransfer(project, selection() === LOCAL ? null : selection(), sessionId, "move", create)
+          }
+        : undefined
+    },
+    get sessionCopy() {
+      return isGitRepo() && activeProjectId() === currentProjectId()
+        ? (sessionId: string, create?: boolean) => {
+            const project = currentProjectId()
+            if (isPending(sessionId) || !project) return
+            openTransfer(project, selection() === LOCAL ? null : selection(), sessionId, "copy", create)
+          }
+        : undefined
+    },
+    ...tabState.tab,
+    onTabKey: tabFocus.key,
+    reviewLabel: t("session.tab.review"),
+    transferOptions: {
+      new: t("agentManager.transfer.new"),
+      existing: t("agentManager.transfer.existing"),
+      copy: t("agentManager.transfer.copyMenu"),
+    },
+    reviewTooltip: t("command.review.toggle"),
+  })
+  const renderTabById = (id: string) => renderTab(id, tabDeps())
+
+  const openTransfer = (
+    projectId: string,
+    worktreeId: string | null,
+    sessionId: string,
+    action: "move" | "copy",
+    create?: boolean,
+  ) => {
+    const intent = JSON.stringify([activeProjectId(), selection(), session.currentSessionID()])
+    dialog.show(() => (
+      <SessionTransferDialog
+        projectId={projectId}
+        sourceSessionId={sessionId}
+        sourceWorktreeId={worktreeId}
+        action={action}
+        create={create}
+        onClose={() => dialog.close()}
+        onCommitted={(result) => {
+          if (result.action === "move")
+            registry.ensure(projectId).tabs.set((ids) => ids.filter((id) => id !== sessionId))
+          if (intent !== JSON.stringify([activeProjectId(), selection(), session.currentSessionID()])) return
+          activateSelection({ projectId, kind: "session", sessionId: result.sessionID })
+        }}
+      />
+    ))
+  }
+
+  const historyActions: HistoryMenuActions = {
+    transfer: openTransfer,
+    new: (projectId, worktreeId) => {
+      if (worktreeId) return vscode.postMessage({ type: "agentManager.addSessionToWorktree", projectId, worktreeId })
+      activateSelection({ projectId, kind: "local" })
+      historyDraft = projectId
+    },
+    close: (projectId, sessionId) => {
+      if (projectId === currentProjectId() && projectId === activeProjectId()) return handleCloseTab(sessionId)
+      registry.ensure(projectId).tabs.set((ids) => ids.filter((id) => id !== sessionId))
+      if (isPending(sessionId)) return closeDraft(sessionId)
+      vscode.postMessage({ type: "agentManager.closeSession", projectId, sessionId })
+    },
+    tabs: (projectId, worktreeId) =>
+      projectId === activeProjectId() && projectId === currentProjectId() && selection() === (worktreeId ?? LOCAL)
+        ? tabDeps()
+        : undefined,
+  }
 
   const renderAddTab = () =>
     renderNewTabButton({
@@ -2170,6 +2246,7 @@ const AgentManagerContent: Component = () => {
           shortcutMap={projectShortcutMap}
           activityFor={activity.project}
           sessionActivity={session.activityFor}
+          historyActions={historyActions}
         />
       </div>
 

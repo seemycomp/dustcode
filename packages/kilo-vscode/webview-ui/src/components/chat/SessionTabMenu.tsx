@@ -7,8 +7,11 @@ export const SessionTabMenu: ParentComponent<{
   showFork?: boolean
   showNewSession?: boolean
   showMoveToWorktree?: boolean
+  showCopyToWorktree?: boolean
   onNewSession?: () => void
-  onMoveToWorktree?: () => void
+  onMoveToWorktree?: (create?: boolean) => void
+  onCopyToWorktree?: (create?: boolean) => void
+  transferOptions?: { new: string; existing: string; copy: string }
   onFork?: () => void
   onClose: () => void
   onCloseOthers?: () => void
@@ -49,14 +52,54 @@ export const SessionTabMenu: ParentComponent<{
             </ContextMenu.Item>
           </Show>
           <Show when={props.showMoveToWorktree}>
-            <ContextMenu.Item disabled={!props.onMoveToWorktree} onSelect={() => props.onMoveToWorktree?.()}>
-              <Icon name="branch" size="small" />
-              <ContextMenu.ItemLabel>{t("sidebar.session.moveToWorktree")}</ContextMenu.ItemLabel>
-            </ContextMenu.Item>
+            <Show
+              when={props.transferOptions}
+              fallback={
+                <ContextMenu.Item disabled={!props.onMoveToWorktree} onSelect={() => props.onMoveToWorktree?.()}>
+                  <Icon name="branch" size="small" />
+                  <ContextMenu.ItemLabel>{t("sidebar.session.moveToWorktree")}</ContextMenu.ItemLabel>
+                </ContextMenu.Item>
+              }
+            >
+              <ContextMenu.Sub>
+                <ContextMenu.SubTrigger disabled={!props.onMoveToWorktree}>
+                  <Icon name="branch" size="small" />
+                  <span>{t("session.menu.moveToWorktree")}</span>
+                </ContextMenu.SubTrigger>
+                <ContextMenu.Portal>
+                  <ContextMenu.SubContent>
+                    <ContextMenu.Item onSelect={() => props.onMoveToWorktree?.(true)}>
+                      {props.transferOptions?.new}
+                    </ContextMenu.Item>
+                    <ContextMenu.Item onSelect={() => props.onMoveToWorktree?.(false)}>
+                      {props.transferOptions?.existing}
+                    </ContextMenu.Item>
+                  </ContextMenu.SubContent>
+                </ContextMenu.Portal>
+              </ContextMenu.Sub>
+            </Show>
+          </Show>
+          <Show when={props.showCopyToWorktree}>
+            <ContextMenu.Sub>
+              <ContextMenu.SubTrigger disabled={!props.onCopyToWorktree}>
+                <Icon name="copy" size="small" />
+                <span>{props.transferOptions?.copy}</span>
+              </ContextMenu.SubTrigger>
+              <ContextMenu.Portal>
+                <ContextMenu.SubContent>
+                  <ContextMenu.Item onSelect={() => props.onCopyToWorktree?.(true)}>
+                    {props.transferOptions?.new}
+                  </ContextMenu.Item>
+                  <ContextMenu.Item onSelect={() => props.onCopyToWorktree?.(false)}>
+                    {props.transferOptions?.existing}
+                  </ContextMenu.Item>
+                </ContextMenu.SubContent>
+              </ContextMenu.Portal>
+            </ContextMenu.Sub>
           </Show>
           <Show
             when={
-              (props.showNewSession || props.showFork || props.showMoveToWorktree) &&
+              (props.showNewSession || props.showFork || props.showMoveToWorktree || props.showCopyToWorktree) &&
               (props.closeable !== false || props.onCloseOthers || props.onCloseToRight || props.onTogglePin)
             }
           >

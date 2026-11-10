@@ -35,6 +35,7 @@ function fakeState(worktrees: Worktree[], sessions: ManagedSession[] = []): Work
     getWorktrees: () => worktrees,
     getWorktree: (id: string) => wtMap.get(id),
     getSessions: () => sessions,
+    sessionPlacement: (id: string) => sessions.find((session) => session.id === id)?.worktreeId,
     flush: async () => {},
   } as unknown as WorktreeStateManager
 }
@@ -262,7 +263,7 @@ describe("Agent Manager per-project session discovery", () => {
     expect(tracked.sort()).toEqual(["ses-local", "ses-wt"].sort())
   })
 
-  it("registerProjectSessions falls back to ctx.root when a managed worktree is gone", () => {
+  it("registerProjectSessions does not silently route a missing worktree to Local", () => {
     const managed: ManagedSession[] = [{ id: "ses-orphan", worktreeId: "wt-gone", createdAt: "" }]
     const ctx = makeContext(ROOT, fakeState([], managed))
     const registered = new Map<string, string>()
@@ -271,7 +272,7 @@ describe("Agent Manager per-project session discovery", () => {
       trackSession: () => {},
     })
 
-    expect(registered.get("ses-orphan")).toBe(ROOT)
+    expect(registered.has("ses-orphan")).toBe(false)
   })
 
   it("pushProjectSessions posts one projectSessions message with the collected ids", async () => {

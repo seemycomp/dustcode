@@ -80,6 +80,7 @@ import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { assertExternalDirectoryEffect } from "@/tool/external-directory" // kilocode_change
 import { SessionRunState } from "./run-state"
 import { SessionDrain } from "@/kilocode/session/drain" // kilocode_change
+import { KiloRunner } from "@/kilocode/effect/runner" // kilocode_change
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
@@ -1800,7 +1801,12 @@ export const layer = Layer.effect(
           }
 
           if (step === 1)
-            yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
+          // kilocode_change start - summary writes retain execution admission
+          yield* KiloRunner.fork(
+            summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope)),
+            drain.hold(sessionID),
+          )
+          // kilocode_change end
 
           yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
@@ -1990,9 +1996,21 @@ export const layer = Layer.effect(
         continue
       }
 
-      yield* compaction.prune({ sessionID, reason: "normal" }).pipe(Effect.ignore, Effect.forkIn(scope))
+      // kilocode_change start - detached work must retain admission after the runner finishes
+      yield* KiloRunner.fork(
+        compaction.prune({ sessionID, reason: "normal" }).pipe(Effect.ignore, Effect.forkIn(scope)),
+        drain.hold(sessionID),
+      ) // kilocode_change
       // kilocode_change - Kilo defers session titles; see kilocode/session/title.ts
-      yield* KiloSessionTitle.deferred({ sessionID, scope, sessions, database, generate: title }).pipe(Effect.ignore)
+      yield* KiloSessionTitle.deferred({
+        sessionID,
+        scope,
+        sessions,
+        database,
+        generate: title,
+        lease: drain.hold(sessionID),
+      }).pipe(Effect.ignore) // kilocode_change
+      // kilocode_change end
       return yield* lastAssistant(sessionID)
     })
 
@@ -2493,9 +2511,9 @@ export const layer = Layer.effect(
       cancel,
       paused: (id) => control.paused(id), // kilocode_change - wakeup resume reads it before forking a turn
       prompt,
-      loop: (input) => loop(input).pipe(Effect.orDie),
+      loop: (input) => drain.track(input.sessionID, loop(input)).pipe(Effect.orDie), // kilocode_change
       shell,
-      command,
+      command: (input) => drain.track(input.sessionID, command(input)), // kilocode_change
       resolvePromptParts,
     })
   }),

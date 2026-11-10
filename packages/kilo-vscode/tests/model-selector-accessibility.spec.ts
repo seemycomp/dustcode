@@ -388,6 +388,34 @@ test("mode picker focuses the selected mode as it opens", async ({ page }) => {
   await expect(page.locator(".mode-switcher-item.selected")).toBeFocused()
 })
 
+test("prompt selectors switch open menus on hover without opening idle menus", async ({ page }) => {
+  await load(page, "prompt-input--with-thinking-420")
+
+  const mode = page.getByRole("button", { name: "Code", exact: true })
+  const effort = page.getByRole("button", { name: "Medium", exact: true })
+  const popup = page.locator(".popup-selector[data-expanded]")
+  await mode.hover()
+  await expect(popup).toHaveCount(0)
+  await mode.click()
+  await expect(page.locator(".mode-switcher-list")).toBeVisible()
+  // The segment/tooltip wrapper can extend beyond the actual trigger button.
+  const segment = page.locator('.prompt-selector[data-part="model"]')
+  await segment.evaluate((el) => (el.style.paddingTop = "8px"))
+  await segment.hover({ position: { x: 4, y: 2 } })
+  await expect(page.locator(".model-selector-search")).toBeVisible()
+  await expect(page.locator(".mode-switcher-list")).toBeHidden()
+  await effort.hover()
+  await expect(page.locator(".thinking-selector-item.selected")).toBeVisible()
+  await expect(page.locator(".model-selector-search")).toBeHidden()
+  await mode.hover()
+  await expect(page.locator(".mode-switcher-list")).toBeVisible()
+  await expect(popup).toHaveCount(1)
+  await page.keyboard.press("Escape")
+  await expect(popup).toHaveCount(0)
+  await effort.hover()
+  await expect(popup).toHaveCount(0)
+})
+
 test("variant picker focuses the selected effort as it opens", async ({ page }) => {
   await load(page, "prompt-input--with-thinking-420")
 

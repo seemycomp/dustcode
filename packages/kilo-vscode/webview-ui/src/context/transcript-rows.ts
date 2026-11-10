@@ -155,7 +155,7 @@ function attachTiming(rows: TranscriptAssistantRow[], copied: string | undefined
   if (owner) owner.timing = timing
 }
 
-function content(parts: Part[]) {
+export function userContent(parts: Part[]) {
   const text = parts.find((part) => part.type === "text" && (!part.synthetic || part.metadata?.wakeup === true))
   if (text?.type === "text" && text.text.trim()) return true
   return parts.some(
@@ -200,7 +200,7 @@ export function transcriptRows(
     const copied = copy(turn.assistant, parts, meta.live)
     const user = turn.partial ? [] : parts(turn.user.id)
 
-    if (!turn.partial && content(user)) {
+    if (!turn.partial && userContent(user)) {
       rows.push({
         ...meta,
         type: "user",

@@ -66,6 +66,8 @@ const STORIES = [
   { id: "settings--providers-configure", name: "Settings / providers empty state" },
   { id: "marketplace--empty-list", name: "Marketplace / empty state" },
   { id: "agentmanager--sidebar-search-open", name: "Agent Manager / sidebar search" },
+  { id: "agentmanager--worktree-history", name: "Agent Manager / worktree history" },
+  { id: "agentmanager--worktree-history-narrow", name: "Agent Manager / narrow worktree history" },
   { id: "agentmanager--side-terminal-panel-empty", name: "Agent Manager / side terminal" },
   { id: "session-tabs--switcher-open", name: "Session tabs / switcher" },
   { id: "iconbutton--states", name: "IconButton / shared states" },

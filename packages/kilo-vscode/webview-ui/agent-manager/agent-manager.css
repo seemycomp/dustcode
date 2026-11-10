@@ -98,6 +98,153 @@ html[data-theme="kilo-vscode"]
 
 /* Fixed local repo item */
 
+.am-history-context {
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.am-history-header {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 2px;
+}
+
+.am-history-card {
+  flex: 1;
+  min-width: 0;
+}
+
+.am-history-disclosure {
+  flex: none;
+}
+
+.am-history {
+  min-width: 0;
+  margin: 0 4px 6px 26px;
+  border-inline-start: 1px solid var(--border-weak-base);
+  padding-inline-start: 4px;
+}
+
+.am-history-tools {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 2px;
+  min-height: 28px;
+  padding-block: 4px;
+}
+
+.am-history-tools > [data-component="input"],
+.am-history-caption {
+  flex: 1;
+  min-width: 0;
+}
+
+.am-history-caption {
+  padding-inline-start: 6px;
+  font-size: var(--font-size-small);
+  color: var(--text-weak);
+}
+
+.am-history-tools [data-slot="input-wrapper"] {
+  min-height: 24px;
+}
+
+.am-history-tools [data-slot="input-input"].am-history-input {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  padding: 1px 6px;
+  font-size: var(--font-size-small);
+}
+
+.am-history-viewport {
+  max-height: 168px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  overflow-anchor: none;
+}
+
+.am-history-viewport-virtual {
+  height: 168px;
+}
+
+.am-history-row[data-component="button"] {
+  display: flex;
+  justify-content: flex-start;
+  width: 100%;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 6px;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-weight: 400;
+  text-align: start;
+  user-select: text;
+}
+
+.am-history-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.am-history-time {
+  flex: none;
+  white-space: nowrap;
+  font-size: var(--font-size-small);
+  color: var(--text-weak);
+  font-variant-numeric: tabular-nums;
+}
+
+.am-history-row[data-component="button"][aria-current="page"],
+.am-history-row[data-component="button"][aria-current="page"]:hover:not(:disabled) {
+  background: var(--surface-interactive-base);
+  color: var(--text-on-interactive-base);
+  border-color: var(--vscode-contrastActiveBorder, transparent);
+}
+
+.am-history-row[aria-current="page"] .am-history-time {
+  color: inherit;
+}
+
+.am-history-row:focus-visible,
+.am-history-disclosure:focus-visible {
+  outline: 1px solid var(--border-focus);
+  outline-offset: -1px;
+}
+
+.am-history-note {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 4px 6px;
+  font-size: var(--font-size-small);
+  color: var(--text-weak);
+}
+
+.am-history-note [data-component="spinner"] {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+.am-history-error {
+  flex-wrap: wrap;
+  color: var(--text-critical-base);
+}
+
+.am-history-more {
+  width: 100%;
+}
+
 .am-local-item {
   position: relative;
   display: flex;
@@ -126,13 +273,18 @@ html[data-theme="kilo-vscode"]
   opacity: 0.8;
 }
 
-.am-local-item-active {
+.am-local-item-active,
+.am-local-item-active:hover {
   background: var(--surface-interactive-base);
   color: var(--text-on-interactive-base);
 }
 
 .am-local-item-active .am-local-branch {
-  color: color-mix(in srgb, var(--text-on-interactive-base) 70%, transparent);
+  color: inherit;
+}
+
+.am-local-item-active .am-local-status[data-activity="idle"] [data-slot="icon-svg"] {
+  color: var(--text-on-interactive-base);
 }
 
 .am-local-item-active .am-stat-files {
@@ -816,7 +968,7 @@ body.am-project-dragging-active * {
 }
 
 .am-worktree-item-active .am-worktree-subtitle {
-  color: color-mix(in srgb, var(--text-on-interactive-base) 70%, transparent);
+  color: inherit;
 }
 
 .am-worktree-item:hover {
@@ -827,7 +979,8 @@ body.am-project-dragging-active * {
   opacity: 0.8;
 }
 
-.am-worktree-item-active {
+.am-worktree-item-active,
+.am-worktree-item-active:hover {
   background: var(--surface-interactive-base);
   color: var(--text-on-interactive-base);
 }
@@ -881,16 +1034,9 @@ body.am-project-dragging-active * {
   -webkit-mask-image: linear-gradient(to right, black calc(100% - 40px), transparent 100%);
 }
 
-.am-worktree-item-active .am-shortcut-badge {
-  color: color-mix(in srgb, var(--text-on-interactive-base) 60%, transparent);
-}
-
-.am-worktree-item-active:hover .am-shortcut-badge {
-  opacity: 0.8;
-}
-
+.am-worktree-item-active .am-shortcut-badge,
 .am-local-item-active .am-shortcut-badge {
-  color: var(--text-weak);
+  color: var(--text-on-interactive-base);
 }
 
 /* Jump modifier held (⌘/Ctrl): reveal shortcut badges on every item, not just the
@@ -3782,6 +3928,11 @@ body.am-wt-dragging-active * {
   height: 100%;
   max-height: none;
   overflow-y: auto;
+}
+
+.am-nv-dialog .am-prompt-input::selection {
+  color: var(--vscode-input-foreground, var(--text-base));
+  background: var(--vscode-editor-selectionBackground, var(--vscode-list-activeSelectionBackground));
 }
 
 .am-nv-config-label {

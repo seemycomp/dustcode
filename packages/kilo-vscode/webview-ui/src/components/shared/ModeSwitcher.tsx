@@ -26,6 +26,27 @@ function formatAgentLabel(agent: AgentInfo): string {
     .join(" ")
 }
 
+const modeColors: Record<string, string> = {
+  code: "var(--vscode-textLink-foreground, #3794ff)",
+  plan: "var(--vscode-charts-purple, #c586c0)",
+  debug: "var(--vscode-editorWarning-foreground, #cca700)",
+  ask: "var(--vscode-charts-green, #89d185)",
+  orchestrator: "var(--vscode-charts-pink, #f48771)",
+  multitask: "var(--vscode-charts-cyan, #4ec9b0)",
+}
+
+function modeColor(agent: Pick<AgentInfo, "name" | "color">): string {
+  const color = agent.color?.trim()
+  if (color) {
+    const named = modeColors[color.toLowerCase()]
+    if (named) return named
+    if (color.startsWith("#") || color.startsWith("rgb") || color.startsWith("var(") || color.startsWith("hsl")) {
+      return color
+    }
+  }
+  return modeColors[agent.name.toLowerCase()] ?? "var(--text-base)"
+}
+
 // ---------------------------------------------------------------------------
 // Reusable base component
 // ---------------------------------------------------------------------------
@@ -157,6 +178,8 @@ export const ModeSwitcherBase: Component<ModeSwitcherBaseProps> = (props) => {
       <PopupSelector
         expanded={false}
         placement="top-start"
+        preferredWidth={190}
+        preferredHeight={280}
         minHeight={100}
         portal={props.portal}
         deferDismiss={props.deferDismiss}
@@ -168,7 +191,17 @@ export const ModeSwitcherBase: Component<ModeSwitcherBaseProps> = (props) => {
           <>
             {/* Keyed so the label remounts on change and the prompt pill can animate it. */}
             <Show when={triggerLabel()} keyed>
-              {(label) => <span class="mode-switcher-trigger-label">{label}</span>}
+              {(label) => {
+                const agent = () => props.agents.find((item) => item.name === props.value)
+                return (
+                  <span
+                    class="mode-switcher-trigger-badge"
+                    style={{ "--mode-color": modeColor(agent() ?? { name: props.value }) }}
+                  >
+                    <span class="mode-switcher-trigger-label">{label}</span>
+                  </span>
+                )
+              }}
             </Show>
             <svg
               class="selector-trigger-chevron"
@@ -199,11 +232,14 @@ export const ModeSwitcherBase: Component<ModeSwitcherBaseProps> = (props) => {
                   aria-selected={agent.name === props.value}
                   tabindex={focused() === i() ? 0 : -1}
                   data-autofocus={focused() === i() ? "" : undefined}
+                  title={agent.description}
                   onClick={() => pick(agent.name)}
                   onFocus={() => setFocused(i())}
                 >
-                  <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
-                    <span class="mode-switcher-item-name">{formatAgentLabel(agent)}</span>
+                  <div class="mode-switcher-item-main">
+                    <span class="mode-switcher-item-badge" style={{ "--mode-color": modeColor(agent) }}>
+                      <span class="mode-switcher-item-name">{formatAgentLabel(agent)}</span>
+                    </span>
                     <Show when={agent.deprecated}>
                       <span
                         style={{
@@ -218,8 +254,10 @@ export const ModeSwitcherBase: Component<ModeSwitcherBaseProps> = (props) => {
                       </span>
                     </Show>
                   </div>
-                  <Show when={agent.description}>
-                    <span class="mode-switcher-item-desc">{agent.description}</span>
+                  <Show when={agent.name === props.value}>
+                    <span class="mode-switcher-item-check" aria-hidden="true">
+                      ✓
+                    </span>
                   </Show>
                 </div>
               )}

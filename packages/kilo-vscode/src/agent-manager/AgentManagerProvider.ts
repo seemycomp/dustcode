@@ -87,6 +87,7 @@ import { hydrateExpanded } from "./project/hydrate"
 import { createMultiVersion, type MultiVersionHost } from "./provider-multi-version"
 import { handleProjectMessage, routeProjectSession, type ProjectMessageDeps } from "./project/messages"
 import { createProjectWiring, type ProjectWiring } from "./project/wiring"
+import { sidebarState } from "./history-state"
 import { ProjectScope } from "./project/scope"
 import { revealManagedSession } from "./reveal-session"
 import { resolveWorktreeFile } from "./worktree-file-path"
@@ -224,6 +225,8 @@ export class AgentManagerProvider implements Disposable {
     const wiring = createProjectWiring({
       host: this.host,
       git: this.gitOps,
+      connection: this.connectionService,
+      sessions: () => this.panel?.sessions,
       log: (...args) => this.log(...args),
       output: (msg) => this.outputChannel.appendLine(msg),
       activate: (ctx) => this.activateProject(ctx),
@@ -237,6 +240,9 @@ export class AgentManagerProvider implements Disposable {
       selected: (target) => this.postToWebview({ type: "agentManager.selectionActivated", target }),
       post: (message) => this.postToWebview(message),
       routeSession: (pid, sid, dir, gen) => routeProjectSession(this.panel?.sessions, pid, sid, dir, gen),
+      setup: { manager: this.scripts.manager, run: executeVscodeTask },
+      destination: () => this.destination.value(),
+      closeBrowser: (id) => this.browserLifecycle.close(id),
     })
     this.registry = wiring.registry
     this.contexts = wiring.contexts
@@ -346,9 +352,10 @@ export class AgentManagerProvider implements Disposable {
       busy: this.busySessions,
       removed: this.removedSessions,
       contexts: this.contexts,
-      closeBrowser: (id) => this.browserLifecycle.close(id),
+      transfer: this.projects.transfer,
       post: (message) => this.postToWebview(message),
     })
+    this.projects.history?.event(event)
   }
   private onSessionStatus(event: unknown): void {
     const props = (event as { properties?: { sessionID?: string; status?: { type?: string } } }).properties
@@ -443,6 +450,7 @@ export class AgentManagerProvider implements Disposable {
       // Only clear if this is still the active panel — a newer panel may
       // have already replaced us via attachPanel.
       if (this.panel === ctx) {
+        this.projects.history?.pause()
         this.log("Panel disposed")
         const ids = [...this.panelSessions]
         if (this.activeSessionId) ids.push(this.activeSessionId)
@@ -1412,20 +1420,13 @@ export class AgentManagerProvider implements Disposable {
       sections: state.getSections(),
       staleWorktreeIds: active ? staleForState(this.staleWorktreeIds, worktrees) : [],
       ...healthPayload(target.report, worktrees),
-      tabOrder: state.getTabOrder(),
-      pinnedTabs: state.getPinnedTabs(),
-      worktreeOrder: state.getWorktreeOrder(),
-      sessionsCollapsed: state.getSessionsCollapsed(),
-      sidebarCollapsed: state.getSidebarCollapsed(),
-      reviewDiffStyle: state.getReviewDiffStyle(),
+      ...sidebarState(state),
       reviewMarkdownRender: getDiffMarkdownRender(),
       terminalDestination: this.destination.value(),
       terminalFont: readTerminalFont(),
       browserAutomation: this.host.browserAutomation(),
       isGitRepo: true,
       restricted: isRestrictedRoot(target.root),
-      defaultBaseBranch: state.getDefaultBaseBranch(),
-      activeTarget: state.getActiveTarget(),
       ...(active ? this.runStateFor(target) : {}),
     })
     void this.activity.sync()

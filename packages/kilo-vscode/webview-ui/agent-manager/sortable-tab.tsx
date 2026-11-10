@@ -31,8 +31,11 @@ export const SortableTab: Component<{
   onFork?: () => void
   showNewSession?: boolean
   showMoveToWorktree?: boolean
+  showCopyToWorktree?: boolean
   onNewSession?: () => void
-  onMoveToWorktree?: () => void
+  onMoveToWorktree?: (create?: boolean) => void
+  onCopyToWorktree?: (create?: boolean) => void
+  transferOptions?: { new: string; existing: string; copy: string }
   pinned?: boolean
   onTogglePin?: () => void
   role?: "tab"
@@ -47,8 +50,11 @@ export const SortableTab: Component<{
         showFork
         showNewSession={props.showNewSession}
         showMoveToWorktree={props.showMoveToWorktree}
+        showCopyToWorktree={props.showCopyToWorktree}
+        transferOptions={props.transferOptions}
         onNewSession={props.onNewSession}
         onMoveToWorktree={props.onMoveToWorktree}
+        onCopyToWorktree={props.onCopyToWorktree}
         onFork={props.onFork}
         onClose={props.onClose}
         onCloseOthers={props.onCloseOthers}

@@ -19,20 +19,25 @@ type Entry<E> = {
   owner?: Fiber.Fiber<void, never>
   pendingWake: boolean
   stopping: boolean
+  release: () => void // kilocode_change
 }
 
 export const make = <Key, E>(options: {
   readonly drain: (key: Key, force: boolean) => Effect.Effect<void, E>
+  readonly lease?: (key: Key) => Effect.Effect<() => void> // kilocode_change
 }): Effect.Effect<Coordinator<Key, E>, never, Scope.Scope> =>
   Effect.gen(function* () {
     const active = new Map<Key, Entry<E>>()
     const fork = yield* FiberSet.makeRuntime<never, void, never>()
 
-    const makeEntry = (): Entry<E> => ({
+    // kilocode_change start - native runner retains admission independently of its caller
+    const makeEntry = (release: () => void): Entry<E> => ({
       done: Deferred.makeUnsafe<void, E>(),
       pendingWake: false,
       stopping: false,
+      release, // kilocode_change
     })
+    // kilocode_change end
 
     const start = (key: Key, entry: Entry<E>, force: boolean, successor = false) => {
       const ready = Deferred.makeUnsafe<void>()
@@ -55,8 +60,13 @@ export const make = <Key, E>(options: {
         return
       }
 
-      const successor = entry.pendingWake ? makeEntry() : undefined
-      if (successor === undefined) active.delete(key)
+      const successor = entry.pendingWake ? makeEntry(entry.release) : undefined // kilocode_change
+      // kilocode_change start
+      if (successor === undefined) {
+        active.delete(key)
+        entry.release()
+      }
+      // kilocode_change end
       else {
         active.set(key, successor)
         start(key, successor, false, true)
@@ -64,32 +74,53 @@ export const make = <Key, E>(options: {
       Deferred.doneUnsafe(entry.done, exit)
     }
 
+    // kilocode_change start - lease admission may yield, so recheck before starting a new owner
     const run = (key: Key): Effect.Effect<void, E> =>
-      Effect.uninterruptibleMask((restore) => {
-        const entry = active.get(key)
-        if (entry !== undefined) {
-          if (entry.stopping) return restore(Deferred.await(entry.done).pipe(Effect.andThen(run(key))))
-          return restore(Deferred.await(entry.done))
-        }
+      Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          // kilocode_change
+          const entry = active.get(key)
+          if (entry !== undefined) {
+            if (entry.stopping) return yield* restore(Deferred.await(entry.done).pipe(Effect.andThen(run(key)))) // kilocode_change
+            return yield* restore(Deferred.await(entry.done)) // kilocode_change
+          }
 
-        const next = makeEntry()
-        active.set(key, next)
-        start(key, next, true)
-        return restore(Deferred.await(next.done))
-      })
+          // Acquire before publishing active execution or returning wake acceptance.
+          const release = options.lease ? yield* options.lease(key) : () => {}
+          const existing = active.get(key)
+          if (existing) {
+            release()
+            return yield* restore(Deferred.await(existing.done))
+          }
+          const next = makeEntry(release)
+          active.set(key, next)
+          start(key, next, true)
+          return yield* restore(Deferred.await(next.done)) // kilocode_change
+        }),
+      ) // kilocode_change
 
     const wake = (key: Key) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
+        // kilocode_change
         const entry = active.get(key)
         if (entry !== undefined) {
           entry.pendingWake = true
           return
         }
 
-        const next = makeEntry()
+        const release = options.lease ? yield* options.lease(key) : () => {}
+        const existing = active.get(key)
+        if (existing) {
+          release()
+          existing.pendingWake = true
+          return
+        }
+        const next = makeEntry(release)
         active.set(key, next)
         start(key, next, false)
-      })
+      }).pipe(Effect.uninterruptible) // kilocode_change
+
+    // kilocode_change end
 
     const interrupt = (key: Key): Effect.Effect<void> =>
       Effect.suspend(() => {

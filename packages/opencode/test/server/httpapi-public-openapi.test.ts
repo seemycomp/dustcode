@@ -70,6 +70,26 @@ function isBuiltInEndpointError(name: string) {
 }
 
 describe("PublicApi OpenAPI v2 errors", () => {
+  // kilocode_change start
+  test("documents persistence disposal queries as optional SDK booleans", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+    for (const [method, path] of [
+      ["patch", "/global/config"],
+      ["put", "/auth/{providerID}"],
+      ["delete", "/auth/{providerID}"],
+    ] as const) {
+      expect(spec.paths[path]?.[method]?.parameters).toContainEqual(
+        expect.objectContaining({
+          name: "dispose",
+          in: "query",
+          required: false,
+          schema: expect.objectContaining({ type: "boolean" }),
+        }),
+      )
+    }
+  })
+  // kilocode_change end
+
   test("includes plugin-facing core schemas", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 

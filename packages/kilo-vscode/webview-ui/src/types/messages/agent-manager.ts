@@ -1,3 +1,12 @@
+export type {
+  HistoryRow,
+  HistoryRequest,
+  HistoryMessage,
+  HistoryOpen,
+  HistoryOpenFailed,
+  SetHistoryExpanded,
+} from "../../../../src/shared/agent-history"
+
 export type WorktreeErrorCode =
   | "git_not_found"
   | "not_git_repo"

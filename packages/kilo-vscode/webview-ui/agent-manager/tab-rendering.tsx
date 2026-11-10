@@ -93,7 +93,9 @@ export interface TabRenderDeps {
   sessionClose: (id: string) => void
   sessionFork?: (id: string) => void
   sessionNew?: () => void
-  sessionMove?: (id: string) => void
+  sessionMove?: (id: string, create?: boolean) => void
+  sessionCopy?: (id: string, create?: boolean) => void
+  transferOptions?: { new: string; existing: string; copy: string }
   isPinned: (id: string) => boolean
   togglePinned: (id: string) => void
   onTabKey: (id: string, event: KeyboardEvent) => void
@@ -221,10 +223,19 @@ function renderSessionTab(s: SessionInfo, deps: TabRenderDeps): JSX.Element {
       showNewSession={!!deps.sessionNew}
       onNewSession={() => deps.sessionNew?.()}
       showMoveToWorktree={!!deps.sessionMove}
+      showCopyToWorktree={!!deps.sessionCopy}
+      transferOptions={deps.transferOptions}
+      onCopyToWorktree={
+        actionable() && deps.sessionCopy
+          ? (create) => {
+              if (actionable()) deps.sessionCopy?.(s.id, create)
+            }
+          : undefined
+      }
       onMoveToWorktree={
         actionable() && deps.sessionMove
-          ? () => {
-              if (actionable()) deps.sessionMove?.(s.id)
+          ? (create) => {
+              if (actionable()) deps.sessionMove?.(s.id, create)
             }
           : undefined
       }

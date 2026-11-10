@@ -4,6 +4,7 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { described } from "./metadata"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { PersistenceQuery } from "@/kilocode/server/httpapi/groups/persistence" // kilocode_change
 
 const AuthParams = Schema.Struct({
   providerID: ProviderV2.ID,
@@ -38,6 +39,7 @@ export const ControlApi = HttpApi.make("control").add(
     .add(
       HttpApiEndpoint.put("authSet", ControlPaths.auth, {
         params: AuthParams,
+        query: PersistenceQuery, // kilocode_change
         payload: Auth.Info,
         success: described(Schema.Boolean, "Successfully set authentication credentials"),
         error: HttpApiError.BadRequest,
@@ -50,6 +52,7 @@ export const ControlApi = HttpApi.make("control").add(
       ),
       HttpApiEndpoint.delete("authRemove", ControlPaths.auth, {
         params: AuthParams,
+        query: PersistenceQuery, // kilocode_change
         success: described(Schema.Boolean, "Successfully removed authentication credentials"),
         error: HttpApiError.BadRequest,
       }).annotateMerge(

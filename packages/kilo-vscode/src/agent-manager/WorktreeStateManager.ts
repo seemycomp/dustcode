@@ -87,6 +87,15 @@ export interface ManagedSession {
   createdAt: string
 }
 
+export interface PendingTransfer {
+  operationID: string
+  projectID: string
+  sourceSessionID: string
+  sourceWorktreeId: string | null
+  action: "move" | "copy"
+  targetWorktreeId?: string
+}
+
 interface StateFile {
   worktrees: Record<string, Omit<Worktree, "id">>
   sessions: Record<string, Omit<ManagedSession, "id">>
@@ -97,9 +106,12 @@ interface StateFile {
   worktreeOrder?: string[]
   sessionsCollapsed?: boolean
   sidebarCollapsed?: boolean
+  historyExpanded?: Record<string, boolean>
+  historyInitialized?: boolean
   reviewDiffStyle?: "unified" | "split"
   defaultBaseBranch?: string
   activeTarget?: SidebarTarget
+  pendingTransfers?: Record<string, Omit<PendingTransfer, "operationID">>
 }
 
 export type StateLoadStatus = "loaded" | "missing" | "failed"
@@ -111,7 +123,6 @@ export interface StateLoadResult extends MigrationResult {
 import { KILO_DIR, migrateAgentManagerData, type MigrationResult } from "./constants"
 
 const STATE_FILE = "agent-manager.json"
-const CLOSED_LIMIT = 1_000
 
 let counter = 0
 
@@ -130,9 +141,13 @@ export class WorktreeStateManager {
   private worktreeOrder: string[] = []
   private collapsed = true
   private sidebar = false
+  private history: Record<string, boolean> = {}
+  private initialized = false
+  private readonly listeners = new Set<() => void>()
   private reviewDiffStyle: "unified" | "split" = "unified"
   private defaultBase: string | undefined
   private activeTarget: SidebarTarget | undefined
+  private pendingTransfers = new Map<string, PendingTransfer>()
   private readonly log: (msg: string) => void
   private saving: Promise<void> | undefined
   private dirty = false
@@ -189,6 +204,42 @@ export class WorktreeStateManager {
     return this.closed.has(id)
   }
 
+  /** Undefined means unassigned; null is an explicit Local placement. */
+  sessionPlacement(id: string): string | null | undefined {
+    const session = this.sessions.get(id)
+    return session ? session.worktreeId : this.closed.get(id)
+  }
+
+  sessionPlacements(): ReadonlyMap<string, string | null> {
+    return new Map([...this.closed, ...[...this.sessions.values()].map((s) => [s.id, s.worktreeId] as const)])
+  }
+
+  onDidChangePlacement(listener: () => void): () => void {
+    this.listeners.add(listener)
+    return () => void this.listeners.delete(listener)
+  }
+
+  private changed(): void {
+    for (const listener of this.listeners) listener()
+  }
+
+  getHistoryExpanded(): Record<string, boolean> {
+    return this.history
+  }
+
+  getHistoryInitialized(): boolean {
+    return this.initialized
+  }
+
+  setHistoryExpanded(id: string | null, expanded: boolean, initialize = false): void {
+    if (id !== null && !this.worktrees.has(id)) return
+    if (initialize && this.initialized) return
+    const key = id ?? "local"
+    if (!initialize || this.history[key] === undefined) this.history[key] = expanded
+    this.initialized = true
+    void this.save()
+  }
+
   /** Returns the worktree directory for a session, or undefined for local sessions. */
   directoryFor(sessionId: string): string | undefined {
     const session = this.sessions.get(sessionId)
@@ -232,6 +283,7 @@ export class WorktreeStateManager {
     if (params.branchOwned !== undefined) wt.branchOwned = params.branchOwned
     this.worktrees.set(id, wt)
     this.setNormalizedWorktreeOrder(this.worktreeOrder)
+    this.changed()
     this.log(
       `Added worktree ${id}: ${params.branch}${params.label ? ` (label=${params.label})` : ""}${params.groupId ? ` (group=${params.groupId})` : ""}`,
     )
@@ -259,6 +311,7 @@ export class WorktreeStateManager {
     if (params.remote) wt.remote = params.remote
     this.worktrees.set(id, wt)
     this.setNormalizedWorktreeOrder(this.worktreeOrder)
+    this.changed()
     this.log(`Restored worktree ${id}: ${params.branch} (${params.path})`)
     void this.save()
     return wt
@@ -364,10 +417,12 @@ export class WorktreeStateManager {
     // Clean up tab order for this worktree
     delete this.tabOrder[id]
     delete this.pinnedTabs[id]
+    delete this.history[id]
 
     this.setNormalizedWorktreeOrder(this.worktreeOrder.filter((item) => item !== id))
 
     this.log(`Removed worktree ${id}, removed ${orphaned.length} sessions`)
+    this.changed()
     void this.save()
     return orphaned
   }
@@ -382,6 +437,7 @@ export class WorktreeStateManager {
       worktree.autoNamePromptCount = undefined
     }
     this.log(`Added session ${sessionId} to worktree ${worktreeId ?? "local"}`)
+    this.changed()
     void this.save()
     return session
   }
@@ -402,14 +458,66 @@ export class WorktreeStateManager {
       worktree.autoNamePromptCount = undefined
     }
     this.log(`Moved session ${sessionId} to ${worktreeId ?? "local"}`)
+    this.changed()
     void this.save()
+  }
+
+  /** Publish placement, closed membership and old tab bookkeeping as one change. */
+  transferSession(id: string, worktreeId: string, preservePin = true): void {
+    const previous = this.sessions.get(id)
+    const tree = previous?.worktreeId ? this.worktrees.get(previous.worktreeId) : undefined
+    const pinned = preservePin && previous?.worktreeId != null && this.pinnedTabs[previous.worktreeId]?.includes(id)
+    if (tree?.autoNameSessionId === id) {
+      tree.autoNameSessionId = undefined
+      tree.autoNamePromptCount = undefined
+    }
+    this.closed.delete(id)
+    this.sessions.set(id, { id, worktreeId, createdAt: previous?.createdAt ?? new Date().toISOString() })
+    for (const values of [this.tabOrder, this.pinnedTabs]) {
+      for (const [key, rows] of Object.entries(values)) {
+        if (!rows.includes(id) || key === worktreeId) continue
+        const next = rows.filter((row) => row !== id)
+        if (next.length) values[key] = next
+        if (!next.length) delete values[key]
+      }
+    }
+    if (pinned) this.pinnedTabs[worktreeId] = [...new Set([...(this.pinnedTabs[worktreeId] ?? []), id])]
+    this.changed()
+    void this.save()
+  }
+
+  setPendingTransfer(value: PendingTransfer): void {
+    this.pendingTransfers.set(value.operationID, value)
+    void this.save()
+  }
+
+  getPendingTransfers(): PendingTransfer[] {
+    return [...this.pendingTransfers.values()]
+  }
+
+  clearPendingTransfer(operationID: string): void {
+    if (!this.pendingTransfers.delete(operationID)) return
+    void this.save()
+  }
+
+  async persistTransfers(): Promise<void> {
+    await this.flush()
+    if (this.failed || this.loadFailed)
+      throw new Error("Unable to persist transfer recovery state. The source was left unchanged.")
   }
 
   closeSession(id: string, worktreeId: string | null): void {
     this.closed.delete(id)
     this.closed.set(id, worktreeId)
-    if (this.closed.size > CLOSED_LIMIT) this.closed.delete(this.closed.keys().next().value!)
+    this.changed()
     void this.save()
+  }
+
+  /** Backend deletion, unlike tab closure, removes placement evidence too. */
+  forgetSession(id: string): void {
+    if (!this.closed.has(id) && !this.sessions.has(id)) return
+    this.closed.delete(id)
+    this.removeSession(id)
   }
 
   removeSession(id: string): void {
@@ -432,6 +540,7 @@ export class WorktreeStateManager {
       }
     }
 
+    this.changed()
     void this.save()
   }
 
@@ -781,6 +890,7 @@ export class WorktreeStateManager {
     this.sessions.clear()
     this.closed.clear()
     this.sections.clear()
+    this.pendingTransfers.clear()
     this.tabOrder = {}
     this.pinnedTabs = {}
     this.worktreeOrder = []
@@ -821,11 +931,18 @@ export class WorktreeStateManager {
     // State files from before this preference was explicit used the expanded layout.
     this.collapsed = data.sessionsCollapsed ?? false
     this.sidebar = data.sidebarCollapsed ?? false
+    this.history = Object.fromEntries(
+      Object.entries(data.historyExpanded ?? {}).filter(
+        ([id, value]) => typeof value === "boolean" && (id === "local" || this.worktrees.has(id)),
+      ),
+    )
+    this.initialized = data.historyInitialized === true
     if (data.reviewDiffStyle === "split") {
       this.reviewDiffStyle = "split"
     }
     this.defaultBase = data.defaultBaseBranch
     this.activeTarget = validTarget(data.activeTarget)
+    this.restorePending(data.pendingTransfers)
     this.log(`Loaded state: ${this.worktrees.size} worktrees, ${this.sessions.size} sessions`)
     if (pruned > 0 || repaired) {
       if (pruned > 0) this.log(`Pruned ${pruned} orphaned sessions`)
@@ -837,6 +954,15 @@ export class WorktreeStateManager {
     if (!value || typeof value !== "object" || Array.isArray(value)) return
     for (const [id, ref] of Object.entries(value)) {
       if (ref === null || (typeof ref === "string" && this.worktrees.has(ref))) this.closed.set(id, ref)
+    }
+  }
+
+  private restorePending(value: StateFile["pendingTransfers"]): void {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return
+    for (const [operationID, item] of Object.entries(value)) {
+      if (typeof item?.projectID !== "string" || typeof item.sourceSessionID !== "string") continue
+      if (item.action !== "move" && item.action !== "copy") continue
+      this.pendingTransfers.set(operationID, { operationID, ...item })
     }
   }
 
@@ -919,6 +1045,8 @@ export class WorktreeStateManager {
       data.worktreeOrder = this.worktreeOrder
     }
     data.sessionsCollapsed = this.collapsed
+    if (Object.keys(this.history).length > 0) data.historyExpanded = this.history
+    if (this.initialized) data.historyInitialized = true
     if (this.sidebar) {
       data.sidebarCollapsed = true
     }
@@ -930,6 +1058,14 @@ export class WorktreeStateManager {
     }
     if (this.activeTarget) {
       data.activeTarget = this.activeTarget
+    }
+    if (this.pendingTransfers.size) {
+      data.pendingTransfers = Object.fromEntries(
+        [...this.pendingTransfers].map(([id, value]) => {
+          const { operationID: _, ...rest } = value
+          return [id, rest]
+        }),
+      )
     }
 
     const tmp = `${this.file}.${process.pid}.${Date.now()}.tmp`

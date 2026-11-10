@@ -5,8 +5,10 @@ import { KiloRunner } from "@/kilocode/effect/runner"
 import { SessionDrain } from "@/kilocode/session/drain"
 import { SessionID } from "@/session/schema"
 import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { Database } from "@opencode-ai/core/database/database"
 
-const it = testEffect(SessionDrain.layer)
+const it = testEffect(AppNodeBuilder.build(SessionDrain.node, [[Database.node, Database.layerFromPath(":memory:")]]))
 
 describe("Runner start ordering", () => {
   it.live(

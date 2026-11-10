@@ -11,6 +11,7 @@
 import type { Session } from "@kilocode/sdk/v2/client"
 import type { ProjectRef, SessionRef, WorktreeRef } from "./project/route"
 import type { PRMergeMethod } from "./types"
+import type { SessionPage } from "../kilo-provider/session-page"
 
 // ---------------------------------------------------------------------------
 // Primitives
@@ -39,9 +40,17 @@ export interface SessionProvider {
   setSessionDirectory(id: string, directory: string): void
   clearSessionDirectory(id: string): void
   getSessionDirectories(): ReadonlyMap<string, string>
-  getSessionInfo?(id: string): Promise<Session | undefined>
+  getSessionInfo?(id: string, directory?: string): Promise<Session | undefined>
   /** List root sessions (no parent) whose directory exactly matches `dir`. */
   listSessions?(dir: string): Promise<Session[]>
+  /** One root metadata page, with host-owned raw paired continuation. */
+  listSessionPage?(input: {
+    directory: string
+    cursor?: number
+    cursorID?: string
+    limit: number
+    search?: string
+  }): Promise<SessionPage>
   trackSession(id: string): void
   refreshSessions(): void
   registerSession(session: Session): void

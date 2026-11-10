@@ -13,6 +13,9 @@ for (const width of [420, 1280]) {
     const before = await input.boundingBox()
     await trigger.click()
     await expect(panel).toBeVisible()
+    await expect(panel.locator(".context-usage-group-label")).toHaveText("Session activity · estimated tokens")
+    await expect(panel.locator(".context-usage-group-count").first()).toHaveText(/[\d.,]+[KMB]? tokens/)
+    await expect(panel.getByRole("button", { name: /Completed steps/ })).toHaveCount(0)
     await expect(trigger).toHaveAttribute("aria-expanded", "true")
     await expect(panel).toHaveCSS("box-sizing", "border-box")
     await expect

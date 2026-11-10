@@ -12,6 +12,7 @@ import { SessionSchema } from "../session/schema"
 import { SessionStore } from "../session/store"
 import { AbsolutePath, RelativePath } from "../schema"
 import path from "path"
+import { SessionAdmission } from "../kilocode/session-admission" // kilocode_change
 
 export const Destination = Schema.Struct({
   directory: AbsolutePath,
@@ -73,6 +74,7 @@ const layer = Layer.effect(
     const events = yield* EventV2.Service
     const project = yield* ProjectV2.Service
     const sessions = yield* SessionStore.Service
+    const admission = yield* SessionAdmission.Service // kilocode_change
 
     const moveSession = Effect.fn("MoveSession.moveSession")(function* (input: Input) {
       const current = yield* sessions.get(input.sessionID)
@@ -140,12 +142,12 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ moveSession })
+    return Service.of({ moveSession: (input) => admission.work([input.sessionID], moveSession(input)) }) // kilocode_change
   }),
 )
 
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [Git.node, EventV2.node, ProjectV2.node, SessionStore.node],
+  deps: [Git.node, EventV2.node, ProjectV2.node, SessionStore.node, SessionAdmission.node], // kilocode_change
 })

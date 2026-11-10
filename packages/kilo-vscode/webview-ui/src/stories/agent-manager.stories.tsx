@@ -1866,6 +1866,7 @@ export const SidebarSearchOpen: Story = {
 // ---------------------------------------------------------------------------
 
 import { ProjectList } from "../../agent-manager/ProjectList"
+import { HistorySidebar } from "./agent-manager-history"
 import type { AgentManagerStateMessage, LocalGitStats, ProjectSessionInfo } from "../types/messages"
 
 const projectA: AgentProjectSnapshot = {
@@ -2050,6 +2051,28 @@ export const MultiProjectSidebar200: Story = {
   name: "Project List - minimum sidebar width",
   parameters: { layout: "fullscreen" },
   render: () => renderProjectSidebar(200),
+}
+
+export const WorktreeHistory: Story = {
+  name: "Worktree chat history",
+  render: () => (
+    <StoryProviders noPadding>
+      <div style={{ width: "280px", height: "720px" }}>
+        <HistorySidebar total={5000} />
+      </div>
+    </StoryProviders>
+  ),
+}
+
+export const WorktreeHistoryNarrow: Story = {
+  name: "Worktree chat history - narrow",
+  render: () => (
+    <StoryProviders noPadding>
+      <div style={{ width: "200px", height: "720px" }}>
+        <HistorySidebar total={7} />
+      </div>
+    </StoryProviders>
+  ),
 }
 
 export const MultiProjectSidebarScrolled: Story = {

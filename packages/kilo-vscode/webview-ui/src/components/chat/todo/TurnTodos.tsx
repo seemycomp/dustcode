@@ -3,6 +3,7 @@ import { Button } from "@kilocode/kilo-ui/button"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { Spinner } from "@kilocode/kilo-ui/spinner"
 import { SessionContext } from "../../../context/session"
+import { userContent } from "../../../context/transcript-rows"
 import { useLanguage } from "../../../context/language"
 import type { TodoItem } from "../../../types/messages"
 import { todoStats } from "./todo-dock"
@@ -41,7 +42,13 @@ export function TurnTodos(props: { id: string; floating?: boolean }) {
     const index = messages.findIndex((message) => message.id === props.id)
     if (index < 0) return []
     const following = messages.slice(index + 1)
-    const end = following.findIndex((message) => message.role === "user")
+    // Background results and compaction continuations do not start a new
+    // visible prompt. Their final writes still belong to this plan.
+    const end = following.findIndex((message) => {
+      if (message.role !== "user") return false
+      const parts = session.getParts(message.id)
+      return parts.length === 0 || userContent(parts)
+    })
     const turn = end < 0 ? following : following.slice(0, end)
     const parts = turn.flatMap((message) => session.getParts(message.id))
     const part = parts.findLast(

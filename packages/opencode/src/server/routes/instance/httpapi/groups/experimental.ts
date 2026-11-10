@@ -93,6 +93,7 @@ export const SessionListQuery = Schema.Struct({
   roots: Schema.optional(QueryBoolean),
   start: Schema.optional(Schema.NumberFromString),
   cursor: Schema.optional(Schema.NumberFromString),
+  cursorID: Schema.optional(SessionID), // kilocode_change - optional timestamp tiebreaker
   search: Schema.optional(Schema.String),
   limit: Schema.optional(Schema.NumberFromString),
   archived: Schema.optional(QueryBoolean),
@@ -284,6 +285,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
         HttpApiEndpoint.get("session", ExperimentalPaths.session, {
           query: SessionListQuery,
           success: described(Schema.Array(Session.GlobalInfo), "List of sessions"),
+          error: HttpApiError.BadRequest, // kilocode_change - malformed cursor pairing
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.session.list",

@@ -6,8 +6,55 @@ import { disposeInstance, registerDisposer } from "@/effect/instance-registry"
 import { SessionDrain } from "@/kilocode/session/drain"
 import { SessionID } from "@/session/schema"
 import { testEffect } from "../lib/effect"
+import { SessionAdmission } from "@opencode-ai/core/kilocode/session-admission"
+import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 
-const it = testEffect(SessionDrain.layer)
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([SessionDrain.node, SessionAdmission.node]), [
+    [Database.node, Database.layerFromPath(":memory:")],
+  ]),
+)
+
+it.instance("accepted drain ownership excludes transfer without cancelling work", () =>
+  Effect.gen(function* () {
+    const drain = yield* SessionDrain.Service
+    const gate = yield* SessionAdmission.Service
+    const id = SessionID.make("ses_transfer_drain")
+    const release = yield* drain.hold(id)
+    const transfer = yield* gate.reserve([id], "operation", Effect.void).pipe(Effect.exit)
+    expect(Exit.isFailure(transfer)).toBe(true)
+    release()
+    yield* drain.wait(id)
+  }),
+)
+
+it.instance("transfer reservation refuses new intake before its work executes", () =>
+  Effect.gen(function* () {
+    const drain = yield* SessionDrain.Service
+    const gate = yield* SessionAdmission.Service
+    const id = SessionID.make("ses_transfer_intake")
+    let ran = false
+    yield* gate.reserve(
+      [id],
+      "operation",
+      Effect.gen(function* () {
+        const intake = yield* drain
+          .track(
+            id,
+            Effect.sync(() => {
+              ran = true
+            }),
+          )
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(intake)).toBe(true)
+      }),
+    )
+    expect(ran).toBe(false)
+    yield* drain.wait(id)
+  }),
+)
 
 it.instance(
   "drains only after execution and delivery reservations end",

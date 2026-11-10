@@ -797,6 +797,7 @@ export interface OpenSessionLocallyRequest {
 // Add a new session to an existing worktree
 export interface AddSessionToWorktreeRequest {
   type: "agentManager.addSessionToWorktree"
+  projectId?: string
   worktreeId: string
   sessionId?: string
 }
@@ -804,6 +805,7 @@ export interface AddSessionToWorktreeRequest {
 // Fork an existing session (copies conversation history)
 export interface ForkSessionRequest {
   type: "agentManager.forkSession"
+  projectId?: string
   sessionId: string
   worktreeId?: string
   messageId?: string
@@ -818,6 +820,7 @@ export interface SidebarForkSessionRequest {
 // Stop and remove a Local or worktree session from Agent Manager
 export interface CloseSessionRequest {
   type: "agentManager.closeSession"
+  projectId?: string
   sessionId: string
 }
 
@@ -1123,6 +1126,7 @@ export interface CreateMultiVersionRequest {
 // Persist tab order for a context (worktree ID or "local")
 export interface SetTabOrderRequest {
   type: "agentManager.setTabOrder"
+  projectId?: string
   key: string
   order: string[]
 }
@@ -1130,6 +1134,7 @@ export interface SetTabOrderRequest {
 // Persist pinned session tabs for a context (worktree ID or "local"), in pin order
 export interface SetPinnedTabsRequest {
   type: "agentManager.setPinnedTabs"
+  projectId?: string
   key: string
   ids: string[]
 }
@@ -1762,6 +1767,9 @@ export interface DismissAgentMigrationBannerMessage {
 }
 
 export type WebviewMessage =
+  | import("../../../../src/shared/agent-history").HistoryRequest
+  | import("../../../../src/shared/agent-history").HistoryOpen
+  | import("../../../../src/shared/agent-history").SetHistoryExpanded
   | { type: "sessionReview.load"; sessionID: string; requestId: string }
   | {
       type: "sessionReview.decide"
@@ -1915,6 +1923,7 @@ export type WebviewMessage =
   | CleanOrphanDirectoriesRequest
   | RevealPathRequest
   | PromoteSessionRequest
+  | import("../../../../src/shared/session-transfer").SessionTransferRequest
   | OpenLocallyRequest
   | OpenSessionLocallyRequest
   | AddSessionToWorktreeRequest

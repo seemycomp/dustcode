@@ -62,6 +62,7 @@ const TSX_FILES = [
   path.join(ROOT, "webview-ui/agent-manager/MultiModelSelector.tsx"),
   path.join(ROOT, "webview-ui/agent-manager/ApplyDialog.tsx"),
   path.join(ROOT, "webview-ui/agent-manager/WorktreeItem.tsx"),
+  path.join(ROOT, "webview-ui/agent-manager/WorktreeHistory.tsx"),
   path.join(ROOT, "webview-ui/agent-manager/pr/PRBadge.tsx"),
   path.join(ROOT, "webview-ui/agent-manager/SectionHeader.tsx"),
   path.join(ROOT, "webview-ui/agent-manager/SidebarSectionHeader.tsx"),
@@ -457,7 +458,11 @@ describe("Agent Manager Provider Messages", () => {
     const body = text.slice(start, end)
     expect(start).toBeGreaterThanOrEqual(0)
     expect(end).toBeGreaterThan(start)
-    expect(body).toContain("closedDrafts.add(sessionId)")
+    expect(body).toContain("if (pending) closeDraft(sessionId)")
+    const draft = text.slice(text.indexOf("const closeDraft ="), start)
+    expect(draft).toContain("closedDrafts.add(id)")
+    expect(draft).toContain("discardPendingDraft(id)")
+    expect(text).toContain("if (isPending(sessionId)) return closeDraft(sessionId)")
     expect(body).toContain('vscode.postMessage({ type: "agentManager.closeSession", sessionId })')
     expect(body).not.toContain('type: "agentManager.forgetSession"')
     const close = getMethodBody("onCloseSession")

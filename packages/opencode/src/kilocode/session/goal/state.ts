@@ -123,6 +123,10 @@ export namespace GoalState {
     return active(id) || waiting(id)
   }
 
+  export function queued(id: string) {
+    return pending.has(id)
+  }
+
   export function project(id: string, metadata?: Record<string, unknown> | null) {
     const goal = read(metadata)
     if (!goal) return metadata ?? undefined

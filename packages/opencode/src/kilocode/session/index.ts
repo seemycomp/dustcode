@@ -396,6 +396,7 @@ export namespace KiloSession {
     roots?: boolean
     start?: number
     cursor?: number
+    cursorID?: string
     search?: string
     limit?: number
     archived?: boolean
@@ -427,7 +428,15 @@ export namespace KiloSession {
       if (input.directory) conditions.push(eq(SessionTable.directory, Filesystem.resolve(input.directory)))
       if (input.roots) conditions.push(isNull(SessionTable.parent_id))
       if (input.start) conditions.push(gte(SessionTable.time_updated, input.start))
-      if (input.cursor) conditions.push(lt(SessionTable.time_updated, input.cursor))
+      if (input.cursor && input.cursorID === undefined) conditions.push(lt(SessionTable.time_updated, input.cursor))
+      if (input.cursorID !== undefined && input.cursor !== undefined) {
+        conditions.push(
+          or(
+            lt(SessionTable.time_updated, input.cursor),
+            and(eq(SessionTable.time_updated, input.cursor), lt(SessionTable.id, SessionID.make(input.cursorID))),
+          )!,
+        )
+      }
       if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
       if (!input.archived) conditions.push(isNull(SessionTable.time_archived))
 

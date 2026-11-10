@@ -12,6 +12,9 @@ import { SessionID, MessageID, PartID } from "./schema"
 import { SessionRunState } from "./run-state"
 import { SessionSummary } from "./summary"
 import { KiloSessionRevert } from "@/kilocode/session/revert" // kilocode_change
+import { SessionDrain } from "@/kilocode/session/drain" // kilocode_change
+import { diffKey as transferDiffKey } from "@/kilocode/session-transfer/epoch" // kilocode_change
+import { Database } from "@opencode-ai/core/database/database" // kilocode_change
 
 export const RevertInput = Schema.Struct({
   sessionID: SessionID,
@@ -38,6 +41,8 @@ const layer = Layer.effect(
     const summary = yield* SessionSummary.Service
     const state = yield* SessionRunState.Service
     const config = yield* Config.Service // kilocode_change
+    const drain = yield* SessionDrain.Service // kilocode_change
+    const database = yield* Database.Service // kilocode_change
 
     const revert = Effect.fn("SessionRevert.revert")(function* (input: RevertInput) {
       yield* state.assertNotBusy(input.sessionID)
@@ -105,7 +110,7 @@ const layer = Layer.effect(
           const diffs = yield* summary.computeDiff({ messages: range })
           yield* snap.revert(patches)
           if (rev.snapshot) rev.diff = yield* snap.diff(rev.snapshot)
-          yield* storage.write(["session_diff", input.sessionID], diffs).pipe(Effect.ignore)
+          yield* storage.write(yield* transferDiffKey(input.sessionID), diffs).pipe(Effect.ignore) // kilocode_change
           yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: diffs })
           const summaryDiffs: Snapshot.SummaryFileDiff[] = diffs.map((d) => ({
             file: d.file,
@@ -202,7 +207,14 @@ const layer = Layer.effect(
       yield* sessions.clearRevert(sessionID)
     })
 
-    return Service.of({ revert, unrevert, cleanup })
+    // kilocode_change start - exclude transfer across the full file/Undo transition
+    return Service.of({
+      revert: (input) =>
+        drain.track(input.sessionID, revert(input)).pipe(Effect.provideService(Database.Service, database)),
+      unrevert: (input) => drain.track(input.sessionID, unrevert(input)),
+      cleanup: (session) => drain.track(session.id, cleanup(session)),
+    })
+    // kilocode_change end
   }),
 )
 
@@ -217,6 +229,8 @@ export const node = LayerNode.make({
     SessionSummary.node,
     SessionRunState.node,
     Config.node, // kilocode_change
+    SessionDrain.node, // kilocode_change
+    Database.node, // kilocode_change
   ],
 })
 

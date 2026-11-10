@@ -61,6 +61,7 @@ import { Permission } from "@/permission"
 import { withTimeout } from "@/util/timeout"
 import { Snapshot } from "@/snapshot"
 import { cumulativeSessionDiff } from "@/kilocode/session-portability/cumulative-diff"
+import { diffKey } from "@/kilocode/session-transfer/epoch" // kilocode_change
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder" // kilocode_change
 import { KiloShutdown } from "@/kilocode/cli/shutdown"
@@ -1756,12 +1757,14 @@ export namespace KiloSessions {
       Effect.gen(function* () {
         const sessions = yield* Session.Service
         const storage = yield* Storage.Service
+        // kilocode_change start - transfer epochs select the active diff namespace
+        const id = SessionID.make(sessionId)
+        const key = yield* diffKey(id)
         return yield* Effect.all([
-          sessions.get(SessionID.make(sessionId)),
-          storage
-            .read<Snapshot.FileDiff[]>(["session_diff", sessionId])
-            .pipe(Effect.orElseSucceed((): Snapshot.FileDiff[] => [])),
+          sessions.get(id),
+          storage.read<Snapshot.FileDiff[]>(key).pipe(Effect.orElseSucceed((): Snapshot.FileDiff[] => [])),
         ])
+        // kilocode_change end
       }),
     )
     const diffs = await cumulative(sessionId, local)

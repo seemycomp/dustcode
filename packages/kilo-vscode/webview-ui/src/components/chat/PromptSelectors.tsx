@@ -140,7 +140,9 @@ export const PromptSelectors: Component<Props> = (props) => {
 
   const onPointerOver = (e: PointerEvent) => {
     if (e.pointerType === "touch") return
-    const target = (e.target as HTMLElement).closest<HTMLButtonElement>(TRIGGER)
+    if (!(e.target instanceof Element)) return
+    const segment = e.target.closest<HTMLElement>(".prompt-selector")
+    const target = segment?.querySelector<HTMLButtonElement>(TRIGGER)
     if (!target || !switchable(target)) return
     // The new popover takes focus, so the open one closes as an outside focus.
     // Wait one frame so the hover tooltip has opened first. Opening the popover
@@ -149,7 +151,10 @@ export const PromptSelectors: Component<Props> = (props) => {
     cancelAnimationFrame(hover)
     hover = requestAnimationFrame(() => {
       hover = 0
-      if (!target.matches(":hover") || !switchable(target)) return
+      if (!segment?.matches(":hover") || !switchable(target)) return
+      // Close the previous popover through its outside-focus handler before
+      // opening the next one, even when that picker has no autofocus target.
+      target.focus()
       target.click()
     })
   }
