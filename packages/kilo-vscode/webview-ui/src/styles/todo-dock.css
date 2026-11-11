@@ -20,15 +20,6 @@
   gap: 6px;
 }
 
-.vscode-user-message:has(> .turn-todos) {
-  border: 1px solid var(--border-weak-base);
-  border-radius: 12px;
-}
-
-.vscode-user-message:has(> .turn-todos) [data-slot="user-message-text"] {
-  border-radius: 11px;
-}
-
 .turn-todos {
   position: relative;
   min-width: 0;
@@ -98,7 +89,7 @@
   background: var(--background-base);
 }
 
-.vscode-user-message:has(> .turn-todos[data-floating][data-open]) {
+.vscode-user-message [data-slot="user-message-card"]:has(> .turn-todos[data-floating][data-open]) {
   border-radius: 12px 12px 0 0;
 }
 

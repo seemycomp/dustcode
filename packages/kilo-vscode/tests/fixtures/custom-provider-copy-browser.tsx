@@ -1,5 +1,6 @@
 import { render } from "solid-js/web"
 import { DialogProvider } from "@kilocode/kilo-ui/context/dialog"
+import { Toast } from "@kilocode/kilo-ui/toast"
 import { StoryProviders } from "../../webview-ui/src/stories/StoryProviders"
 import { ProviderProvider } from "../../webview-ui/src/context/provider"
 import ProvidersTab from "../../webview-ui/src/components/settings/ProvidersTab"
@@ -40,6 +41,7 @@ window.addEventListener("fixture-outgoing", (event) => {
   const message = (event as CustomEvent).detail
   if (message.type === "saveCustomProvider") document.body.dataset.saved = JSON.stringify(message)
 })
+window.addEventListener("fixture-response", (event) => post((event as CustomEvent).detail))
 
 render(
   () => (
@@ -47,6 +49,7 @@ render(
       <ProviderProvider>
         <DialogProvider>
           <ProvidersTab />
+          <Toast.Region />
         </DialogProvider>
       </ProviderProvider>
     </StoryProviders>

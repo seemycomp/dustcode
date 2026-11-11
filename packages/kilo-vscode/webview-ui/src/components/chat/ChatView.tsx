@@ -297,6 +297,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                 editDisabled={!editable() || !!editing()}
                 questions={standaloneQuestions}
                 suggestions={standaloneSuggestions}
+                blocked={blocked() || questioning() || suggesting()}
                 readonly={props.readonly}
                 interactivePrompts={ownsPrompts()}
                 emptyState={props.emptyState}

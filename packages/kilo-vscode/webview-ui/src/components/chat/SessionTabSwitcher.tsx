@@ -145,7 +145,7 @@ export const SessionTabSwitcher: Component<SessionTabSwitcherProps> = (props) =>
             {(item) => (
               <span class="search-menu-row">
                 <span class="search-menu-icon" data-activity={item.state} aria-label={item.stateLabel}>
-                  <ActivityIcon state={item.state} spinner="search-menu-spinner" />
+                  <ActivityIcon state={item.state} />
                 </span>
                 <span class="search-menu-copy">
                   <span class="search-menu-title" dir="auto">

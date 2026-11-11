@@ -13,6 +13,7 @@ import type {
 import type { HistoryRequest, HistoryRow } from "../../../src/shared/agent-history"
 import { useDialog } from "@kilocode/kilo-ui/context/dialog"
 import { SessionTransferDialog } from "../../agent-manager/SessionTransferDialog"
+import type { Activity } from "../utils/session-activity"
 
 /** Real sidebar with a deterministic metadata-only host, shared by stories and browser checks. */
 export function HistorySidebar(props: {
@@ -42,6 +43,7 @@ export function HistorySidebar(props: {
   const [selection, setSelection] = createSignal("w-0")
   const [session, setSession] = createSignal<string>()
   const [busySession, setBusySession] = createSignal<string>()
+  const [activity, setActivity] = createSignal<Activity>("busy")
   const initialStates: Record<string, AgentManagerStateMessage> = Object.fromEntries(
     ["a", "b"].map((id) => [
       id,
@@ -275,7 +277,13 @@ export function HistorySidebar(props: {
         tabOrder: { "w-0": ["history-00000", "history-00001", "history-00002"] },
         pinnedTabs: { "w-0": ["history-00002"] },
       }))
-    if (detail.action === "menu-busy") setBusySession("history-00000")
+    if (detail.action === "menu-busy") {
+      setBusySession("history-00000")
+      setActivity("busy")
+    }
+    if (detail.action === "menu-waiting") setActivity("waiting")
+    if (detail.action === "menu-error") setActivity("error")
+    if (detail.action === "menu-idle") setActivity("idle")
   }
   window.addEventListener("history-fixture", command)
   onMount(() => {
@@ -305,7 +313,7 @@ export function HistorySidebar(props: {
         busy={() => false}
         blocked={() => false}
         activityFor={() => "idle"}
-        sessionActivity={(id) => (id === busySession() ? "busy" : "idle")}
+        sessionActivity={(id) => (id === busySession() ? activity() : "idle")}
         historyActions={{
           new: (projectId, worktreeId) => {
             if (worktreeId) return api.postMessage({ type: "agentManager.addSessionToWorktree", projectId, worktreeId })

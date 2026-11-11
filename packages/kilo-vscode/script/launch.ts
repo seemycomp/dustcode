@@ -17,6 +17,7 @@
  *   --wait            Block until the VS Code window is closed
  *   --clean           Wipe isolated VS Code dirs and backend storage before launching
  *   --preserve-settings  Merge defaults into existing VS Code user settings
+ *   --theme NAME      Override the isolated VS Code color theme
  *   --accessible      Enable VS Code accessibility support for assistive-technology testing
  *
  * Environment:
@@ -43,7 +44,7 @@ const temp = tmpdir().trimEnd()
 // Argument parsing
 // ---------------------------------------------------------------------------
 
-const valued = new Set(["workspace", "mode", "app-path", "state-dir", "kilo-storage-dir"])
+const valued = new Set(["workspace", "mode", "app-path", "state-dir", "kilo-storage-dir", "theme"])
 
 function parse(argv: string[]) {
   const result: Record<string, string | boolean> = {}
@@ -333,6 +334,7 @@ function settings(keep: boolean, enabled: boolean) {
       ? { ...defaults, ...load(file), ...(enabled ? { "editor.accessibilitySupport": "on" } : {}) }
       : defaults
 
+  if (typeof opts.theme === "string") Object.assign(cfg, { "workbench.colorTheme": opts.theme })
   writeFileSync(file, JSON.stringify(cfg, null, 2) + "\n")
 }
 

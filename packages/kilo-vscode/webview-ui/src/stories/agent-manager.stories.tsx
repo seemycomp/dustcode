@@ -11,12 +11,14 @@ import { DiffPanel } from "../../agent-manager/DiffPanel"
 import { DiffPanelCache } from "../../agent-manager/DiffPanelCache"
 import { createReviewComposers } from "../../agent-manager/review-composers"
 import { FullScreenDiffView } from "../../diff-viewer/FullScreenDiffView"
+import { DiffViewerApp } from "../../diff-viewer/DiffViewerApp"
 import { WorktreeItem } from "../../agent-manager/WorktreeItem"
 import { createIntro } from "../../agent-manager/intro/AgentManagerIntro"
 import { SessionTab } from "../components/chat/SessionTab"
 import { ChatView } from "../components/chat/ChatView"
 import { registerVscodeToolOverrides } from "../components/chat/VscodeToolOverrides"
 import { SessionContext, useSession } from "../context/session"
+import { post as send } from "../utils/webview-message"
 import { ServerContext } from "../context/server"
 import { WorktreeModeProvider } from "../context/worktree-mode"
 import { SidebarSearchMenu } from "../../agent-manager/SidebarSearchMenu"
@@ -850,6 +852,42 @@ export const FullScreenDiffAgentEditScroll: Story = {
           </div>
         </div>
       </StoryProviders>
+    )
+  },
+}
+
+export const FullScreenDiffNavigation: Story = {
+  name: "Review Changes - requested file navigation",
+  render: () => {
+    const files: WorktreeFileDiff[] = [
+      { ...edited("first", "src/first.ts"), status: "added" },
+      edited("middle", "src/middle.ts"),
+      { ...edited("requested", "src/requested.ts"), generatedLike: true },
+      { ...tail, file: "src/last.ts", status: "deleted" },
+    ]
+    const request = () => send({ type: "diffViewer.initialFile", file: "src/requested.ts" })
+    const load = () => {
+      send({ type: "diffViewer.diffs", diffs: files.map((file) => ({ ...file })) })
+      send({ type: "diffViewer.loading", loading: false })
+    }
+    onMount(() => {
+      send({ type: "diffViewer.context", key: "navigation" })
+      request()
+    })
+    return (
+      <div style={{ height: "700px", display: "flex", "flex-direction": "column" }}>
+        <div style={{ display: "flex", gap: "8px", padding: "4px" }}>
+          <Button size="small" onClick={load}>
+            Load review files
+          </Button>
+          <Button size="small" onClick={request}>
+            Open requested file
+          </Button>
+        </div>
+        <div style={{ display: "flex", "min-height": "0", flex: "1" }}>
+          <DiffViewerApp />
+        </div>
+      </div>
     )
   },
 }

@@ -556,6 +556,7 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
           showToast({ title: language.t("common.requestFailed"), description: message.message })
         },
       },
+      { timeout: 30_000, message: language.t("provider.custom.saveTimeout") },
     )
   }
 

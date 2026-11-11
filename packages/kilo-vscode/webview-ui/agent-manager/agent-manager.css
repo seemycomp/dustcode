@@ -5527,9 +5527,13 @@ body.am-wt-dragging-active * {
   color: var(--surface-interactive-strong);
 }
 
-/* Active file — subtle background + left accent bar */
-.am-file-tree-active {
-  background: var(--surface-base-active, rgba(128, 128, 128, 0.15));
+/* Keep the selected background paired with its theme foreground, including hover. */
+.am-file-tree-active,
+.am-file-tree-active:hover {
+  background: var(--vscode-list-activeSelectionBackground, var(--surface-base-active));
+  color: var(--vscode-list-activeSelectionForeground, var(--text-on-interactive-base));
+  outline: 1px solid var(--vscode-contrastActiveBorder, transparent);
+  outline-offset: -1px;
 }
 
 .am-file-tree-active::before {
@@ -5542,10 +5546,6 @@ body.am-wt-dragging-active * {
   height: 18px;
   border-radius: 3px;
   background: var(--surface-interactive-strong, var(--vscode-focusBorder, #007fd4));
-}
-
-.am-file-tree-active:hover {
-  background: var(--surface-base-active, rgba(128, 128, 128, 0.15));
 }
 
 .am-file-tree-name {
@@ -5651,6 +5651,23 @@ body.am-wt-dragging-active * {
   border-radius: 4px;
   background: color-mix(in lab, var(--syntax-diff-delete, #da3319) 15%, transparent);
   color: var(--syntax-diff-delete, #da3319);
+}
+
+.am-file-tree-active .am-file-tree-name,
+.am-file-tree-active .am-file-tree-stat-add,
+.am-file-tree-active .am-file-tree-stat-del,
+.am-file-tree-active .am-file-tree-badge-added,
+.am-file-tree-active .am-file-tree-badge-deleted {
+  color: inherit;
+}
+
+.am-file-tree-active .am-file-tree-changes {
+  color: inherit;
+}
+
+.am-file-tree-active .am-file-tree-badge-added,
+.am-file-tree-active .am-file-tree-badge-deleted {
+  background: transparent;
 }
 
 .am-file-tree-file-content {

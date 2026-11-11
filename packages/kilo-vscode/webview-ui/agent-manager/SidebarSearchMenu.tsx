@@ -128,7 +128,6 @@ export const SidebarSearchMenu: Component<SidebarSearchMenuProps> = (props) => {
                       fallback={
                         <ActivityIcon
                           state={item.state}
-                          spinner="search-menu-spinner"
                           idle={
                             <Show when={item.kind !== "local"} fallback={<Icon name="local" size="small" />}>
                               <Icon name={item.kind === "worktree" ? "branch" : "speech-bubble"} size="small" />

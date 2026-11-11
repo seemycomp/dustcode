@@ -54,6 +54,15 @@ async function fixture() {
 }
 
 describe("extension launch build", () => {
+  test("applies the requested theme even when preserving existing settings", async () => {
+    const item = await fixture()
+    await Bun.write(join(item.root, "dist/extension.js"), "previous")
+    const file = join(item.root, "../../.kilo-dev/vscode/user-data/User/settings.json")
+    await Bun.write(file, JSON.stringify({ "workbench.colorTheme": "Default Dark Modern" }))
+    expect(item.run(["--no-build", "--preserve-settings", "--theme", "Visual Studio Light"]).exitCode).toBe(0)
+    expect((await Bun.file(file).json())["workbench.colorTheme"]).toBe("Visual Studio Light")
+  })
+
   test("does not forward debugger settings to build subprocesses", async () => {
     const item = await fixture()
     await Bun.write(

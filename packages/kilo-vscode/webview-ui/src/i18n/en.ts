@@ -110,6 +110,8 @@ export const dict = {
   "task.swarm.failed": "Could not load or reset the board. Try refreshing it.",
 
   "command.provider.connect": "Connect provider",
+  "provider.custom.saveTimeout":
+    "Saving the custom provider timed out after 30 seconds. The save could not be confirmed. Check the provider before trying again.",
 
   "session.activity.waiting": "Waiting for an answer or approval.",
   "session.activity.error": "Error or connection lost.",

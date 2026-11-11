@@ -460,6 +460,112 @@ for (const picker of ["model", "variant"]) {
   })
 }
 
+test("mode badges preserve their colors when selected, hovered or keyboard focused", async ({ page }) => {
+  await load(page, "shared--mode-picker")
+
+  const trigger = page.locator("button:has(.mode-switcher-trigger-badge)")
+  const output = page.getByRole("status", { name: "Selected mode" })
+  for (const colors of [
+    { background: "#005fb8", foreground: "#ffffff", hover: "#e8e8e8", text: "rgb(51, 51, 51)" },
+    { background: "#04395e", foreground: "#ffffff", hover: "#2a2d2e", text: "rgb(204, 204, 204)" },
+  ]) {
+    await page.evaluate((colors) => {
+      const root = document.documentElement.style
+      root.setProperty("--surface-interactive-active", colors.background)
+      root.setProperty("--text-on-interactive-base", colors.foreground)
+      root.setProperty("--surface-interactive-hover", colors.hover)
+      root.setProperty("--vscode-list-hoverForeground", colors.text)
+      root.setProperty("--vscode-textLink-foreground", "#007acc")
+      root.setProperty("--vscode-charts-green", "#388a34")
+      root.setProperty("--vscode-charts-red", "#e51400")
+      root.setProperty("--vscode-editorWarning-foreground", "#bf8803")
+    }, colors)
+    for (const [name, color] of [
+      ["Code", "rgb(0, 122, 204)"],
+      ["Ask", "rgb(56, 138, 52)"],
+      ["Debug", "rgb(229, 20, 0)"],
+      ["Plan", "rgb(191, 136, 3)"],
+      ["Custom", "rgb(206, 56, 150)"],
+    ] as const) {
+      await trigger.click()
+      const option = page.getByRole("option", { name: new RegExp(`^${name}( deprecated)?$`) })
+      const badge = option.locator(".mode-switcher-item-badge")
+      const label = option.locator(".mode-switcher-item-name")
+      await output.hover()
+      await page.keyboard.press(name === "Code" ? "End" : "Home")
+      await expect(badge).toHaveCSS("color", color)
+      await expect(label).toHaveCSS("color", color)
+      const idle = await badge.evaluate((el) => {
+        const style = getComputedStyle(el)
+        return { background: style.backgroundColor, border: style.borderTopColor }
+      })
+      await option.hover()
+      await expect(badge).toHaveCSS("color", color)
+      await expect(label).toHaveCSS("color", color)
+      await expect(badge).toHaveCSS("background-color", idle.background)
+      await expect(badge).toHaveCSS("border-top-color", idle.border)
+      await output.hover()
+      await page.keyboard.press("Home")
+      for (const mode of ["Code", "Ask", "Debug", "Plan", "Custom"]) {
+        if (mode === name) break
+        await page.keyboard.press("ArrowDown")
+      }
+      await expect(option).toBeFocused()
+      await expect(label).toHaveCSS("color", color)
+      await expect(badge).toHaveCSS("background-color", idle.background)
+      await expect(badge).toHaveCSS("border-top-color", idle.border)
+      await page.keyboard.press("Enter")
+      await expect(output).toHaveText(name.toLowerCase())
+      await expect(trigger.locator(".mode-switcher-trigger-badge")).toHaveCSS("color", color)
+      const tint = await trigger.locator(".mode-switcher-trigger-badge").evaluate((el) => {
+        const style = getComputedStyle(el)
+        return { background: style.backgroundColor, border: style.borderTopColor }
+      })
+      await trigger.click()
+      await expect(label).toHaveCSS("color", color)
+      expect(tint).toEqual(idle)
+      await expect(badge).toHaveCSS("background-color", tint.background)
+      await expect(badge).toHaveCSS("border-top-color", tint.border)
+      await option.hover()
+      await expect(label).toHaveCSS("color", color)
+      await expect(badge).toHaveCSS("background-color", tint.background)
+      await expect(badge).toHaveCSS("border-top-color", tint.border)
+      await page.keyboard.press("Escape")
+    }
+  }
+})
+
+test("mode picker excludes Orchestrator without shifting keyboard selection or changing legacy sessions", async ({
+  page,
+}) => {
+  await load(page, "shared--mode-picker-legacy")
+
+  const trigger = page.locator("button:has(.mode-switcher-trigger-badge)")
+  const output = page.getByRole("status", { name: "Selected mode" })
+  await expect(trigger).toHaveText("Orchestrator")
+  await trigger.click()
+  await expect(page.getByRole("option", { name: /Orchestrator/ })).toHaveCount(0)
+  await expect(page.locator(".mode-switcher-item-name")).toHaveText(["Code", "Ask", "Debug", "Plan", "Custom"])
+  await expect(page.getByRole("option", { name: "Code", exact: true })).toBeFocused()
+  await expect(output).toHaveText("orchestrator")
+  await page.keyboard.press("End")
+  await expect(page.getByRole("option", { name: /Custom/ })).toBeFocused()
+  await page.keyboard.press("ArrowDown")
+  await expect(page.getByRole("option", { name: "Code", exact: true })).toBeFocused()
+  await page.keyboard.press("ArrowUp")
+  await page.keyboard.press("ArrowUp")
+  await expect(page.getByRole("option", { name: "Plan", exact: true })).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(output).toHaveText("plan")
+  await trigger.click()
+  await page.keyboard.press("c")
+  await expect(page.getByRole("option", { name: "Code", exact: true })).toBeFocused()
+  await page.keyboard.press("u")
+  await expect(page.getByRole("option", { name: /Custom/ })).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(output).toHaveText("custom")
+})
+
 test("slash mode picker Escape returns focus to the prompt", async ({ page }) => {
   await load(page, "prompt-input--default-420")
 

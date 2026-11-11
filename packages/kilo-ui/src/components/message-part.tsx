@@ -797,6 +797,7 @@ export function UserMessageDisplay(props: {
   copyText?: string
   header?: JSX.Element
   bubbleHeader?: JSX.Element
+  footer?: JSX.Element
   edit?: { label: string; onClick: () => void; disabled?: boolean }
   queuedDisabled?: boolean
   onDelete?: () => void
@@ -919,67 +920,73 @@ export function UserMessageDisplay(props: {
   return (
     <GrowBox animate={!!props.animate} fade class="w-full min-w-0 self-stretch max-w-full">
       <div data-component="user-message" data-interrupted={props.interrupted ? "" : undefined}>
-        <Show when={attachments().length > 0}>
-          <div data-slot="user-message-attachments">
-            <For each={attachments()}>
-              {(file) => (
-                <Show
-                  when={file.mime.startsWith("image/") && !!file.url && !!props.renderAttachment}
-                  fallback={
-                    <div
-                      data-slot="user-message-attachment"
-                      data-type={file.mime.startsWith("image/") ? "image" : "file"}
-                      data-queued={props.queued ? "" : undefined}
-                      onClick={() => {
-                        if (file.mime.startsWith("image/") && file.url) {
-                          openImagePreview(file.url, file.filename)
-                        }
-                      }}
-                    >
-                      <Show
-                        when={file.mime.startsWith("image/") && file.url}
-                        fallback={
-                          <div data-slot="user-message-attachment-icon">
-                            <Icon name="folder" />
-                          </div>
-                        }
+        <div data-slot="user-message-card">
+          <Show when={attachments().length > 0}>
+            <div data-slot="user-message-attachments">
+              <For each={attachments()}>
+                {(file) => (
+                  <Show
+                    when={file.mime.startsWith("image/") && !!file.url && !!props.renderAttachment}
+                    fallback={
+                      <div
+                        data-slot="user-message-attachment"
+                        data-type={file.mime.startsWith("image/") ? "image" : "file"}
+                        data-queued={props.queued ? "" : undefined}
+                        onClick={() => {
+                          if (file.mime.startsWith("image/") && file.url) {
+                            openImagePreview(file.url, file.filename)
+                          }
+                        }}
                       >
-                        <img
-                          data-slot="user-message-attachment-image"
-                          src={file.url}
-                          alt={file.filename ?? i18n.t("ui.message.attachment.alt")}
-                        />
-                      </Show>
-                    </div>
-                  }
-                >
-                  {props.renderAttachment?.(file)}
+                        <Show
+                          when={file.mime.startsWith("image/") && file.url}
+                          fallback={
+                            <div data-slot="user-message-attachment-icon">
+                              <Icon name="folder" />
+                            </div>
+                          }
+                        >
+                          <img
+                            data-slot="user-message-attachment-image"
+                            src={file.url}
+                            alt={file.filename ?? i18n.t("ui.message.attachment.alt")}
+                          />
+                        </Show>
+                      </div>
+                    }
+                  >
+                    {props.renderAttachment?.(file)}
+                  </Show>
+                )}
+              </For>
+            </div>
+          </Show>
+          <Show when={!text() && !props.header && !props.bubbleHeader && props.queued}>
+            <div data-slot="user-message-queued-indicator">
+              <TextShimmer text={i18n.t("ui.message.queued")} />
+              <Edit />
+              <Delete />
+            </div>
+          </Show>
+          <Show when={text() || props.header || props.bubbleHeader}>
+            <>
+              <div data-slot="user-message-body">
+                {props.header}
+                <Show when={text() || props.bubbleHeader}>
+                  <div data-slot="user-message-text" dir="auto" data-queued={props.queued ? "" : undefined}>
+                    {props.bubbleHeader}
+                    <span data-slot="user-message-content">
+                      <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+                    </span>
+                  </div>
                 </Show>
-              )}
-            </For>
-          </div>
-        </Show>
-        <Show when={!text() && !props.header && !props.bubbleHeader && props.queued}>
-          <div data-slot="user-message-queued-indicator">
-            <TextShimmer text={i18n.t("ui.message.queued")} />
-            <Edit />
-            <Delete />
-          </div>
-        </Show>
+              </div>
+            </>
+          </Show>
+          {props.footer}
+        </div>
         <Show when={text() || props.header || props.bubbleHeader}>
           <>
-            <div data-slot="user-message-body">
-              {props.header}
-              <Show when={text() || props.bubbleHeader}>
-                <div data-slot="user-message-text" dir="auto" data-queued={props.queued ? "" : undefined}>
-                  {props.bubbleHeader}
-                  <span data-slot="user-message-content">
-                    <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
-                  </span>
-                </div>
-              </Show>
-            </div>
-
             {/* Queued controls live in the same reserved action row as the
                 hover actions, so unqueueing swaps content without a height change. */}
             <div

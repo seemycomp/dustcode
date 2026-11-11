@@ -6,6 +6,7 @@ const INLINE_STORY_ID = "agentmanager--diff-panel-scroll-up"
 const CACHE_STORY_ID = "agentmanager--diff-panel-cached-worktree-switch"
 const VIEWPORT_STORY_ID = "agentmanager--diff-panel-viewport-loading"
 const TREE_STORY_ID = "agentmanager--file-tree-virtualized-large"
+const NAVIGATION_STORY_ID = "agentmanager--full-screen-diff-navigation"
 
 function storyUrl() {
   return `/iframe.html?id=${STORY_ID}&viewMode=story&globals=${GLOBALS}`
@@ -61,6 +62,114 @@ async function alignTarget(page: Page) {
     el.scrollTop += target.getBoundingClientRect().top - el.getBoundingClientRect().top - 24
   })
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+}
+
+async function openNavigation(page: Page, theme = "dark-modern") {
+  await page.setViewportSize({ width: 1000, height: 760 })
+  await page.goto(
+    `/iframe.html?id=${NAVIGATION_STORY_ID}&viewMode=story&globals=${GLOBALS.replace("dark-modern", theme)}`,
+  )
+  await disableAnimations(page)
+  await page.getByRole("button", { name: "Load review files" }).click()
+}
+
+async function selected(page: Page, file: string) {
+  await expect(page.locator(".am-file-tree-active")).toHaveCount(1)
+  await expect(page.locator(".am-file-tree-active .am-file-tree-name")).toHaveText(file)
+}
+
+async function revealed(page: Page, file: string) {
+  const row = page.locator(`[data-file-path="src/${file}"]`)
+  await expect(row).toBeAttached()
+  await expect
+    .poll(() =>
+      row.evaluate((el) => {
+        const pane = el.closest(".am-review-diff")!.getBoundingClientRect()
+        const bounds = el.getBoundingClientRect()
+        return bounds.top >= pane.top - 1 && bounds.top < pane.bottom
+      }),
+    )
+    .toBe(true)
+}
+
+test("opens requested review files after data and virtualizer readiness, including repeated host requests", async ({
+  page,
+}) => {
+  await openNavigation(page)
+  await selected(page, "requested.ts")
+  await revealed(page, "requested.ts")
+  await expect(page.locator('[data-file-path="src/requested.ts"] [data-slot="accordion-trigger"]')).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  )
+
+  await page.locator(".am-file-tree-file-content").filter({ hasText: "first.ts" }).click()
+  await selected(page, "first.ts")
+  await page.getByRole("button", { name: "Open requested file" }).click()
+  await selected(page, "requested.ts")
+  await revealed(page, "requested.ts")
+
+  // A poll/resize must not consume the same request again or replace its selection.
+  await page.getByRole("button", { name: "Load review files" }).click()
+  await page.setViewportSize({ width: 960, height: 800 })
+  await selected(page, "requested.ts")
+})
+
+test("keeps tree navigation authoritative at adjacent and clamped final files, then follows user scrolling", async ({
+  page,
+}) => {
+  await openNavigation(page)
+  const pane = page.locator(".am-review-diff")
+  for (const file of ["middle.ts", "last.ts", "first.ts", "last.ts"]) {
+    await page.locator(".am-file-tree-file-content").filter({ hasText: file }).click()
+    await revealed(page, file)
+    // Allow deferred rendering and ResizeObserver callbacks to settle.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+    await selected(page, file)
+  }
+  await page.setViewportSize({ width: 1000, height: 900 })
+  await selected(page, "last.ts")
+  await pane.hover()
+  await page.mouse.wheel(0, -100_000)
+  await expect.poll(() => pane.evaluate((el) => el.scrollTop)).toBe(0)
+  await selected(page, "first.ts")
+
+  await page.locator(".am-file-tree-file-content").filter({ hasText: "last.ts" }).click()
+  await selected(page, "last.ts")
+  await pane.focus()
+  for (let count = 0; count < 50 && (await pane.evaluate((el) => el.scrollTop)) > 0; count++) {
+    await page.keyboard.press("Shift+ArrowUp")
+  }
+  await expect.poll(() => pane.evaluate((el) => el.scrollTop)).toBe(0)
+  await selected(page, "first.ts")
+})
+
+for (const theme of ["dark-modern", "light-modern", "hc-black", "hc-light"]) {
+  test(`pairs selected review labels and stats with the selection foreground in ${theme}`, async ({ page }) => {
+    await openNavigation(page, theme)
+    for (const file of ["first.ts", "requested.ts", "last.ts"]) {
+      await page.locator(".am-file-tree-file-content").filter({ hasText: file }).click()
+      await selected(page, file)
+      await page.locator(".am-file-tree-active").hover()
+      const colors = await page.locator(".am-file-tree-active").evaluate((el) => {
+        const probe = document.createElement("span")
+        probe.style.color = "var(--vscode-list-activeSelectionForeground)"
+        el.append(probe)
+        const foreground = getComputedStyle(probe).color
+        probe.remove()
+        return {
+          foreground,
+          colors: [
+            ...el.querySelectorAll(
+              ".am-file-tree-name, .am-file-tree-stat-add, .am-file-tree-stat-del, .am-file-tree-badge-added, .am-file-tree-badge-deleted",
+            ),
+          ].map((item) => getComputedStyle(item).color),
+        }
+      })
+      expect(colors.colors.length).toBeGreaterThan(1)
+      expect(colors.colors.every((color) => color === colors.foreground)).toBe(true)
+    }
+  })
 }
 
 for (const width of [420, 200]) {

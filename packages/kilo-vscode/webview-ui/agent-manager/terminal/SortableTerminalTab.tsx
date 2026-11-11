@@ -87,7 +87,7 @@ export const SortableTerminalTab: Component<
       label={props.label}
       tooltip={title() ? `${props.tooltip} (${title()})` : terminalChrome(props.tooltip, props.status).tooltip}
       icon={() => icon(props.status)}
-      iconNode={state() && state() !== "idle" ? <ActivityIcon state={state()!} spinner="am-tab-spinner" /> : undefined}
+      iconNode={state() && state() !== "idle" ? <ActivityIcon state={state()!} /> : undefined}
       iconStatus={() => iconStatus(props.status)}
       state={state()}
       stateLabel={title()}

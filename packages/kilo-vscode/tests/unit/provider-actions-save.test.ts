@@ -1,4 +1,5 @@
-import { describe, expect, it } from "bun:test"
+import { describe, expect, it, spyOn } from "bun:test"
+import { createKiloClient } from "@kilocode/sdk/v2"
 import {
   connectProvider,
   disconnectProvider,
@@ -287,6 +288,68 @@ describe("connectProvider", () => {
 })
 
 describe("saveCustomProvider", () => {
+  for (const stage of ["read", "write", "auth"] as const) {
+    it(`aborts a stalled ${stage} request with one shared save budget`, async () => {
+      const { ctx, calls, setCachedConfig } = createCtx()
+      const controller = new AbortController()
+      const timeout = spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal)
+      const entered = Promise.withResolvers<void>()
+      const released = Promise.withResolvers<Response>()
+      const paths: string[] = []
+      const server = Bun.serve({
+        hostname: "127.0.0.1",
+        port: 0,
+        fetch(request) {
+          const route = `${request.method} ${new URL(request.url).pathname}`
+          paths.push(route)
+          const blocked =
+            stage === "read"
+              ? "GET /global/config"
+              : stage === "write"
+                ? "PATCH /global/config"
+                : "PUT /auth/myprovider"
+          if (route === blocked) {
+            entered.resolve()
+            return released.promise
+          }
+          return Response.json({})
+        },
+      })
+      ctx.client = createKiloClient({ baseUrl: server.url.toString() })
+      try {
+        const pending = saveCustomProvider(
+          ctx,
+          "req",
+          "myprovider",
+          createProvider(),
+          "test-only",
+          true,
+          null,
+          setCachedConfig,
+        )
+        await entered.promise
+        controller.abort(new DOMException("Save deadline exceeded", "TimeoutError"))
+        await pending
+        expect(timeout.mock.calls).toEqual([[30_000]])
+        expect(paths).toEqual(
+          stage === "read"
+            ? ["GET /global/config"]
+            : stage === "write"
+              ? ["GET /global/config", "PATCH /global/config"]
+              : ["GET /global/config", "PATCH /global/config", "PUT /auth/myprovider"],
+        )
+        expect(calls.posts).toEqual([
+          expect.objectContaining({ type: "providerActionError", requestId: "req", providerID: "myprovider" }),
+        ])
+        expect(calls.refresh).toBe(0)
+      } finally {
+        released.resolve(Response.json({}))
+        await server.stop(true)
+        timeout.mockRestore()
+      }
+    }, 2000)
+  }
+
   for (const auth of ["preserve", "set", "clear"] as const) {
     it(`acknowledges persisted edits before one disposal barrier with ${auth} credentials`, async () => {
       const { ctx, calls, setCachedConfig } = createCtx()

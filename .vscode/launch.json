@@ -9,7 +9,7 @@
       "name": "VSCode - Run Extension (Isolated)",
       "type": "node-terminal",
       "request": "launch",
-      "command": "bun run extension:isolated --wait",
+      "command": "bun run extension:isolated --wait --theme \"Visual Studio Light\"",
       "cwd": "${workspaceFolder}"
     },
     {
@@ -57,7 +57,7 @@
       "name": "VSCode - Run Extension (Isolated Clean)",
       "type": "node-terminal",
       "request": "launch",
-      "command": "bun script/launch.ts --isolated --clean --workspace \"${workspaceFolder}\"",
+      "command": "bun script/launch.ts --isolated --clean --theme \"Visual Studio Light\" --workspace \"${workspaceFolder}\"",
       "cwd": "${workspaceFolder}/packages/kilo-vscode"
     }
   ]

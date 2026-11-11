@@ -1,4 +1,4 @@
-import { createSignal, Show } from "solid-js"
+import { createSignal, onCleanup, Show } from "solid-js"
 import { render } from "solid-js/web"
 import { StoryProviders, defaultMockData, mockSessionValue } from "../../webview-ui/src/stories/StoryProviders"
 import { SessionContext } from "../../webview-ui/src/context/session"
@@ -8,7 +8,7 @@ import { PromptInput } from "../../webview-ui/src/components/chat/PromptInput"
 import { post } from "../../webview-ui/src/utils/webview-message"
 import { TaskHeader } from "../../webview-ui/src/components/chat/TaskHeader"
 import { SessionChanges } from "../../webview-ui/src/components/chat/SessionChanges"
-import type { Message, Part } from "../../webview-ui/src/types/messages"
+import type { Message, Part, SessionStatus } from "../../webview-ui/src/types/messages"
 import { applyKiloTheme, applyVscodeTheme } from "../../../kilo-ui/src/stories/theme-decorator"
 import "@kilocode/kilo-ui/styles"
 import "../../webview-ui/src/styles/chat.css"
@@ -64,16 +64,36 @@ const parts: Record<string, Part[]> = Object.fromEntries(
     ],
   ]),
 )
+const images = [
+  [160, 40],
+  [40, 160],
+].map(([width, height]) => {
+  const canvas = document.createElement("canvas")
+  canvas.width = width!
+  canvas.height = height!
+  const ctx = canvas.getContext("2d")!
+  ctx.fillStyle = "#ffffff"
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.fillStyle = "#0066cc"
+  ctx.fillRect(0, 0, canvas.width, 4)
+  ctx.fillStyle = "#cc3300"
+  ctx.fillRect(0, canvas.height - 4, canvas.width, 4)
+  return canvas.toDataURL()
+})
 for (const message of messages.filter((message) => message.role === "user")) {
-  parts[message.id]!.push({
-    id: `image-${message.id}`,
-    sessionID: sid,
-    messageID: message.id,
-    type: "file",
-    mime: "image/gif",
-    filename: "pixel.gif",
-    url: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
-  })
+  parts[message.id]!.push(
+    ...images.map(
+      (url, index): Part => ({
+        id: `image-${message.id}-${index}`,
+        sessionID: sid,
+        messageID: message.id,
+        type: "file",
+        mime: "image/png",
+        filename: `${index === 0 ? "landscape" : "portrait"}.png`,
+        url,
+      }),
+    ),
+  )
 }
 
 if (location.search.includes("internal")) {
@@ -148,12 +168,29 @@ if (location.search.includes("updates")) {
 
 function App() {
   const [revision, refresh] = createSignal(0)
+  const [work, update] = createSignal({
+    type: "busy" as SessionStatus,
+    label: "Thinking",
+    submitting: false,
+    blocked: false,
+  })
+  const working = location.search.includes("working")
+  const timing = { active: 2000, since: Date.now() }
+  const change = (event: Event) => {
+    const next = (event as CustomEvent<Partial<ReturnType<typeof work>>>).detail
+    update((prev) => ({ ...prev, ...next }))
+  }
+  window.addEventListener("fixtureStatus", change)
+  onCleanup(() => window.removeEventListener("fixtureStatus", change))
   const session = {
     ...mockSessionValue({ id: sid, status: "busy" }),
     messages: () => messages,
     visibleMessages: () => messages,
     contextUsage: () => ({ tokens: 25533, percentage: 13 }),
-    status: () => (location.search.includes("composer") ? "idle" : "busy"),
+    status: () => (working ? work().type : location.search.includes("composer") ? "idle" : "busy"),
+    submitting: () => working && work().submitting,
+    statusText: () => (working ? work().label : "Thinking"),
+    busyTiming: () => timing,
     compact: () => document.body.setAttribute("data-compacted", "true"),
     sessions: () => [
       { id: sid, title: "Active session" },
@@ -162,7 +199,13 @@ function App() {
     activityFor: (id: string) => (location.search.includes("tabs-busy") && id === "other-session" ? "busy" : "idle"),
     isSubmitting: () => false,
     userMessages: () => messages.filter((message) => message.role === "user"),
-    statusInfo: () => ({ type: "busy" as const }),
+    statusInfo: () => {
+      if (!working) return { type: "busy" as const }
+      const type = work().type
+      if (type === "retry") return { type, attempt: 1, message: work().label, next: Date.now() + 30000 }
+      if (type === "offline") return { type, message: work().label }
+      return { type }
+    },
     getParts: (message: string | Message) => {
       revision()
       const id = typeof message === "string" ? message : message.id
@@ -209,7 +252,10 @@ function App() {
           </button>
         </Show>
         <div class="chat-view" style={{ height: "100vh" }}>
-          <Show when={location.search.includes("composer")} fallback={<MessageList />}>
+          <Show
+            when={location.search.includes("composer")}
+            fallback={<MessageList blocked={working && work().blocked} />}
+          >
             <TaskHeader />
             <SessionChanges
               files={[{ file: "example.txt", additions: 1, deletions: 0 }]}

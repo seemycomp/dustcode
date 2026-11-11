@@ -20,7 +20,8 @@ import { formatRelativeDate } from "../src/utils/date"
 import type { HistoryRow } from "../../src/shared/agent-history"
 import type { ProjectStore } from "./project/store"
 import { HistorySessionMenu, type HistoryMenuActions } from "./HistorySessionMenu"
-import type { Activity } from "../src/utils/session-activity"
+import { label, type Activity } from "../src/utils/session-activity"
+import { ActivityIcon } from "../src/components/shared/ActivityIcon"
 
 const HEIGHT = 28
 
@@ -145,6 +146,15 @@ export function WorktreeHistory(
         onClick={() => history.open(item.id)}
         onKeyDown={(event: KeyboardEvent) => navigate(event, item.id)}
       >
+        <Show when={props.activity?.(item.id) && props.activity?.(item.id) !== "idle"}>
+          <span
+            class="am-history-status am-local-status"
+            data-activity={props.activity?.(item.id)}
+            aria-label={t(label(props.activity?.(item.id) ?? "idle"))}
+          >
+            <ActivityIcon state={props.activity?.(item.id) ?? "idle"} />
+          </span>
+        </Show>
         <span class="am-history-title" dir="auto">
           {item.title || t("agentManager.session.untitled")}
         </span>

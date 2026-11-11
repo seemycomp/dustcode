@@ -33,6 +33,9 @@ import { RevertBanner } from "./RevertBanner"
 import { AccountSwitcher } from "../shared/AccountSwitcher"
 import { KiloNotifications } from "./KiloNotifications"
 import { TurnOutcome } from "../shared/TurnOutcome"
+import { WorkingIndicator } from "../shared/WorkingIndicator"
+import { showsWorking } from "../shared/working-indicator-utils"
+import { running } from "../../context/session-timing"
 import { QuestionDock } from "./QuestionDock"
 import { Virtualizer, type VirtualizerHandle } from "virtua/solid"
 import { SuggestBar } from "./SuggestBar"
@@ -84,6 +87,8 @@ interface MessageListProps {
   /** Whether inline questions and suggestions are actionable on this surface. */
   interactivePrompts?: boolean
   queuedDisabled?: boolean
+  /** Hide live work status while a permission, question, or suggestion needs attention. */
+  blocked?: boolean
   editDisabled?: boolean
   /** Optionally replace the standard welcome content while the conversation is empty. */
   emptyState?: () => JSX.Element
@@ -120,6 +125,13 @@ export const MessageList: Component<MessageListProps> = (props) => {
   const server = useServer()
   const vscode = useVSCode()
   const language = useLanguage()
+  const working = () =>
+    showsWorking(
+      session.status(),
+      session.submitting(),
+      !!props.blocked,
+      running(session.currentSession()?.goal, session.status(), session.closeReason()),
+    )
 
   const autoScroll = createAutoScroll({
     working: () => session.status() !== "idle",
@@ -1020,6 +1032,11 @@ export const MessageList: Component<MessageListProps> = (props) => {
                   }}
                 </Show>
                 <For each={tail()}>{(key) => <Row id={key} />}</For>
+              </div>
+            </Show>
+            <Show when={working()}>
+              <div class="message-list-working" data-slot="message-list-working">
+                <WorkingIndicator onScrollToBottom={() => autoScroll.resume()} />
               </div>
             </Show>
             <Show when={revert()}>

@@ -321,6 +321,17 @@ body.vscode-high-contrast-light .chat-view {
     color 150ms ease;
 }
 
+.message-list-working {
+  width: calc(100% - 8px);
+  max-width: var(--chat-readable-width);
+  margin-inline: auto;
+}
+
+.message-list-working .working-indicator {
+  justify-content: flex-start;
+  padding: 0;
+}
+
 .working-indicator-scroll:hover:not(:disabled),
 .working-indicator-scroll:focus-visible:not(:disabled),
 .working-indicator-scroll:active:not(:disabled) {

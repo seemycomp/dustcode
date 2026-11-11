@@ -39,13 +39,20 @@ type Handlers = {
 }
 
 export function createProviderAction(vscode: Transport) {
-  const pending = new Map<string, Handlers>()
+  const pending = new Map<string, Handlers & { timer?: ReturnType<typeof setTimeout> }>()
   const unsubscribe = vscode.onMessage((message) => {
     if (!("requestId" in message)) return
+    if (
+      message.type !== "providerOAuthReady" &&
+      message.type !== "providerConnected" &&
+      message.type !== "providerDisconnected" &&
+      message.type !== "providerActionError"
+    )
+      return
 
     const item = pending.get(message.requestId)
     if (!item) return
-    pending.delete(message.requestId)
+    clear(message.requestId)
 
     if (message.type === "providerOAuthReady") {
       item.onOAuthReady?.(message)
@@ -67,18 +74,44 @@ export function createProviderAction(vscode: Transport) {
     }
   })
 
-  function send(message: ProviderRequestInput, handlers: Handlers = {}) {
+  function send(message: ProviderRequestInput, handlers: Handlers = {}, expiry?: { timeout: number; message: string }) {
     const requestId = crypto.randomUUID()
     pending.set(requestId, handlers)
-    vscode.postMessage({ ...message, requestId } as ProviderRequest)
+    const fail = (reason: string) => {
+      const item = pending.get(requestId)
+      if (!item) return
+      clear(requestId)
+      item.onError?.({
+        type: "providerActionError",
+        requestId,
+        providerID: message.providerID,
+        action:
+          message.type === "disconnectProvider"
+            ? "disconnect"
+            : message.type === "authorizeProviderOAuth"
+              ? "authorize"
+              : "connect",
+        message: reason,
+      })
+    }
+    if (expiry && message.type === "saveCustomProvider") {
+      pending.set(requestId, { ...handlers, timer: setTimeout(() => fail(expiry.message), expiry.timeout) })
+    }
+    try {
+      vscode.postMessage({ ...message, requestId } as ProviderRequest)
+    } catch (err) {
+      fail(err instanceof Error ? err.message : String(err))
+    }
     return requestId
   }
 
   function clear(requestId?: string) {
     if (requestId) {
+      clearTimeout(pending.get(requestId)?.timer)
       pending.delete(requestId)
       return
     }
+    for (const item of pending.values()) clearTimeout(item.timer)
     pending.clear()
   }
 

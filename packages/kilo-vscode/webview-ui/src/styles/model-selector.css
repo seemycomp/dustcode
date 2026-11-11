@@ -689,12 +689,14 @@
 
 .mode-switcher-item:hover {
   background: var(--surface-interactive-hover, var(--vscode-list-hoverBackground));
+  color: var(--vscode-list-hoverForeground, var(--text-base, var(--vscode-foreground)));
 }
 
 .mode-switcher-item:focus-visible {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: -1px;
   background: var(--surface-interactive-hover, var(--vscode-list-hoverBackground));
+  color: var(--vscode-list-hoverForeground, var(--text-base, var(--vscode-foreground)));
 }
 
 .mode-switcher-item.selected {
@@ -716,6 +718,11 @@
 .mode-switcher-item-badge {
   max-width: 100%;
   padding: 2px 7px;
+  background: color-mix(
+    in srgb,
+    var(--mode-color) 14%,
+    var(--surface-raised-stronger-non-alpha, var(--vscode-editor-background))
+  );
 }
 
 .mode-switcher-item-name {

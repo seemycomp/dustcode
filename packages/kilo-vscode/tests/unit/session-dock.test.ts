@@ -148,9 +148,15 @@ describe("session dock layout", () => {
     expect(css).toContain("var(--surface-interactive-hover, var(--vscode-list-hoverBackground))")
   })
 
-  it("does not mount a dock row in either the transcript or composer", () => {
-    expect(read("webview-ui/src/components/chat/MessageList.tsx")).not.toContain("WorkingIndicator")
+  it("renders live work status after transcript rows without restoring the dock", () => {
+    const list = read("webview-ui/src/components/chat/MessageList.tsx")
+    expect(list).toContain("<WorkingIndicator onScrollToBottom={() => autoScroll.resume()} />")
+    expect(list.indexOf('data-slot="message-list-working"')).toBeGreaterThan(list.indexOf("<For each={tail()}"))
+    expect(list).toContain("!!props.blocked")
     expect(read("webview-ui/src/components/chat/ChatView.tsx")).not.toContain("<SessionDock")
+    expect(read("webview-ui/src/components/chat/ChatView.tsx")).toContain(
+      "blocked={blocked() || questioning() || suggesting()}",
+    )
   })
 
   it("routes both states through the dock so neither can claim the row alone", () => {

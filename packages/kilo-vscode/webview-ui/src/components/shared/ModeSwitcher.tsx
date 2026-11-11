@@ -7,7 +7,7 @@
  * ModeSwitcher     — thin wrapper wired to session context for chat usage.
  */
 
-import { type Accessor, Component, createEffect, createSignal, onCleanup, For, Show } from "solid-js"
+import { type Accessor, Component, createEffect, createMemo, createSignal, onCleanup, For, Show } from "solid-js"
 import { PopupSelector } from "./PopupSelector"
 import { Button } from "@kilocode/kilo-ui/button"
 import { TooltipKeybind } from "@kilocode/kilo-ui/tooltip"
@@ -28,8 +28,8 @@ function formatAgentLabel(agent: AgentInfo): string {
 
 const modeColors: Record<string, string> = {
   code: "var(--vscode-textLink-foreground, #3794ff)",
-  plan: "var(--vscode-charts-purple, #c586c0)",
-  debug: "var(--vscode-editorWarning-foreground, #cca700)",
+  plan: "var(--vscode-editorWarning-foreground, #cca700)",
+  debug: "var(--vscode-charts-red, #f14c4c)",
   ask: "var(--vscode-charts-green, #89d185)",
   orchestrator: "var(--vscode-charts-pink, #f48771)",
   multitask: "var(--vscode-charts-cyan, #4ec9b0)",
@@ -94,7 +94,8 @@ export const ModeSwitcherBase: Component<ModeSwitcherBaseProps> = (props) => {
     onCleanup(() => window.removeEventListener("openModePicker", onTrigger))
   })
 
-  const hasAgents = () => props.agents.length > 1
+  const agents = createMemo(() => props.agents.filter((agent) => agent.name !== "orchestrator"))
+  const hasAgents = () => agents().length > 1
 
   function pick(name: string) {
     props.onSelect(name)
@@ -109,11 +110,11 @@ export const ModeSwitcherBase: Component<ModeSwitcherBaseProps> = (props) => {
     items[clamped]?.focus()
   }
 
-  const typeahead = createTypeahead(() => props.agents.map(formatAgentLabel))
+  const typeahead = createTypeahead(() => agents().map(formatAgentLabel))
 
   function openSelected() {
     if (props.blocked) return
-    const idx = props.agents.findIndex((a) => a.name === props.value)
+    const idx = agents().findIndex((a) => a.name === props.value)
     setFocused(idx >= 0 ? idx : 0)
     typeahead.reset()
     setOpen(true)
@@ -137,7 +138,7 @@ export const ModeSwitcherBase: Component<ModeSwitcherBaseProps> = (props) => {
   }
 
   function onKeyDown(e: KeyboardEvent) {
-    const len = props.agents.length
+    const len = agents().length
     const cur = focused()
     if (e.key === "ArrowDown") {
       e.preventDefault()
@@ -157,7 +158,8 @@ export const ModeSwitcherBase: Component<ModeSwitcherBaseProps> = (props) => {
       if (idx >= 0) focusItem(idx)
     } else if (e.key === " " || isEnterKeyCommitNotIme(e)) {
       e.preventDefault()
-      if (cur >= 0 && cur < len) pick(props.agents[cur].name)
+      const agent = agents().at(cur)
+      if (cur >= 0 && agent) pick(agent.name)
     } else if (isTypeaheadChar(e)) {
       const idx = typeahead.type(e.key)
       if (idx >= 0) {
@@ -224,7 +226,7 @@ export const ModeSwitcherBase: Component<ModeSwitcherBaseProps> = (props) => {
             onKeyDown={onKeyDown}
             style={bodyH() !== undefined ? { "max-height": `${bodyH()}px` } : {}}
           >
-            <For each={props.agents}>
+            <For each={agents()}>
               {(agent, i) => (
                 <div
                   class={`mode-switcher-item${agent.name === props.value ? " selected" : ""}`}

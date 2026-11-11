@@ -96,7 +96,7 @@ const DiffViewerContent: Component = () => {
       </Dialog>
     ))
   }
-  const [initialFile, setInitialFile] = createSignal<string | undefined>(undefined)
+  const [initialFile, setInitialFile] = createSignal<{ file?: string }>()
   const [capabilities, setCapabilities] = createSignal<DiffSourceCapabilities | undefined>(undefined)
   const [notice, setNotice] = createSignal<DiffViewerNotice | undefined>(undefined)
   const [branches, setBranches] = createSignal<BranchInfo[]>([])
@@ -321,7 +321,8 @@ const DiffViewerContent: Component = () => {
       return
     }
     if ((msg as { type: string; file?: string }).type === "diffViewer.initialFile") {
-      setInitialFile((msg as { file?: string }).file)
+      const file = (msg as { file?: string }).file
+      setInitialFile({ file })
       return
     }
     if ((msg as { type: string; render?: boolean }).type === "diffViewer.initialMarkdown") {

@@ -60,7 +60,7 @@ interface FullScreenDiffViewProps extends ReviewViewProps {
   diffStyle: DiffStyle
   onDiffStyleChange: (style: DiffStyle) => void
   onMarkdownRenderChange?: (render: boolean) => void
-  initialFile?: string
+  initialFile?: { file?: string }
   onRevertFile?: (file: string) => void
   revertingFiles?: Set<string>
   /** Defaults to true. Hides the per-file Revert action when false. */
@@ -137,34 +137,57 @@ export const FullScreenDiffView: Component<FullScreenDiffViewProps> = (props) =>
   }
 
   const [treeWidth, setTreeWidth] = createSignal(240)
-  let initialFileKey: string | undefined
+  const [navigation, setNavigation] = createSignal<{ file: string; key: string | undefined }>()
+  let initialFileKey: { key: string | undefined; request: typeof props.initialFile } | undefined
+  let selected = false
   let syncFrame: number | undefined
+
+  createEffect(
+    on(
+      () => props.sessionKey,
+      () => {
+        selected = false
+        setNavigation(undefined)
+      },
+    ),
+  )
+
+  const handleFileSelect = (path: string) => {
+    const diff = props.diffs.find((item) => item.file === path)
+    if (!diff) return
+    // Layout corrections and clamped EOF navigation must not undo an explicit selection.
+    selected = true
+    request(diff)
+    setActiveFile(path)
+    if (isDiffExpandable(diff) && !open().includes(path)) setOpen((prev) => [...prev, path])
+    setNavigation({ file: path, key: props.sessionKey })
+  }
 
   createEffect(
     on(
       () => [props.sessionKey, props.diffs, props.initialFile] as const,
       ([key, diffs, initial]) => {
-        if (!initial || !diffs.some((diff) => diff.file === initial)) return
-        const next = `${key ?? ""}:${initial}`
-        if (initialFileKey === next) return
-        initialFileKey = next
-        setActiveFile(initial)
+        if (!initial?.file || !diffs.some((diff) => diff.file === initial.file)) return
+        if (initialFileKey && initialFileKey.key === key && initialFileKey.request === initial) return
+        initialFileKey = { key, request: initial }
+        handleFileSelect(initial.file)
       },
     ),
   )
-  const handleFileSelect = (path: string) => {
-    const diff = props.diffs.find((item) => item.file === path)
-    if (diff) request(diff)
-    setActiveFile(path)
-    if (diff && isDiffExpandable(diff) && !open().includes(path)) setOpen((prev) => [...prev, path])
-    requestAnimationFrame(() => {
-      const index = rows().findIndex((diff) => diff.file === path)
-      if (index < 0) return
-      const handle = virtualizer()
-      const current = handle?.findItemIndex(handle.scrollOffset) ?? index
-      virtualizer()?.scrollToIndex(index, { offset: -8, smooth: Math.abs(index - current) <= 8 })
+
+  // Keep requests pending until both the data and virtualizer exist. Re-schedule
+  // if the context/rows change before the frame, rather than scrolling an old handle.
+  createEffect(() => {
+    const target = navigation()
+    const handle = virtualizer()
+    const index = rows().findIndex((diff) => diff.file === target?.file)
+    if (!target || target.key !== props.sessionKey || !handle || index < 0) return
+    const frame = requestAnimationFrame(() => {
+      handle.scrollToIndex(index, { offset: -8 })
+      setNavigation(undefined)
     })
-  }
+    onCleanup(() => cancelAnimationFrame(frame))
+  })
 
   const handleExpandAll = () => {
     setOpen(toggleOpenFiles(props.diffs, open()))
@@ -176,6 +199,7 @@ export const FullScreenDiffView: Component<FullScreenDiffViewProps> = (props) =>
   }
 
   const syncActiveFileFromScroll = () => {
+    if (selected) return
     const handle = virtualizer()
     if (!handle) return
     const file = rows()[handle.findItemIndex(handle.scrollOffset)]?.file
@@ -195,13 +219,33 @@ export const FullScreenDiffView: Component<FullScreenDiffViewProps> = (props) =>
     const container = scroller()
     if (!container) return
     const onScroll = () => scheduleSyncActiveFile()
+    const intent = () => {
+      selected = false
+      setNavigation(undefined)
+    }
+    const pointer = (event: PointerEvent) => {
+      if (event.target === container) intent()
+    }
+    const keyboard = (event: KeyboardEvent) => {
+      if (event.target !== container && !(event.target instanceof HTMLElement && event.target.tagName === "PRE")) return
+      if (!["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) return
+      intent()
+    }
     const resize = new ResizeObserver(() => scheduleSyncActiveFile())
     container.addEventListener("scroll", onScroll, { passive: true })
+    container.addEventListener("wheel", intent, { passive: true })
+    container.addEventListener("touchmove", intent, { passive: true })
+    container.addEventListener("pointerdown", pointer)
+    container.addEventListener("keydown", keyboard)
     resize.observe(container)
     scheduleSyncActiveFile()
 
     onCleanup(() => {
       container.removeEventListener("scroll", onScroll)
+      container.removeEventListener("wheel", intent)
+      container.removeEventListener("touchmove", intent)
+      container.removeEventListener("pointerdown", pointer)
+      container.removeEventListener("keydown", keyboard)
       resize.disconnect()
       if (syncFrame !== undefined) {
         cancelAnimationFrame(syncFrame)

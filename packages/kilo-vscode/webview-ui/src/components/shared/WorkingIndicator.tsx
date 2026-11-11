@@ -3,9 +3,7 @@
  * Shows a spinner, status text, and elapsed time counter while the agent is active.
  * Matches the v1.0.25 working indicator UX.
  *
- * `SessionDock` decides when this renders (see `showsWorking`). Keeping the
- * decision in one place is what stops the dock from resizing when a turn starts
- * or ends.
+ * The transcript or standalone dock decides visibility through `showsWorking`.
  */
 
 import { type Component, Show, createSignal, createEffect, createMemo, onCleanup } from "solid-js"

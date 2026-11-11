@@ -160,4 +160,98 @@ describe("createProviderAction", () => {
     expect(seen).toEqual([])
     action.dispose()
   })
+
+  it("does not consume a save when an unrelated response has the same request id", () => {
+    const transport = createTransport()
+    const action = createProviderAction(transport)
+    const seen: string[] = []
+    const requestId = action.send(
+      { type: "saveCustomProvider", providerID: "custom", config: {} },
+      { onConnected: () => seen.push("saved") },
+    )
+    transport.receive({ type: "customProviderModelsFetched", requestId, models: [] })
+    transport.receive({ type: "providerConnected", requestId, providerID: "custom" })
+    expect(seen).toEqual(["saved"])
+    action.dispose()
+  })
+
+  it("expires a missing save response once and ignores it after a retry", async () => {
+    const transport = createTransport()
+    const action = createProviderAction(transport)
+    const seen: string[] = []
+    const requestId = action.send(
+      { type: "saveCustomProvider", providerID: "custom", config: {} },
+      { onConnected: () => seen.push("stale"), onError: (message) => seen.push(message.message) },
+      { timeout: 10, message: "Save unconfirmed" },
+    )
+    await Bun.sleep(30)
+    expect(seen).toEqual(["Save unconfirmed"])
+    const retry = action.send(
+      { type: "saveCustomProvider", providerID: "custom", config: {} },
+      { onConnected: () => seen.push("saved"), onError: () => seen.push("failed") },
+      { timeout: 10, message: "Retry expired" },
+    )
+    transport.receive({ type: "providerConnected", requestId, providerID: "custom" })
+    transport.receive({
+      type: "providerActionError",
+      requestId,
+      providerID: "custom",
+      action: "connect",
+      message: "Late error",
+    })
+    transport.receive({ type: "providerConnected", requestId: retry, providerID: "custom" })
+    await Bun.sleep(30)
+    expect(seen).toEqual(["Save unconfirmed", "saved"])
+    action.dispose()
+  })
+
+  it("does not apply the save deadline to interactive OAuth", async () => {
+    const transport = createTransport()
+    const action = createProviderAction(transport)
+    const seen: string[] = []
+    const requestId = action.send(
+      { type: "authorizeProviderOAuth", providerID: "custom", method: 0 },
+      { onOAuthReady: () => seen.push("ready"), onError: () => seen.push("expired") },
+      { timeout: 10, message: "Save unconfirmed" },
+    )
+    await Bun.sleep(30)
+    transport.receive({
+      type: "providerOAuthReady",
+      requestId,
+      providerID: "custom",
+      authorization: { url: "https://example.com", method: "code", instructions: "Enter code" },
+    })
+    expect(seen).toEqual(["ready"])
+    action.dispose()
+  })
+
+  it("cancels expiration on error, clear, disposal, and synchronous send failure", async () => {
+    for (const mode of ["error", "clear", "dispose", "throw"] as const) {
+      const transport = createTransport()
+      if (mode === "throw")
+        transport.postMessage = () => {
+          throw new Error("Transport unavailable")
+        }
+      const action = createProviderAction(transport)
+      const seen: string[] = []
+      const requestId = action.send(
+        { type: "saveCustomProvider", providerID: "custom", config: {} },
+        { onError: (message) => seen.push(message.message) },
+        { timeout: 10, message: "Expired" },
+      )
+      if (mode === "error")
+        transport.receive({
+          type: "providerActionError",
+          requestId,
+          providerID: "custom",
+          action: "connect",
+          message: "Failed",
+        })
+      if (mode === "clear") action.clear(requestId)
+      if (mode === "dispose") action.dispose()
+      await Bun.sleep(30)
+      expect(seen).toEqual(mode === "error" ? ["Failed"] : mode === "throw" ? ["Transport unavailable"] : [])
+      action.dispose()
+    }
+  })
 })

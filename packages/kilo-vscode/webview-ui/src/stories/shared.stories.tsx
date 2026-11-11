@@ -12,6 +12,7 @@ import type { EnrichedModel } from "../context/provider"
 import type { ModelSelection } from "../types/messages"
 import { Markdown } from "@kilocode/kilo-ui/markdown"
 import { ThinkingSelectorBase } from "../components/shared/ThinkingSelector"
+import { ModeSwitcherBase } from "../components/shared/ModeSwitcher"
 
 const meta: Meta = {
   title: "Shared",
@@ -19,6 +20,35 @@ const meta: Meta = {
 }
 export default meta
 type Story = StoryObj
+
+export const ModePicker: Story = {
+  args: { value: "code" },
+  render: (args: { value: string }) => {
+    const [value, select] = createSignal(String(args.value))
+    return (
+      <StoryProviders>
+        <ModeSwitcherBase
+          agents={[
+            { name: "code", mode: "primary" },
+            { name: "ask", mode: "primary" },
+            { name: "debug", mode: "primary" },
+            { name: "orchestrator", mode: "primary", deprecated: true },
+            { name: "plan", mode: "primary" },
+            { name: "custom", mode: "primary", color: "#ce3896", deprecated: true },
+          ]}
+          value={value()}
+          onSelect={select}
+        />
+        <output aria-label="Selected mode">{value()}</output>
+      </StoryProviders>
+    )
+  },
+}
+
+export const ModePickerLegacy: Story = {
+  ...ModePicker,
+  args: { value: "orchestrator" },
+}
 
 export const ReasoningEfforts: Story = {
   render: () => {

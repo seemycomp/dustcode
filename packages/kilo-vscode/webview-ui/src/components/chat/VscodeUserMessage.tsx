@@ -187,6 +187,7 @@ export const VscodeUserMessage: Component<VscodeUserMessageProps> = (props) => {
               copyText={view() ? full() : feedback() ? text()?.text : undefined}
               bubbleHeader={controls()}
               header={header()}
+              footer={<TurnTodos id={props.message.id} floating={props.sticky} />}
               interrupted={props.interrupted}
               queued={props.queued}
               edit={
@@ -214,8 +215,8 @@ export const VscodeUserMessage: Component<VscodeUserMessageProps> = (props) => {
           }
           onCancel={() => setEditing(false)}
         />
+        <TurnTodos id={props.message.id} floating={props.sticky} />
       </Show>
-      <TurnTodos id={props.message.id} floating={props.sticky} />
     </div>
   )
 }

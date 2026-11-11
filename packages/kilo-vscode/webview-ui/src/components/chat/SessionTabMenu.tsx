@@ -64,7 +64,7 @@ export const SessionTabMenu: ParentComponent<{
               <ContextMenu.Sub>
                 <ContextMenu.SubTrigger disabled={!props.onMoveToWorktree}>
                   <Icon name="branch" size="small" />
-                  <span>{t("session.menu.moveToWorktree")}</span>
+                  <span>{t("sidebar.session.moveToWorktree")}</span>
                 </ContextMenu.SubTrigger>
                 <ContextMenu.Portal>
                   <ContextMenu.SubContent>

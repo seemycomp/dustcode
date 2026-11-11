@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { createKiloClient } from "@kilocode/sdk/v2"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
 import { Permission } from "../../src/permission"
@@ -51,6 +52,42 @@ afterEach(async () => {
 })
 
 describe("global config refresh", () => {
+  test("adding a custom provider model persists across global reload without losing existing settings", async () => {
+    await using global = await tmpdir()
+    ;(Global.Path as { config: string }).config = global.path
+    const existing = {
+      npm: "@ai-sdk/openai-compatible",
+      name: "Custom",
+      options: { baseURL: "https://example.com/v1", headers: { "X-Custom": "test-only" } },
+      models: { original: { name: "Original" } },
+    }
+    await config(global.path, { provider: { custom: existing, sibling: existing } })
+    await disposeAllInstances()
+    const target = app()
+    const client = createKiloClient({
+      baseUrl: "http://localhost",
+      fetch: Object.assign(async (request: Parameters<typeof fetch>[0]) => target.request(new Request(request)), {
+        preconnect: fetch.preconnect,
+      }),
+    })
+    const started = performance.now()
+    const current = (await client.global.config.get({ throwOnError: true })).data?.provider?.custom
+    expect(current).toMatchObject(existing)
+    const expected = { ...existing, models: { ...existing.models, added: { name: "Added" } } }
+    const response = await client.global.config.update(
+      { dispose: false, config: { provider: { custom: expected } } },
+      { throwOnError: true },
+    )
+    expect(response.response.status).toBe(200)
+    expect(await Bun.file(path.join(global.path, "kilo.json")).json()).toMatchObject({
+      provider: { custom: expected, sibling: existing },
+    })
+    expect((await client.global.dispose({ throwOnError: true })).response.status).toBe(200)
+    const reloaded = await client.global.config.get({ throwOnError: true })
+    expect(reloaded.data).toMatchObject({ provider: { custom: expected, sibling: existing } })
+    expect(performance.now() - started).toBeLessThan(30_000)
+  })
+
   test("persistence-only update writes and invalidates config without disposing instances", async () => {
     await using global = await tmpdir()
     await using workspace = await tmpdir({ config: { formatter: false, lsp: false } })

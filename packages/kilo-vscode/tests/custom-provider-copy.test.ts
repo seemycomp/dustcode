@@ -132,6 +132,74 @@ it("copies only custom providers into an editable new-provider dialog without ch
       expect(env.config.env).toEqual(["CUSTOM_API_KEY"])
       expect(env.apiKey).toBeUndefined()
     }
+    await page.clock.install()
+    for (const width of [1100, 420]) {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto(server.url.toString())
+      const source = page
+        .locator("div")
+        .filter({ has: page.getByText("Custom Source", { exact: true }) })
+        .filter({ has: page.getByRole("button", { name: "Edit provider", exact: true }) })
+        .last()
+      await source.getByRole("button", { name: "Edit provider", exact: true }).click()
+      const dialog = page.getByRole("dialog")
+      await dialog.getByRole("button", { name: "Add model", exact: true }).click()
+      await dialog.getByRole("textbox", { name: "ID", exact: true }).last().fill("added-model")
+      await dialog.getByRole("textbox", { name: "Name", exact: true }).last().fill("Added Model")
+      await dialog.getByRole("button", { name: "Submit", exact: true }).click()
+      await check(dialog.getByRole("button", { name: "Saving...", exact: true })).toBeDisabled()
+      const expired = await page.evaluate(() => JSON.parse(document.body.dataset.saved!))
+      expect(expired.config.models["added-model"]).toMatchObject({ name: "Added Model" })
+      expect(expired.apiKeyChanged).toBe(false)
+      await page.clock.fastForward(30_000)
+      await check(dialog).toBeVisible()
+      await check(dialog.getByRole("button", { name: "Submit", exact: true })).toBeEnabled()
+      await check(dialog.getByRole("textbox", { name: "ID", exact: true }).last()).toHaveValue("added-model")
+      await check(dialog.getByRole("textbox", { name: "Base URL", exact: true })).toHaveValue("https://example.com/v1")
+      await check(page.getByText(/The save could not be confirmed/)).toBeVisible()
+      await dialog.getByRole("button", { name: "Submit", exact: true }).click()
+      const retry = await page.evaluate(() => JSON.parse(document.body.dataset.saved!))
+      expect(retry.requestId).not.toBe(expired.requestId)
+      await page.evaluate(
+        (requestId) =>
+          window.dispatchEvent(
+            new CustomEvent("fixture-response", {
+              detail: { type: "providerConnected", requestId, providerID: "custom" },
+            }),
+          ),
+        expired.requestId,
+      )
+      await check(dialog.getByRole("button", { name: "Saving...", exact: true })).toBeDisabled()
+      await page.evaluate(
+        (requestId) =>
+          window.dispatchEvent(
+            new CustomEvent("fixture-response", {
+              detail: {
+                type: "providerActionError",
+                requestId,
+                providerID: "custom",
+                action: "connect",
+                message: "Config unavailable",
+              },
+            }),
+          ),
+        retry.requestId,
+      )
+      await check(dialog.getByRole("button", { name: "Submit", exact: true })).toBeEnabled()
+      await check(dialog.getByRole("textbox", { name: "ID", exact: true }).last()).toHaveValue("added-model")
+      await dialog.getByRole("button", { name: "Submit", exact: true }).click()
+      const saved = await page.evaluate(() => JSON.parse(document.body.dataset.saved!))
+      await page.evaluate(
+        (requestId) =>
+          window.dispatchEvent(
+            new CustomEvent("fixture-response", {
+              detail: { type: "providerConnected", requestId, providerID: "custom" },
+            }),
+          ),
+        saved.requestId,
+      )
+      await check(dialog).toHaveCount(0)
+    }
   } finally {
     await browser.close()
     server.stop(true)

@@ -363,6 +363,10 @@ html[data-theme="kilo-vscode"] [data-component="bash-output"] {
 }
 
 /* Queued state (upstream removed in v1.2.25) */
+[data-slot="user-message-card"] {
+  display: contents;
+}
+
 [data-component="user-message"] {
   [data-slot="user-message-attachment"][data-queued] {
     opacity: 0.6;

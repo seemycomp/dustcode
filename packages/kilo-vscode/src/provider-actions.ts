@@ -466,12 +466,32 @@ export async function saveCustomProvider(
     ])
   }
 
+  const signal = AbortSignal.timeout(30_000)
+  const started = performance.now()
+  let stage = "read configuration"
+  const fail = (error: unknown) => {
+    console.warn(
+      `[Dustcode] Custom provider save ${requestId} failed at ${stage} after ${Math.round(performance.now() - started)}ms`,
+    )
+    postError(
+      ctx,
+      requestId,
+      providerID,
+      "connect",
+      signal.aborted
+        ? `Saving the custom provider timed out during ${stage}. The save could not be confirmed. Check the provider before trying again.`
+        : ctx.getErrorMessage(error) || "Failed to save custom provider",
+    )
+  }
+
   try {
-    const globalConfig = (await ctx.client.global.config.get({ throwOnError: true })).data ?? {}
+    const globalConfig = (await ctx.client.global.config.get({ throwOnError: true, signal })).data ?? {}
     const disabled = globalConfig.disabled_providers ?? []
     const nextDisabled = disabled.filter((item: string) => item !== id)
     const existing = (globalConfig.provider as Record<string, unknown> | undefined)?.[id]
     const patch = withCustomProviderDeletions(existing, sanitized.value)
+    signal.throwIfAborted()
+    stage = "write configuration"
     await ctx.client.global.config.update(
       {
         config: {
@@ -480,30 +500,33 @@ export async function saveCustomProvider(
         },
         dispose: false,
       },
-      { throwOnError: true },
+      { throwOnError: true, signal },
     )
 
     const auth = resolveCustomProviderAuth(apiKey, apiKeyChanged)
 
     try {
+      signal.throwIfAborted()
+      stage = "write credentials"
       if (auth.mode === "set") {
         await ctx.client.auth.set(
           { providerID: id, auth: { type: "api", key: auth.key }, dispose: false },
-          { throwOnError: true },
+          { throwOnError: true, signal },
         )
       }
       if (auth.mode === "clear") {
-        await ctx.client.auth.remove({ providerID: id, dispose: false }, { throwOnError: true })
+        await ctx.client.auth.remove({ providerID: id, dispose: false }, { throwOnError: true, signal })
       }
     } catch (error) {
-      postError(ctx, requestId, providerID, "connect", ctx.getErrorMessage(error) || "Failed to save custom provider")
-      await refresh()
+      fail(error)
+      if (!signal.aborted) await refresh()
       return
     }
 
+    signal.throwIfAborted()
     ctx.postMessage({ type: "providerConnected", requestId, providerID: id })
     await refresh()
   } catch (error) {
-    postError(ctx, requestId, providerID, "connect", ctx.getErrorMessage(error) || "Failed to save custom provider")
+    fail(error)
   }
 }

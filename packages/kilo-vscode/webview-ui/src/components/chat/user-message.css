@@ -9,6 +9,20 @@
   align-items: stretch;
 }
 
+.vscode-user-message [data-slot="user-message-card"] {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--border-weak-base);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--text-base) 7%, transparent);
+}
+
+.vscode-user-message [data-slot="user-message-attachments"] {
+  padding: 10px 10px 0;
+  box-sizing: border-box;
+}
+
 .chat-view .vscode-user-message [data-slot="user-message-body"],
 .chat-view .vscode-user-message [data-slot="user-message-attachments"] {
   width: 100%;
@@ -21,8 +35,9 @@
 .vscode-user-message [data-slot="user-message-text"] {
   width: 100%;
   overflow: hidden;
-  border-color: var(--border-weak-base);
-  border-radius: 12px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
   text-align: start;
 }
 
@@ -33,12 +48,12 @@
   -webkit-line-clamp: 3;
 }
 
-body.vscode-light:not(.vscode-high-contrast-light) .vscode-user-message [data-slot="user-message-text"] {
+body.vscode-light:not(.vscode-high-contrast-light) .vscode-user-message [data-slot="user-message-card"] {
   background: #ffffff;
   border: 1px solid #d6d6d6;
 }
 
-body.vscode-high-contrast-light .vscode-user-message [data-slot="user-message-text"] {
+body.vscode-high-contrast-light .vscode-user-message [data-slot="user-message-card"] {
   background: #ffffff;
 }
 
@@ -74,16 +89,12 @@ body.vscode-high-contrast-light .vscode-user-message [data-slot="user-message-te
 }
 
 .message-list-sticky-prompt .vscode-user-message [data-component="user-message"] {
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  align-items: stretch;
 }
 
 .message-list-sticky-prompt .vscode-user-message [data-slot="user-message-attachments"] {
-  flex: 0 1 auto;
-  width: auto;
-  max-width: 25%;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 4px;
   overflow: hidden;
 }
@@ -96,8 +107,8 @@ body.vscode-high-contrast-light .vscode-user-message [data-slot="user-message-te
 
 .message-list-sticky-prompt .message-image-thumbnail[data-component="button"] {
   box-sizing: border-box;
-  width: 20px;
-  height: 20px;
+  width: 32px;
+  height: 32px;
   min-height: 0;
   padding: 0;
   flex-shrink: 0;

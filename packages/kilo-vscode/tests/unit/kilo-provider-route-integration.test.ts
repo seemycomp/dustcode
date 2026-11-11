@@ -1,4 +1,4 @@
-import { describe, it, expect, spyOn } from "bun:test"
+import { describe, it, expect, mock, spyOn } from "bun:test"
 import * as vscode from "vscode"
 import * as fs from "fs/promises"
 import * as os from "os"
@@ -9,6 +9,7 @@ import type { PRReviewCommentData } from "../../src/shared/review-comments"
 
 // vscode mock is provided by the shared preload (tests/setup/vscode-mock.ts)
 const { KiloProvider } = await import("../../src/KiloProvider")
+const { SettingsEditorProvider } = await import("../../src/SettingsEditorProvider")
 
 type SessionGetParams = { sessionID: string; directory: string }
 
@@ -79,6 +80,7 @@ function mockConnection(getImpl?: (p: SessionGetParams) => Promise<unknown>, vcs
       onFavoritesChanged: () => () => undefined,
       onModelSelectorExpandedChanged: () => () => undefined,
       onClearPendingPrompts: () => () => undefined,
+      onSessionAcknowledged: () => () => undefined,
       registerDirectoryProvider: () => () => undefined,
       unregisterVisible: () => undefined,
       unregisterAttached: () => undefined,
@@ -109,6 +111,10 @@ async function withNestedRepo(run: (root: string) => Promise<void>): Promise<voi
 
 type ProviderInternals = {
   client: unknown
+  initializeConnection: () => Promise<void>
+  _getHtmlForWebview: () => string
+  onBeforeMessage: unknown
+  handleProviderAction: (message: Record<string, unknown>) => Promise<void>
   connectionState: "connecting" | "connected" | "disconnected" | "error"
   initConnectionPromise: Promise<void> | null
   isWebviewReady: boolean
@@ -161,6 +167,100 @@ describe("KiloProvider route integration", () => {
     title: "Background session",
     version: "1",
     time: { created: 1, updated: 1 },
+  }
+
+  for (const online of [true, false]) {
+    it.each([undefined, "known", "stale"])(
+      `routes Settings custom provider saves with project %s while ${online ? "connected" : "disconnected"}`,
+      async (project) => {
+        const { connection } = mockConnection()
+        const get = mock(async () => {
+          throw new Error("Synthetic config GET boundary reached")
+        })
+        Object.assign(connection.getClient(), { global: { config: { get } } })
+        const access = spyOn(connection, "getClient")
+        if (!online)
+          access.mockImplementation(() => {
+            throw new Error("Not connected")
+          })
+        const proto = KiloProvider.prototype as unknown as ProviderInternals
+        const html = spyOn(proto, "_getHtmlForWebview").mockReturnValue("")
+        const init = spyOn(proto, "initializeConnection").mockResolvedValue(undefined)
+        const action = spyOn(proto, "handleProviderAction")
+        const posts: unknown[] = []
+        const pending = Promise.withResolvers<(message: Record<string, unknown>) => Promise<void>>()
+        const panel = {
+          active: false,
+          visible: false,
+          webview: {
+            postMessage: async (message: unknown) => posts.push(message),
+            onDidReceiveMessage: (receive: (message: Record<string, unknown>) => Promise<void>) => {
+              pending.resolve(receive)
+              return { dispose() {} }
+            },
+          },
+          onDidChangeViewState: () => ({ dispose() {} }),
+          onDidDispose: () => ({ dispose() {} }),
+        }
+        const editor = new SettingsEditorProvider(
+          { fsPath: "/extension" } as never,
+          connection,
+          undefined as never,
+          new Proxy(
+            {},
+            {
+              get: () => {
+                throw new Error("Provider saves must not invoke project settings")
+              },
+            },
+          ) as never,
+        ) as unknown as {
+          wirePanel(panel: unknown, view: "settings", directory: string): void
+          providers: Map<string, InstanceType<typeof KiloProvider>>
+        }
+        try {
+          editor.wirePanel(panel, "settings", "/repo/known")
+          const provider = editor.providers.get("settings") as unknown as ProviderInternals
+          provider.isWebviewReady = true
+          provider.connectionState = online ? "connected" : "disconnected"
+          expect(provider.onBeforeMessage).toBeNull()
+          posts.length = 0
+          const request = {
+            type: "saveCustomProvider",
+            requestId: `save-${online}-${project ?? "absent"}`,
+            providerID: "synthetic",
+            ...(project ? { projectId: project } : {}),
+            config: {
+              name: "Synthetic",
+              options: { baseURL: "https://example.invalid/v1" },
+              models: { old: { name: "Old" }, added: { name: "Added" } },
+            },
+          }
+          const receive = await pending.promise
+          await receive(request)
+
+          expect(action).toHaveBeenCalledTimes(1)
+          expect(action.mock.calls.at(0)?.at(0)).toBe(request)
+          expect(request.config.models).toEqual({ old: { name: "Old" }, added: { name: "Added" } })
+          expect(get).toHaveBeenCalledTimes(online ? 1 : 0)
+          expect(posts).toEqual([
+            {
+              type: "providerActionError",
+              requestId: request.requestId,
+              providerID: request.providerID,
+              action: "connect",
+              message: online ? "Synthetic config GET boundary reached" : "Not connected to CLI backend",
+            },
+          ])
+        } finally {
+          editor.providers.get("settings")?.dispose()
+          action.mockRestore()
+          init.mockRestore()
+          html.mockRestore()
+          access.mockRestore()
+        }
+      },
+    )
   }
 
   it("registers a background source without replacing the foreground session", () => {
