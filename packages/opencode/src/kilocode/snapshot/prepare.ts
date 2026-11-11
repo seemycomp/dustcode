@@ -49,8 +49,8 @@ export namespace KiloSnapshotPrepare {
         "--format=%(refname)",
         "refs/kilo/snapshots",
       ])
-      if (refs.code === 0 && !refs.text.trim()) return false
-      if (refs.code === 0) yield* input.fs.remove(marker)
+      if (refs.code !== 0 || !refs.text.trim()) return false
+      yield* input.fs.remove(marker)
     }
     return yield* KiloSnapshotMaterialize.run(input)
   })
@@ -69,7 +69,9 @@ export namespace KiloSnapshotPrepare {
       const current = yield* input.fs.readFileString(config).pipe(Effect.catch(() => Effect.succeed("")))
       yield* input.fs.writeFileString(config, current.trimEnd() + "\n" + CONFIG).pipe(Effect.orDie)
       const seeded: KiloSnapshotSeed.Output = yield* KiloSnapshotSeed.seed(input)
-      if (prepare) yield* input.fs.writeFileString(path.join(input.gitdir, MARKER), "").pipe(Effect.orDie)
+      // A first reconciliation can fail after seeding. Keep index-only recovery
+      // from pinning that partial index until a real snapshot has been recorded.
+      yield* input.fs.writeFileString(path.join(input.gitdir, MARKER), "").pipe(Effect.orDie)
       yield* Effect.logInfo("initialized")
       return seeded
     }).pipe(

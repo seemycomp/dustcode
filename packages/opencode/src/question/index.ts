@@ -110,19 +110,20 @@ export const layer = Layer.effect(
       yield* KiloQuestion.guardFollowup(input.sessionID, () => new RejectedError())
       // kilocode_change end
 
-      pending.set(id, { info, deferred })
-      yield* events.publish(Event.Asked, info)
-
+      // kilocode_change start - cleanup also covers interruption during Asked publication
       return yield* Effect.ensuring(
-        Deferred.await(deferred),
-        // kilocode_change start - every asked question gets a terminal event when its waiter is interrupted
+        Effect.gen(function* () {
+          pending.set(id, { info, deferred })
+          yield* events.publish(Event.Asked, info)
+          return yield* Deferred.await(deferred)
+        }),
         KiloQuestion.finalize({
           pending,
           id,
           publishRejected: () => events.publish(Event.Rejected, { sessionID: info.sessionID, requestID: info.id }),
         }),
-        // kilocode_change end
       )
+      // kilocode_change end
     })
 
     const reply = Effect.fn("Question.reply")(function* (input: {

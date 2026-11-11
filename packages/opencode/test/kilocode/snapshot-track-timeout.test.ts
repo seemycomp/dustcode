@@ -7,6 +7,7 @@
 import { describe, expect, test } from "bun:test"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Profile } from "@opencode-ai/core/kilocode/profile"
 import { Deferred, Duration, Effect, Fiber } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import path from "path"
@@ -150,6 +151,124 @@ describe("KiloSnapshotTrack.protect", () => {
 })
 
 describe("KiloSnapshotTrack.wrap", () => {
+  for (const outcome of ["hash", "empty", "error", "defect"] as const) {
+    it.live(`completes ${outcome} capture without an answer and aborts only its question waiter`, () =>
+      Effect.gen(function* () {
+        const state = KiloSnapshotTrack.makeState()
+        const asked = Promise.withResolvers<void>()
+        const started = Promise.withResolvers<void>()
+        const answer = Promise.withResolvers<KiloSnapshotTrack.Answer>()
+        const snapshot = yield* Deferred.make<void>()
+        const { hooks: base, calls } = makeHooks(answer.promise)
+        let aborted = false
+        let captures = 0
+        const hooks: KiloSnapshotTrack.Hooks = {
+          ...base,
+          async startProgress(input, signal) {
+            await base.startProgress(input, signal)
+            started.resolve()
+          },
+          async ask(input, signal) {
+            signal?.addEventListener(
+              "abort",
+              () => {
+                aborted = true
+                answer.resolve("dismissed")
+              },
+              { once: true },
+            )
+            asked.resolve()
+            return base.ask(input, signal)
+          },
+        }
+        const inner = Effect.gen(function* () {
+          captures += 1
+          yield* Deferred.await(snapshot)
+          if (outcome === "defect") return yield* Effect.die(new Error("reconciliation failed"))
+          if (outcome === "error") return yield* failingInner(new Error("capture failed"))
+          return outcome === "hash" ? "finished-hash" : undefined
+        })
+        const fiber = yield* KiloSnapshotTrack.protect({
+          inner: KiloSnapshotTrack.wrap({
+            inner,
+            state,
+            sessionID: SESSION,
+            messageID: MESSAGE,
+            hooks,
+            timeoutMs: 10,
+            progressDelayMs: 1,
+          }),
+          state,
+          fallback: undefined,
+          operation: "track",
+          timeoutMs: 2_000,
+        }).pipe(Effect.forkChild)
+
+        yield* awaitWithTimeout(
+          Effect.promise(() => asked.promise),
+          "snapshot question was not asked",
+        )
+        yield* awaitWithTimeout(
+          Effect.promise(() => started.promise),
+          "snapshot progress was not started",
+        )
+        yield* Deferred.succeed(snapshot, undefined)
+        const result = yield* awaitWithTimeout(
+          Fiber.join(fiber),
+          "finished capture remained blocked on its unanswered question",
+          Duration.millis(500),
+        )
+
+        expect(result).toBe(outcome === "hash" ? "finished-hash" : undefined)
+        expect(captures).toBe(1)
+        expect(aborted).toBe(true)
+        expect(calls.persist).toBe(0)
+        expect(calls.progress.at(-1)).toEqual({ kind: "end" })
+        expect(state.disabledForSession).toBe(outcome === "defect")
+        expect(state.asked).toBe(outcome !== "hash")
+        expect(state.owner).toBeUndefined()
+      }),
+    )
+  }
+
+  test.each(["capture", "answer"] as const)(
+    "near-simultaneous %s-first signals select exactly one branch",
+    async (order) => {
+      const state = KiloSnapshotTrack.makeState()
+      const snapshot = Promise.withResolvers<string | undefined>()
+      const answer = Promise.withResolvers<KiloSnapshotTrack.Answer>()
+      const asked = Promise.withResolvers<void>()
+      const { hooks: base, calls } = makeHooks(answer.promise)
+      const hooks: KiloSnapshotTrack.Hooks = {
+        ...base,
+        async ask(input, signal) {
+          asked.resolve()
+          return base.ask(input, signal)
+        },
+      }
+      const run = Effect.runPromise(
+        KiloSnapshotTrack.wrap({
+          inner: Effect.promise(() => snapshot.promise),
+          state,
+          sessionID: SESSION,
+          hooks,
+          timeoutMs: 10,
+        }),
+      )
+      await asked.promise
+      if (order === "capture") snapshot.resolve("hash")
+      answer.resolve("disable")
+      snapshot.resolve("hash")
+
+      const result = await run
+      expect(result === "hash" || result === undefined).toBe(true)
+      expect(calls.persist).toBe(result === "hash" ? 0 : 1)
+      expect(state.disabledForSession).toBe(result !== "hash")
+      expect(state.asked).toBe(result !== "hash")
+      expect(state.owner).toBeUndefined()
+    },
+  )
+
   test("returns the hash when inner resolves before the timeout", async () => {
     const state = KiloSnapshotTrack.makeState()
     const { hooks, calls } = makeHooks("continue")
@@ -1053,7 +1172,7 @@ describe("KiloSnapshotTrack persistDisable", () => {
           progressDelayMs: 2,
         })
 
-        const file = path.join(test.directory, ".kilo", "kilo.jsonc")
+        const file = path.join(test.directory, Profile.dir(), "kilo.jsonc")
         const text = yield* Effect.tryPromise(() => Bun.file(file).text())
         expect(JSON.parse(text).snapshot).toBe(false)
         expect(state.disabledForSession).toBe(true)

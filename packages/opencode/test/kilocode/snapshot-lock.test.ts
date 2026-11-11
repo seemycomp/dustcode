@@ -38,3 +38,24 @@ test("dieOnLockError leaves the body's own errors in the error channel", async (
 test("dieOnLockError passes a success through untouched", async () => {
   expect(await Effect.runPromise(KiloSnapshotLock.dieOnLockError(Effect.succeed("ok")))).toBe("ok")
 })
+
+test("reconciliation failures survive typed-error fallbacks as classified defects", async () => {
+  for (const phase of ["stage", "diff-files", "ls-files", "drop", "write-tree", "patch"]) {
+    const exit = await Effect.runPromiseExit(
+      KiloSnapshotLock.check("/private/snapshot", phase, { code: 128, stderr: "failed git command" }).pipe(
+        Effect.catch(() => Effect.succeed("incorrect success")),
+      ),
+    )
+    expectDefect(exit)
+    if (!Exit.isFailure(exit)) throw new Error("expected a failure")
+    expect(Cause.squash(exit.cause)).toMatchObject({
+      _tag: "SnapshotError",
+      gitdir: "/private/snapshot",
+      phase,
+      code: 128,
+    })
+  }
+  expect(
+    await Effect.runPromise(KiloSnapshotLock.check("/private/snapshot", "stage", { code: 0, stderr: "" })),
+  ).toBeUndefined()
+})

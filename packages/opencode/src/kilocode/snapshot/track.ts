@@ -452,13 +452,23 @@ export namespace KiloSnapshotTrack {
             input.state.owner = owner
 
             const sessionID = input.sessionID
-            const answer = yield* Effect.promise((signal) => hooks.ask({ sessionID }, signal))
+            // Await completion, not just success; interrupting the losing ask aborts only its waiter.
+            const result = yield* Effect.raceFirst(
+              Effect.promise((signal) => hooks.ask({ sessionID }, signal)).pipe(
+                Effect.map((answer) => ({ _tag: "Answer" as const, answer })),
+              ),
+              Fiber.await(fiber).pipe(Effect.as({ _tag: "Finished" as const })),
+            )
 
-            if (answer === "continue") {
-              log.info("user chose to keep waiting for snapshot; joining fiber")
+            if (result._tag === "Finished" || result.answer === "continue") {
+              log.info(
+                result._tag === "Finished"
+                  ? "snapshot finished while awaiting user answer; joining fiber"
+                  : "user chose to keep waiting for snapshot; joining fiber",
+              )
               const finished = yield* Fiber.join(fiber).pipe(
                 Effect.catch((err) => {
-                  log.warn("snapshot track failed after user continue", { err })
+                  log.warn("snapshot track failed after warning", { err })
                   return Effect.succeed(undefined as string | undefined)
                 }),
               )
@@ -476,7 +486,7 @@ export namespace KiloSnapshotTrack {
             yield* cancelSnapshot
             yield* stopProgress
 
-            if (answer === "disable") {
+            if (result.answer === "disable") {
               log.info("user chose to disable snapshot for this project")
               // Restore instance context across the Promise boundary; Effect.promise
               // drops it, and persistDisable needs the project directory.

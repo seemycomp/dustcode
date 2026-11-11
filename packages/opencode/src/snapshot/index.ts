@@ -135,7 +135,9 @@ export const layer: Layer.Layer<Service, never, Requirements> =
             ),
           )
 
-          const ignore = Effect.fnUntraced(function* (files: string[]) {
+          // kilocode_change start - only reconciliation requires source ignore checks to succeed
+          const ignore = Effect.fnUntraced(function* (files: string[], strict = true) {
+            // kilocode_change end
             if (!files.length) return new Set<string>()
             // check-ignore treats a leading colon as pathspec magic but accepts and echoes a protective ./ prefix.
             const checkIgnorePaths = files.map((item) => (item.startsWith(":") ? `./${item}` : item))
@@ -157,7 +159,12 @@ export const layer: Layer.Layer<Service, never, Requirements> =
                 stdin: feed(checkIgnorePaths),
               },
             )
-            if (check.code !== 0 && check.code !== 1) return new Set<string>()
+            // kilocode_change start - an ignore failure cannot mean every path is allowed
+            if (check.code !== 0 && check.code !== 1) {
+              if (strict) return yield* KiloSnapshotLock.fail(state.gitdir, "ignore", check)
+              return new Set<string>()
+            }
+            // kilocode_change end
             return new Set(
               check.text
                 .split("\0")
@@ -168,7 +175,8 @@ export const layer: Layer.Layer<Service, never, Requirements> =
 
           const drop = Effect.fnUntraced(function* (files: string[]) {
             if (!files.length) return
-            yield* git(
+            // kilocode_change start - check index removal before publishing a checkpoint
+            const result = yield* git(
               [
                 ...cfg,
                 ...args(["rm", "--cached", "-f", "--ignore-unmatch", "--pathspec-from-file=-", "--pathspec-file-nul"]),
@@ -179,6 +187,8 @@ export const layer: Layer.Layer<Service, never, Requirements> =
                 stdin: literal(files),
               },
             )
+            yield* KiloSnapshotLock.check(state.gitdir, "drop", result)
+            // kilocode_change end
           })
 
           // kilocode_change start
@@ -201,11 +211,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
               stdin: opts?.root ? undefined : literal(files),
             })
             // kilocode_change end
-            if (result.code === 0) return
-            yield* Effect.logWarning("failed to add snapshot files", {
-              exitCode: result.code,
-              stderr: result.stderr,
-            })
+            yield* KiloSnapshotLock.check(state.gitdir, "stage", result) // kilocode_change
           })
 
           const exists = (file: string) => fs.exists(file).pipe(Effect.orDie)
@@ -252,6 +258,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
 
           // kilocode_change start
           const add = Effect.fnUntraced(function* (opts?: { env?: Record<string, string>; root?: boolean }) {
+            yield* KiloSnapshotLock.preflight(fs, state.gitdir)
             // kilocode_change end
             yield* sync()
             const [diff, other] = yield* Effect.all(
@@ -268,15 +275,10 @@ export const layer: Layer.Layer<Service, never, Requirements> =
               ],
               { concurrency: 2 },
             )
-            if (diff.code !== 0 || other.code !== 0) {
-              yield* Effect.logWarning("failed to list snapshot files", {
-                diffCode: diff.code,
-                diffStderr: diff.stderr,
-                otherCode: other.code,
-                otherStderr: other.stderr,
-              })
-              return
-            }
+            // kilocode_change start - do not write a tree from an unreconciled index
+            yield* KiloSnapshotLock.check(state.gitdir, "diff-files", diff)
+            yield* KiloSnapshotLock.check(state.gitdir, "ls-files", other)
+            // kilocode_change end
 
             const tracked = diff.text.split("\0").filter(Boolean)
             const untracked = other.text.split("\0").filter(Boolean)
@@ -433,7 +435,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
                     seed: seed.hash,
                   }))
                 )
-                  return
+                  return yield* KiloSnapshotLock.fail(state.gitdir, "localize")
                 const result = yield* git(args(["write-tree"]), { cwd: state.directory })
                 const hash = result.text.trim()
                 if (result.code !== 0 || !hash) {
@@ -441,7 +443,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
                     exitCode: result.code,
                     stderr: result.stderr,
                   })
-                  return
+                  return yield* KiloSnapshotLock.fail(state.gitdir, "write-tree", result) // kilocode_change
                 }
                 if (
                   seed &&
@@ -450,8 +452,9 @@ export const layer: Layer.Layer<Service, never, Requirements> =
                     hash,
                   ))
                 )
-                  return
-                if (!(yield* KiloSnapshotMaterialize.pin({ gitdir: state.gitdir, git, fs }, hash))) return
+                  return yield* KiloSnapshotLock.fail(state.gitdir, "localize-trees")
+                if (!(yield* KiloSnapshotMaterialize.pin({ gitdir: state.gitdir, git, fs }, hash)))
+                  return yield* KiloSnapshotLock.fail(state.gitdir, "pin")
                 const alt = path.join(state.gitdir, "objects", "info", "alternates")
                 if (yield* exists(alt)) yield* materialize(KiloSnapshotMaterialize.idle())
                 // kilocode_change end
@@ -478,7 +481,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
                 )
                 if (result.code !== 0) {
                   yield* Effect.logWarning("failed to get diff", { hash, exitCode: result.code })
-                  return { hash, files: [] }
+                  return yield* KiloSnapshotLock.fail(state.gitdir, "patch", result) // kilocode_change
                 }
                 const files = result.text
                   .trim()
@@ -868,7 +871,12 @@ export const layer: Layer.Layer<Service, never, Requirements> =
                   })
 
                 // Hide ignored-file removals from the user-facing diff output.
-                const ignored = yield* ignore(rows.map((r) => r.file))
+                // kilocode_change start - historical trees do not require healthy source Git metadata
+                const ignored = yield* ignore(
+                  rows.map((r) => r.file),
+                  false,
+                )
+                // kilocode_change end
                 if (ignored.size > 0) {
                   const filtered = rows.filter((r) => !ignored.has(r.file))
                   rows.length = 0

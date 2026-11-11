@@ -3,10 +3,14 @@ import { $ } from "bun"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Global } from "@opencode-ai/core/global" // kilocode_change
+import { Hash } from "@opencode-ai/core/util/hash" // kilocode_change
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Fiber, Layer } from "effect"
 import { Snapshot } from "../../src/snapshot"
+import { InstanceState } from "../../src/effect/instance-state" // kilocode_change
+import { KiloSnapshotPrepare } from "../../src/kilocode/snapshot/prepare" // kilocode_change
 import {
   disposeAllInstances,
   provideInstance,
@@ -14,7 +18,7 @@ import {
   TestInstance,
   tmpdirScoped,
 } from "../fixture/fixture"
-import { testEffect } from "../lib/effect"
+import { pollWithTimeout, testEffect } from "../lib/effect" // kilocode_change
 
 const it = testEffect(
   Layer.mergeAll(LayerNode.compile(LayerNode.group([Snapshot.node, FSUtil.node])), testInstanceStoreLayer),
@@ -71,7 +75,7 @@ const withTrackedSnapshot = <A, E, R>(
   Effect.gen(function* () {
     const tmp = yield* bootstrap()
     const snapshot = yield* Snapshot.Service
-    const before = yield* snapshot.track()
+    const before = yield* snapshot.track({ snapshotInitialization: "wait" }) // kilocode_change - fixtures need a complete baseline, not the interactive slow-path fallback
     expect(before).toBeTruthy()
     return yield* fn({ tmp, snapshot, before: before! })
   })
@@ -105,6 +109,164 @@ const withGitConfigGlobal = <A, E, R>(config: string, self: Effect.Effect<A, E, 
         else delete process.env.GIT_CONFIG_GLOBAL
       }),
   )
+
+// kilocode_change start
+it.instance(
+  "historical diffs remain readable when source repository metadata is unavailable",
+  withTrackedSnapshot(({ tmp, snapshot, before }) =>
+    Effect.gen(function* () {
+      yield* write(`${tmp.path}/a.txt`, "historical change")
+      const after = yield* snapshot.track({ snapshotInitialization: "wait" })
+      expect(after).toBeTruthy()
+      yield* write(path.join(tmp.path, ".git", "config"), "[invalid config\n")
+      const diff = yield* snapshot.diffFull(before, after!)
+      expect(diff.find((item) => item.file === "a.txt")?.patch).toContain("historical change")
+    }),
+  ),
+  { git: true },
+  60_000,
+)
+
+it.instance(
+  "blocked snapshot capture preserves history and bypasses later reconciliation",
+  withTrackedSnapshot(({ tmp, snapshot, before }) =>
+    Effect.gen(function* () {
+      const ctx = yield* InstanceState.context
+      const dir = path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(ctx.worktree))
+      const lock = path.join(dir, "index.lock")
+      const alt = path.join(dir, "objects", "info", "alternates")
+      yield* pollWithTimeout(
+        Effect.all([exists(alt), exists(`${alt}.materializing`), exists(path.join(dir, "seed-objects"))]).pipe(
+          Effect.map((values) => (values.some(Boolean) ? undefined : true)),
+        ),
+        "snapshot materialization did not finish",
+        "15 seconds",
+      )
+      const index = yield* Effect.promise(() => fs.readFile(path.join(tmp.path, ".git", "index")))
+      yield* write(`${tmp.path}/a.txt`, "changed after baseline")
+      yield* write(lock, "unknown writer")
+      const started = performance.now()
+      const trace = path.join(dir, "trace.json")
+      yield* Effect.acquireUseRelease(
+        Effect.sync(() => {
+          const previous = process.env.GIT_TRACE2_EVENT
+          process.env.GIT_TRACE2_EVENT = trace
+          return previous
+        }),
+        () => snapshot.track().pipe(Effect.tap((hash) => Effect.sync(() => expect(hash).toBeUndefined()))),
+        (previous) =>
+          Effect.sync(() => {
+            if (previous === undefined) delete process.env.GIT_TRACE2_EVENT
+            if (previous !== undefined) process.env.GIT_TRACE2_EVENT = previous
+          }),
+      )
+      const elapsed = performance.now() - started
+      expect(yield* exists(trace)).toBe(false)
+      expect(yield* readText(lock)).toBe("unknown writer")
+      yield* rm(lock)
+      // Removing the lock must not revive the failed service's capture circuit.
+      expect(yield* snapshot.track()).toBeUndefined()
+      expect(yield* snapshot.patch(before)).toEqual({ hash: before, files: [] })
+      expect(yield* snapshot.diffFull(before, before)).toEqual([])
+      expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, ".git", "index")))).toEqual(index)
+      const contents = yield* Effect.promise(() => $`git --git-dir=${dir} show ${before}:a.txt`.quiet().text())
+      expect(contents).toBe(tmp.extra.aContent)
+      expect(elapsed).toBeLessThan(1000)
+    }),
+  ),
+  { git: true },
+  30_000,
+)
+
+it.instance(
+  "failed snapshot stage cannot publish an unchanged baseline",
+  withTrackedSnapshot(({ tmp, snapshot, before }) =>
+    Effect.gen(function* () {
+      // This attribute makes Git reject staging without replacing the real Git implementation.
+      const ctx = yield* InstanceState.context
+      const dir = path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(ctx.worktree))
+      yield* write(`${tmp.path}/.gitattributes`, "*.txt filter=broken\n")
+      yield* exec(tmp.path, ["git", "--git-dir", dir, "config", "filter.broken.clean", "exit 1"])
+      yield* exec(tmp.path, ["git", "--git-dir", dir, "config", "filter.broken.required", "true"])
+      yield* write(`${tmp.path}/a.txt`, "changed after baseline")
+      expect(yield* snapshot.track()).toBeUndefined()
+      yield* rm(`${tmp.path}/.gitattributes`)
+      expect(yield* snapshot.track()).toBeUndefined()
+      expect(yield* Effect.promise(() => $`git --git-dir=${dir} show ${before}:a.txt`.quiet().text())).toBe(
+        tmp.extra.aContent,
+      )
+    }),
+  ),
+  { git: true },
+  30_000,
+)
+
+it.instance(
+  "failed first reconciliation cannot be pinned by index-only recovery",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const cfg = path.join(tmp.path, ".git", "filter-config")
+    yield* write(cfg, '[filter "broken"]\nclean = exit 1\nrequired = true\n')
+    yield* write(`${tmp.path}/.gitattributes`, "*.txt filter=broken\n")
+    yield* withGitConfigGlobal(
+      cfg,
+      Effect.gen(function* () {
+        const snapshot = yield* Snapshot.Service
+        const ctx = yield* InstanceState.context
+        const dir = path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(ctx.worktree))
+        expect(yield* snapshot.track({ snapshotInitialization: "wait" })).toBeUndefined()
+        expect(yield* exists(path.join(dir, KiloSnapshotPrepare.MARKER))).toBe(true)
+        const fs = yield* FSUtil.Service
+        const git = (cmd: string[]) =>
+          Effect.promise(async () => {
+            const result = await $`git ${cmd}`.quiet().nothrow()
+            return { code: result.exitCode, text: result.stdout.toString(), stderr: result.stderr.toString() }
+          })
+        const commands: string[][] = []
+        expect(
+          yield* KiloSnapshotPrepare.resume({
+            gitdir: dir,
+            fs,
+            git: (cmd) => {
+              commands.push(cmd)
+              if (commands.length === 1) return Effect.succeed({ code: 1, text: "", stderr: "ref lookup failed" })
+              return git(cmd)
+            },
+          }),
+        ).toBe(false)
+        expect(commands).toHaveLength(1)
+        expect(yield* exists(path.join(dir, KiloSnapshotPrepare.MARKER))).toBe(true)
+        expect(yield* KiloSnapshotPrepare.resume({ gitdir: dir, fs, git })).toBe(false)
+        expect((yield* git(["--git-dir", dir, "for-each-ref", "refs/kilo/snapshots"])).text).toBe("")
+        expect(yield* readText(`${tmp.path}/a.txt`)).toBe(tmp.extra.aContent)
+      }),
+    )
+  }),
+  { git: true },
+  30_000,
+)
+
+it.instance(
+  "a blocked prepared snapshot remains untracked and preserves its seed",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    expect(yield* KiloSnapshotPrepare.run(snapshot)).toBe(true)
+    const ctx = yield* InstanceState.context
+    const dir = path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(ctx.worktree))
+    yield* write(path.join(dir, "index.lock"), "unknown writer")
+    expect(yield* snapshot.track()).toBeUndefined()
+    expect(yield* exists(path.join(dir, "index"))).toBe(true)
+    expect(yield* readText(path.join(dir, "index.lock"))).toBe("unknown writer")
+    expect(yield* readText(`${tmp.path}/a.txt`)).toBe(tmp.extra.aContent)
+    expect(yield* Effect.promise(() => $`git --git-dir=${dir} for-each-ref refs/kilo/snapshots`.quiet().text())).toBe(
+      "",
+    )
+  }),
+  { git: true },
+  30_000,
+)
+// kilocode_change end
 
 it.instance(
   "tracks deleted files correctly",
