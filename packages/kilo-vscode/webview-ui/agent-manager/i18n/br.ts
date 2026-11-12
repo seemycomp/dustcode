@@ -1,4 +1,36 @@
 export const dict = {
+  "agentManager.transfer.move": "Mover conversa",
+  "agentManager.transfer.copy": "Copiar conversa",
+  "agentManager.transfer.copyMenu": "Copiar para worktree",
+  "agentManager.transfer.moveTitle": "Mover conversa para worktree",
+  "agentManager.transfer.copyTitle": "Copiar conversa para worktree",
+  "agentManager.transfer.moveDescription":
+    "Mova esta conversa e seu limite atual de desfazer. Os arquivos de origem permanecem intactos.",
+  "agentManager.transfer.copyDescription":
+    "Crie uma cópia independente da conversa atual. A origem permanece inalterada.",
+  "agentManager.transfer.destination": "Worktree de destino",
+  "agentManager.transfer.new": "Novo worktree...",
+  "agentManager.transfer.existing": "Worktree existente...",
+  "agentManager.transfer.create": "Criar worktree",
+  "agentManager.transfer.branch": "Nome da branch (opcional)",
+  "agentManager.transfer.head": "HEAD de origem: {{head}}",
+  "agentManager.transfer.search": "Buscar worktrees por branch ou caminho",
+  "agentManager.transfer.empty": "Não há worktrees existentes elegíveis disponíveis.",
+  "agentManager.transfer.noMatches": "Nenhum worktree correspondente. Escolha Novo worktree para criar um destino.",
+  "agentManager.transfer.files": "Copiar alterações dos arquivos selecionados",
+  "agentManager.transfer.fileNotice":
+    "Alterações do worktree atual, não necessariamente feitas por este chat. Nada é selecionado por padrão.",
+  "agentManager.transfer.chatOnly": "Somente o chat. Nenhum arquivo será copiado.",
+  "agentManager.transfer.selected":
+    "{{count}} arquivos selecionados serão aplicados como alterações fora da área de preparação.",
+  "agentManager.transfer.baseline":
+    "O estado anterior de desfazer e do diff acumulado não será aplicado ao worktree de destino.",
+  "agentManager.transfer.review": "Revisar transferência",
+  "agentManager.transfer.retry": "Tentar transferência novamente",
+  "agentManager.transfer.choose": "Escolher outro destino",
+  "agentManager.transfer.chat": "Transferir somente o chat",
+  "agentManager.transfer.back": "Voltar",
+  "agentManager.transfer.cancel": "Cancelar",
   "agentManager.history.title": "Histórico de conversas",
   "agentManager.history.toggle": "Alternar histórico de conversas de {{context}}",
   "agentManager.history.label": "Histórico de conversas de {{context}}",

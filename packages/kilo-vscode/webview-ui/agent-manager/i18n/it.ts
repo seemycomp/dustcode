@@ -1,4 +1,36 @@
 export const dict = {
+  "agentManager.transfer.move": "Sposta conversazione",
+  "agentManager.transfer.copy": "Copia conversazione",
+  "agentManager.transfer.copyMenu": "Copia in un worktree",
+  "agentManager.transfer.moveTitle": "Sposta conversazione in un worktree",
+  "agentManager.transfer.copyTitle": "Copia conversazione in un worktree",
+  "agentManager.transfer.moveDescription":
+    "Sposta questa conversazione e il suo limite attuale di annullamento. I file di origine restano intatti.",
+  "agentManager.transfer.copyDescription":
+    "Crea una copia indipendente della conversazione attuale. L'originale resta invariato.",
+  "agentManager.transfer.destination": "Worktree di destinazione",
+  "agentManager.transfer.new": "Nuovo worktree...",
+  "agentManager.transfer.existing": "Worktree esistente...",
+  "agentManager.transfer.create": "Crea worktree",
+  "agentManager.transfer.branch": "Nome del branch (facoltativo)",
+  "agentManager.transfer.head": "HEAD di origine: {{head}}",
+  "agentManager.transfer.search": "Cerca worktree per branch o percorso",
+  "agentManager.transfer.empty": "Non sono disponibili worktree esistenti idonei.",
+  "agentManager.transfer.noMatches":
+    "Nessun worktree corrispondente. Scegli Nuovo worktree per creare una destinazione.",
+  "agentManager.transfer.files": "Copia le modifiche dei file selezionati",
+  "agentManager.transfer.fileNotice":
+    "Modifiche del worktree attuale, non necessariamente apportate da questa chat. Nessun file è selezionato per impostazione predefinita.",
+  "agentManager.transfer.chatOnly": "Solo chat. Nessun file verrà copiato.",
+  "agentManager.transfer.selected": "I {{count}} file selezionati verranno applicati come modifiche non in staging.",
+  "agentManager.transfer.baseline":
+    "Il vecchio stato di annullamento e delle differenze cumulative non si applicherà al worktree di destinazione.",
+  "agentManager.transfer.review": "Rivedi trasferimento",
+  "agentManager.transfer.retry": "Riprova trasferimento",
+  "agentManager.transfer.choose": "Scegli un'altra destinazione",
+  "agentManager.transfer.chat": "Trasferisci solo la chat",
+  "agentManager.transfer.back": "Indietro",
+  "agentManager.transfer.cancel": "Annulla",
   "agentManager.history.title": "Cronologia chat",
   "agentManager.history.toggle": "Mostra o nascondi la cronologia di {{context}}",
   "agentManager.history.label": "Cronologia chat di {{context}}",

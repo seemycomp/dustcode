@@ -1,4 +1,36 @@
 export const dict = {
+  "agentManager.transfer.move": "Gesprek verplaatsen",
+  "agentManager.transfer.copy": "Gesprek kopiëren",
+  "agentManager.transfer.copyMenu": "Naar worktree kopiëren",
+  "agentManager.transfer.moveTitle": "Gesprek naar worktree verplaatsen",
+  "agentManager.transfer.copyTitle": "Gesprek naar worktree kopiëren",
+  "agentManager.transfer.moveDescription":
+    "Verplaats dit gesprek en de huidige grens voor ongedaan maken. De bronbestanden blijven ongewijzigd.",
+  "agentManager.transfer.copyDescription":
+    "Maak een onafhankelijke kopie van het huidige gesprek. De bron blijft ongewijzigd.",
+  "agentManager.transfer.destination": "Doelworktree",
+  "agentManager.transfer.new": "Nieuwe worktree...",
+  "agentManager.transfer.existing": "Bestaande worktree...",
+  "agentManager.transfer.create": "Worktree maken",
+  "agentManager.transfer.branch": "Branchnaam (optioneel)",
+  "agentManager.transfer.head": "Bron-HEAD: {{head}}",
+  "agentManager.transfer.search": "Worktrees zoeken op branch of pad",
+  "agentManager.transfer.empty": "Er zijn geen geschikte bestaande worktrees beschikbaar.",
+  "agentManager.transfer.noMatches": "Geen overeenkomende worktrees. Kies Nieuwe worktree om een bestemming te maken.",
+  "agentManager.transfer.files": "Geselecteerde bestandswijzigingen kopiëren",
+  "agentManager.transfer.fileNotice":
+    "Wijzigingen in de huidige worktree, niet noodzakelijk wijzigingen uit deze chat. Standaard is niets geselecteerd.",
+  "agentManager.transfer.chatOnly": "Alleen chat. Er worden geen bestanden gekopieerd.",
+  "agentManager.transfer.selected":
+    "{{count}} geselecteerde bestanden worden toegepast als niet-gestagede wijzigingen.",
+  "agentManager.transfer.baseline":
+    "De oude status voor ongedaan maken en cumulatieve verschillen geldt niet voor de doelworktree.",
+  "agentManager.transfer.review": "Overdracht controleren",
+  "agentManager.transfer.retry": "Overdracht opnieuw proberen",
+  "agentManager.transfer.choose": "Andere bestemming kiezen",
+  "agentManager.transfer.chat": "Alleen chat overdragen",
+  "agentManager.transfer.back": "Terug",
+  "agentManager.transfer.cancel": "Annuleren",
   "agentManager.history.title": "Chatgeschiedenis",
   "agentManager.history.toggle": "Chatgeschiedenis voor {{context}} tonen of verbergen",
   "agentManager.history.label": "Chatgeschiedenis voor {{context}}",

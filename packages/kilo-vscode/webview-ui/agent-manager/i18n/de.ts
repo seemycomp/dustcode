@@ -1,4 +1,36 @@
 export const dict = {
+  "agentManager.transfer.move": "Unterhaltung verschieben",
+  "agentManager.transfer.copy": "Unterhaltung kopieren",
+  "agentManager.transfer.copyMenu": "In Worktree kopieren",
+  "agentManager.transfer.moveTitle": "Unterhaltung in Worktree verschieben",
+  "agentManager.transfer.copyTitle": "Unterhaltung in Worktree kopieren",
+  "agentManager.transfer.moveDescription":
+    "Diese Unterhaltung samt aktueller Rückgängig-Grenze verschieben. Die Quelldateien bleiben unverändert.",
+  "agentManager.transfer.copyDescription":
+    "Eine unabhängige Kopie der aktuellen Unterhaltung erstellen. Die Quelle bleibt unverändert.",
+  "agentManager.transfer.destination": "Ziel-Worktree",
+  "agentManager.transfer.new": "Neuer Worktree...",
+  "agentManager.transfer.existing": "Vorhandener Worktree...",
+  "agentManager.transfer.create": "Worktree erstellen",
+  "agentManager.transfer.branch": "Branchname (optional)",
+  "agentManager.transfer.head": "Quell-HEAD: {{head}}",
+  "agentManager.transfer.search": "Worktrees nach Branch oder Pfad suchen",
+  "agentManager.transfer.empty": "Es sind keine geeigneten vorhandenen Worktrees verfügbar.",
+  "agentManager.transfer.noMatches": "Keine passenden Worktrees. Wähle Neuer Worktree, um ein Ziel zu erstellen.",
+  "agentManager.transfer.files": "Ausgewählte Dateiänderungen kopieren",
+  "agentManager.transfer.fileNotice":
+    "Aktuelle Worktree-Änderungen, nicht unbedingt Änderungen aus diesem Chat. Standardmäßig ist nichts ausgewählt.",
+  "agentManager.transfer.chatOnly": "Nur Chat. Es werden keine Dateien kopiert.",
+  "agentManager.transfer.selected":
+    "{{count}} ausgewählte Dateien werden als nicht bereitgestellte Änderungen angewendet.",
+  "agentManager.transfer.baseline":
+    "Der alte Rückgängig- und kumulative Diff-Zustand gilt nicht für den Ziel-Worktree.",
+  "agentManager.transfer.review": "Übertragung prüfen",
+  "agentManager.transfer.retry": "Übertragung wiederholen",
+  "agentManager.transfer.choose": "Anderes Ziel wählen",
+  "agentManager.transfer.chat": "Nur Chat übertragen",
+  "agentManager.transfer.back": "Zurück",
+  "agentManager.transfer.cancel": "Abbrechen",
   "agentManager.history.title": "Chatverlauf",
   "agentManager.history.toggle": "Chatverlauf für {{context}} ein- oder ausblenden",
   "agentManager.history.label": "Chatverlauf für {{context}}",

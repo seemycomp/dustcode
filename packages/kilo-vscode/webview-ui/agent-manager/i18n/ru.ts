@@ -1,4 +1,36 @@
 export const dict = {
+  "agentManager.transfer.move": "Переместить разговор",
+  "agentManager.transfer.copy": "Копировать разговор",
+  "agentManager.transfer.copyMenu": "Копировать в worktree",
+  "agentManager.transfer.moveTitle": "Переместить разговор в worktree",
+  "agentManager.transfer.copyTitle": "Копировать разговор в worktree",
+  "agentManager.transfer.moveDescription":
+    "Переместите этот разговор и его текущую границу отмены. Исходные файлы останутся без изменений.",
+  "agentManager.transfer.copyDescription":
+    "Создайте независимую копию текущего разговора. Источник останется без изменений.",
+  "agentManager.transfer.destination": "Целевой worktree",
+  "agentManager.transfer.new": "Новый worktree...",
+  "agentManager.transfer.existing": "Существующий worktree...",
+  "agentManager.transfer.create": "Создать worktree",
+  "agentManager.transfer.branch": "Имя ветки (необязательно)",
+  "agentManager.transfer.head": "Исходный HEAD: {{head}}",
+  "agentManager.transfer.search": "Поиск worktree по ветке или пути",
+  "agentManager.transfer.empty": "Нет доступных существующих worktree, подходящих для переноса.",
+  "agentManager.transfer.noMatches":
+    "Подходящие worktree не найдены. Выберите «Новый worktree», чтобы создать целевой worktree.",
+  "agentManager.transfer.files": "Копировать изменения выбранных файлов",
+  "agentManager.transfer.fileNotice":
+    "Текущие изменения в worktree, не обязательно внесённые в этом чате. По умолчанию ничего не выбрано.",
+  "agentManager.transfer.chatOnly": "Только чат. Файлы не будут скопированы.",
+  "agentManager.transfer.selected": "Выбранные файлы ({{count}}) будут применены как неиндексированные изменения.",
+  "agentManager.transfer.baseline":
+    "Прежнее состояние отмены и накопленных различий не будет применяться к целевому worktree.",
+  "agentManager.transfer.review": "Проверить перенос",
+  "agentManager.transfer.retry": "Повторить перенос",
+  "agentManager.transfer.choose": "Выбрать другое назначение",
+  "agentManager.transfer.chat": "Перенести только чат",
+  "agentManager.transfer.back": "Назад",
+  "agentManager.transfer.cancel": "Отмена",
   "agentManager.history.title": "История чатов",
   "agentManager.history.toggle": "Показать или скрыть историю для {{context}}",
   "agentManager.history.label": "История чатов для {{context}}",
