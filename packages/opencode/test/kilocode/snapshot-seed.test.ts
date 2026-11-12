@@ -14,6 +14,7 @@ import { Instance } from "../../src/kilocode/instance"
 import { Filesystem } from "../../src/util/filesystem"
 import { KiloSnapshotMaterialize } from "../../src/kilocode/snapshot/materialize"
 import { KiloSnapshotSeed } from "../../src/kilocode/snapshot/seed"
+import { KiloSnapshotPrepare } from "../../src/kilocode/snapshot/prepare"
 import { disposeAllInstances, provideInstance, testInstanceStoreLayer, tmpdir } from "../fixture/fixture"
 
 const fwd = (...parts: string[]) => path.join(...parts).replaceAll("\\", "/")
@@ -329,7 +330,7 @@ test(
   { timeout: 35_000 },
 )
 
-test("interrupted seed removes borrowed state after source gc", async () => {
+test("interrupted initialization protects borrowed state before rolling it back after source gc", async () => {
   await using source = await tmpdir({
     git: true,
     init: async (dir) => {
@@ -340,7 +341,6 @@ test("interrupted seed removes borrowed state after source gc", async () => {
   })
   await using root = await tmpdir()
   const gitdir = path.join(root.path, "snapshot.git")
-  await $`git init --bare ${gitdir}`.quiet()
   const index = (await $`git rev-parse --path-format=absolute --git-path index`.cwd(source.path).text()).trim()
   const original = await fs.readFile(index)
   const ref = KiloSnapshotMaterialize.ref(gitdir)
@@ -377,7 +377,7 @@ test("interrupted seed removes borrowed state after source gc", async () => {
         if (read) return Deferred.succeed(reached, undefined).pipe(Effect.andThen(Effect.never))
         return raw(cmd, opts)
       }
-      const fiber = yield* KiloSnapshotSeed.seed({
+      const fiber = yield* KiloSnapshotPrepare.initialize({
         dir: source.path,
         worktree: source.path,
         gitdir,
@@ -386,6 +386,11 @@ test("interrupted seed removes borrowed state after source gc", async () => {
         fs: fsys,
       }).pipe(Effect.forkChild)
       yield* Deferred.await(reached)
+
+      expect(yield* Effect.promise(() => fs.readFile(path.join(gitdir, KiloSnapshotPrepare.MARKER), "utf8"))).toBe(
+        "pending\n",
+      )
+      expect(yield* KiloSnapshotPrepare.resume({ gitdir, git: raw, fs: fsys })).toBe(false)
 
       const hash = yield* Effect.promise(() => $`git --git-dir=${source.path}/.git rev-parse ${ref}`.text())
       yield* Effect.promise(() => $`git gc --prune=now`.cwd(source.path).quiet())
@@ -407,7 +412,7 @@ test("interrupted seed removes borrowed state after source gc", async () => {
   ]) {
     await expect(fs.access(file)).rejects.toThrow()
   }
-})
+}, 30_000)
 
 test("regular seed keeps source stat data except for rewritten or flagged entries", async () => {
   const init = async (dir: string) => {

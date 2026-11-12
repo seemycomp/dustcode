@@ -5,8 +5,12 @@ import { KiloSnapshotMaterialize } from "./materialize"
 import type { Snapshot } from "@/snapshot"
 
 export namespace KiloSnapshotPrepare {
-  /** Marks a repository whose seed finished before any snapshot was tracked. */
+  /** Prevents index-only recovery until a successful snapshot has been pinned. */
   export const MARKER = "kilo-prepared"
+
+  // Called under the snapshot locks before borrowing objects or reconciling an index.
+  export const pending = (input: Pick<KiloSnapshotSeed.Input, "fs" | "gitdir">) =>
+    input.fs.writeFileString(path.join(input.gitdir, MARKER), "pending\n").pipe(Effect.orDie)
 
   // Snapshot repositories hash worktree bytes as-is and never run a filesystem monitor.
   // The index and untracked-cache settings keep per-step scans cheap in large worktrees.
@@ -68,10 +72,8 @@ export namespace KiloSnapshotPrepare {
       const config = path.join(input.gitdir, "config")
       const current = yield* input.fs.readFileString(config).pipe(Effect.catch(() => Effect.succeed("")))
       yield* input.fs.writeFileString(config, current.trimEnd() + "\n" + CONFIG).pipe(Effect.orDie)
+      yield* pending(input)
       const seeded: KiloSnapshotSeed.Output = yield* KiloSnapshotSeed.seed(input)
-      // A first reconciliation can fail after seeding. Keep index-only recovery
-      // from pinning that partial index until a real snapshot has been recorded.
-      yield* input.fs.writeFileString(path.join(input.gitdir, MARKER), "").pipe(Effect.orDie)
       yield* Effect.logInfo("initialized")
       return seeded
     }).pipe(

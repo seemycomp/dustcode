@@ -258,6 +258,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
 
           // kilocode_change start
           const add = Effect.fnUntraced(function* (opts?: { env?: Record<string, string>; root?: boolean }) {
+            yield* KiloSnapshotPrepare.pending({ fs, gitdir: state.gitdir })
             yield* KiloSnapshotLock.preflight(fs, state.gitdir)
             // kilocode_change end
             yield* sync()

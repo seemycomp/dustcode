@@ -3,7 +3,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import { existsSync } from "fs"
 import path from "path"
-import { Effect, Layer } from "effect"
+import { Effect, Exit, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppProcess } from "@opencode-ai/core/process"
@@ -11,6 +11,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Hash } from "@opencode-ai/core/util/hash"
+import { Profile } from "@opencode-ai/core/kilocode/profile"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { createKiloClient } from "@kilocode/sdk/v2"
 import { Snapshot } from "../../src/snapshot"
@@ -46,7 +47,7 @@ test("removing a prepared worktree that was never tracked releases only its seed
       await $`git commit -m baseline`.cwd(dir).quiet()
     },
   })
-  const dir = path.join(source.path, ".kilo", "worktrees", "abandoned")
+  const dir = path.join(source.path, Profile.dir(), "worktrees", "abandoned")
   await $`git worktree add --detach ${dir} HEAD`.cwd(source.path).quiet()
   const ctx = await reloadTestInstance({ directory: dir })
   const gitdir = path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(ctx.worktree))
@@ -195,6 +196,128 @@ const it = testEffect(
     Layer.provideMerge(AppNodeBuilder.build(CrossSpawnSpawner.node)),
   ),
 )
+
+for (const mode of ["filter", "lock", "patch", "marker"] as const)
+  it.effect(
+    `failed legacy ${mode} reconciliation retains pending protection across a fresh service`,
+    () =>
+      Effect.gen(function* () {
+        yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            const previous = process.env.KILO_SNAPSHOT_MATERIALIZE_IDLE_MS
+            process.env.KILO_SNAPSHOT_MATERIALIZE_IDLE_MS = "1000"
+            return previous
+          }),
+          (previous) =>
+            Effect.sync(() => {
+              if (previous === undefined) delete process.env.KILO_SNAPSHOT_MATERIALIZE_IDLE_MS
+              if (previous !== undefined) process.env.KILO_SNAPSHOT_MATERIALIZE_IDLE_MS = previous
+            }),
+        )
+        const dir = yield* tmpdirScoped({
+          git: true,
+          init: (dir) =>
+            Effect.promise(async () => {
+              await Bun.write(path.join(dir, "note.txt"), "committed\n")
+              await $`git add .`.cwd(dir).quiet()
+              await $`git commit -m baseline`.cwd(dir).quiet()
+            }),
+        })
+        yield* Effect.gen(function* () {
+          const snapshot = yield* Snapshot.Service
+          const ctx = yield* InstanceState.context
+          const gitdir = path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(ctx.worktree))
+          const fsys = yield* FSUtil.Service
+          const git = (cmd: string[], opts?: { cwd?: string; env?: Record<string, string>; stdin?: string }) =>
+            Effect.promise(async () => {
+              const result = await $`git ${cmd}`
+                .cwd(opts?.cwd ?? dir)
+                .env({ ...process.env, ...opts?.env })
+                .quiet()
+                .nothrow()
+              return { code: result.exitCode, text: result.stdout.toString(), stderr: result.stderr.toString() }
+            })
+          yield* KiloSnapshotPrepare.initialize({ dir, worktree: dir, gitdir, fs: fsys, git, limit: 2 * 1024 * 1024 })
+          // Model an untouched legacy repository, before pending protection existed.
+          const marker = path.join(gitdir, KiloSnapshotPrepare.MARKER)
+          yield* Effect.promise(() => fs.rm(marker))
+          const index = yield* Effect.promise(() => fs.readFile(path.join(dir, ".git", "index")))
+          const original = yield* Effect.promise(() => fs.readFile(path.join(gitdir, "index")))
+          const alt = path.join(gitdir, "objects", "info", "alternates")
+          const borrowed = yield* Effect.promise(() => fs.readFile(alt))
+          const pin = KiloSnapshotMaterialize.ref(gitdir)
+          const seed = (yield* git(["rev-parse", pin])).text.trim()
+          expect(seed).not.toBe("")
+          // The test clock holds startup materialization until this failure is protected.
+          yield* snapshot.init()
+          expect(existsSync(marker)).toBe(false)
+          yield* Effect.promise(() => Bun.write(path.join(dir, "note.txt"), "unreconciled\n"))
+          if (mode === "filter" || mode === "patch") {
+            yield* Effect.promise(() => Bun.write(path.join(dir, ".gitattributes"), "*.txt filter=broken\n"))
+            yield* git(["--git-dir", gitdir, "config", "filter.broken.clean", "exit 1"])
+            yield* git(["--git-dir", gitdir, "config", "filter.broken.required", "true"])
+          }
+          const lock = path.join(gitdir, "index.lock")
+          if (mode === "lock") yield* Effect.promise(() => Bun.write(lock, "unknown writer"))
+          if (mode === "marker") yield* Effect.promise(() => fs.mkdir(marker))
+          const trace = path.join(dir, ".git", "capture-trace.json")
+          yield* Effect.acquireUseRelease(
+            Effect.sync(() => {
+              const previous = process.env.GIT_TRACE2_EVENT
+              process.env.GIT_TRACE2_EVENT = trace
+              return previous
+            }),
+            () =>
+              Effect.gen(function* () {
+                if (mode === "patch") {
+                  expect(yield* snapshot.patch(seed)).toEqual({ hash: seed, files: [] })
+                  return
+                }
+                if (mode === "marker") {
+                  expect(Exit.isFailure(yield* snapshot.diff(seed).pipe(Effect.exit))).toBe(true)
+                  return
+                }
+                expect(yield* snapshot.track({ snapshotInitialization: "wait" })).toBeUndefined()
+              }),
+            (previous) =>
+              Effect.sync(() => {
+                if (previous === undefined) delete process.env.GIT_TRACE2_EVENT
+                if (previous !== undefined) process.env.GIT_TRACE2_EVENT = previous
+              }),
+          )
+          if (mode === "lock" || mode === "marker") {
+            const events = existsSync(trace) ? yield* Effect.promise(() => Bun.file(trace).text()) : ""
+            expect(events).not.toMatch(/"(?:diff-files|ls-files|add|write-tree)"/)
+            expect(yield* Effect.promise(() => fs.readFile(path.join(gitdir, "index")))).toEqual(original)
+          }
+          if (mode === "lock") expect(yield* Effect.promise(() => fs.readFile(lock, "utf8"))).toBe("unknown writer")
+          expect(yield* KiloSnapshotPrepare.resume({ gitdir, fs: fsys, git })).toBe(false)
+          expect(existsSync(marker)).toBe(true)
+          expect((yield* git(["--git-dir", gitdir, "for-each-ref", "refs/kilo/snapshots"])).text).toBe("")
+          expect(yield* Effect.promise(() => fs.readFile(alt))).toEqual(borrowed)
+          expect((yield* git(["rev-parse", pin])).text.trim()).toBe(seed)
+          expect(yield* Effect.promise(() => fs.readFile(path.join(dir, ".git", "index")))).toEqual(index)
+          yield* Effect.gen(function* () {
+            const fresh = yield* Snapshot.Service
+            yield* fresh.init()
+            expect(yield* fresh.track({ snapshotInitialization: "wait" })).toBeUndefined()
+            expect(yield* KiloSnapshotPrepare.resume({ gitdir, fs: fsys, git })).toBe(false)
+          }).pipe(Effect.provide(Layer.fresh(AppNodeBuilder.build(Snapshot.node))))
+          if (mode === "filter" || mode === "patch")
+            yield* Effect.promise(() => fs.rm(path.join(dir, ".gitattributes")))
+          if (mode === "lock") yield* Effect.promise(() => fs.rm(lock))
+          if (mode === "marker") yield* Effect.promise(() => fs.rmdir(marker))
+          const hash = yield* Snapshot.Service.use((fresh) => fresh.track({ snapshotInitialization: "wait" })).pipe(
+            Effect.provide(Layer.fresh(AppNodeBuilder.build(Snapshot.node))),
+          )
+          expect(hash).toBeTruthy()
+          expect((yield* git(["--git-dir", gitdir, "show", `${hash}:note.txt`])).text).toBe("unreconciled\n")
+          expect(yield* KiloSnapshotPrepare.resume({ gitdir, fs: fsys, git })).toBe(true)
+          expect(existsSync(marker)).toBe(false)
+        }).pipe(provideInstance(dir), Effect.provide(AppNodeBuilder.build(FSUtil.node)))
+      }),
+    60_000,
+  )
 
 it.live(
   "does not prepare a worktree that no longer exists",
