@@ -89,7 +89,12 @@ const testAllow: Record<string, { count: number; reason: string }> = {
   },
   "server/experimental-session-list.test.ts": { count: 2, reason: "Kilo session list integration test" },
   "kilocode/server/cloud-session-import.test.ts": { count: 5, reason: "full app cloud import transaction integration" },
-  "kilocode/server/listener-runtime.test.ts": { count: 4, reason: "listener and AppRuntime integration test" },
+  "kilocode/server/listener-runtime.test.ts": {
+    count: 5,
+    reason:
+      "listener integration tests resolve admission before serving health, and create, run and cancel " +
+      "sessions through the same AppRuntime as the listener so abort observes the shared runners",
+  },
   "kilocode/wakeup/wakeup-cron.test.ts": {
     count: 13,
     reason:
