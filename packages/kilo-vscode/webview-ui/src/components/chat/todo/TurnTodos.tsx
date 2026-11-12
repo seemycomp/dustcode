@@ -20,19 +20,14 @@ export function TurnTodos(props: { id: string; floating?: boolean }) {
   })
   createEffect(() => {
     if (!props.floating || !open()) return
-    const dismiss = (event: PointerEvent) => {
-      if (event.target instanceof Node && !root?.contains(event.target)) setOpen(false)
-    }
     const escape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return
       event.preventDefault()
       setOpen(false)
       root?.querySelector<HTMLButtonElement>("button")?.focus()
     }
-    document.addEventListener("pointerdown", dismiss)
     document.addEventListener("keydown", escape)
     onCleanup(() => {
-      document.removeEventListener("pointerdown", dismiss)
       document.removeEventListener("keydown", escape)
     })
   })

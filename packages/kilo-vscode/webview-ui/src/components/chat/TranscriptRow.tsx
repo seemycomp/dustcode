@@ -1,6 +1,7 @@
 import { type Component, Show, createEffect } from "solid-js"
 import { DiffChanges } from "@kilocode/kilo-ui/diff-changes"
 import { Icon } from "@kilocode/kilo-ui/icon"
+import { Button } from "@kilocode/kilo-ui/button"
 import { useI18n } from "@kilocode/kilo-ui/context/i18n"
 import type { AssistantMessage as SDKAssistantMessage, Part as SDKPart, SnapshotFileDiff } from "@kilocode/sdk/v2"
 import type { TranscriptRow } from "../../context/transcript-rows"
@@ -13,6 +14,7 @@ import { useFeedback } from "../../context/feedback"
 import { AssistantMessage } from "./AssistantMessage"
 import { ErrorDisplay, type ErrorDisplayProps } from "./ErrorDisplay"
 import { VscodeUserMessage } from "./VscodeUserMessage"
+import { formatDuration } from "../../utils/message-time"
 
 interface TranscriptRowViewProps {
   row: TranscriptRow
@@ -28,6 +30,8 @@ interface TranscriptRowViewProps {
   interactivePrompts?: boolean
   queuedDisabled?: boolean
   editDisabled?: boolean
+  expanded?: boolean
+  onDisclosure?: (open: boolean) => void
 }
 
 export const TranscriptRowView: Component<TranscriptRowViewProps> = (props) => {
@@ -45,7 +49,7 @@ export const TranscriptRowView: Component<TranscriptRowViewProps> = (props) => {
   return (
     <div
       class="vscode-session-turn"
-      data-message={props.row.message.id}
+      data-message={props.row.type === "work" ? undefined : props.row.message.id}
       data-row={props.row.type}
       data-row-key={props.row.key}
       data-row-index={props.index}
@@ -53,6 +57,22 @@ export const TranscriptRowView: Component<TranscriptRowViewProps> = (props) => {
       data-live={props.row.live ? "" : undefined}
       data-search-active={props.activeSearch ? "" : undefined}
     >
+      <Show when={props.row.type === "work" ? props.row : undefined}>
+        {(row) => (
+          <div class="turn-work">
+            <Button
+              variant="ghost"
+              size="small"
+              class="turn-work-trigger"
+              aria-expanded={props.expanded ?? false}
+              onClick={() => props.onDisclosure?.(!props.expanded)}
+            >
+              {language.t("chat.workedFor", { duration: formatDuration(row().timing.durationMs ?? 0) })}
+              <Icon name={props.expanded ? "chevron-down" : "chevron-right"} size="small" />
+            </Button>
+          </div>
+        )}
+      </Show>
       <Show when={props.row.type === "user" ? props.row : undefined}>
         {(row) => (
           <div

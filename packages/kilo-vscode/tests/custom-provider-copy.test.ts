@@ -61,12 +61,16 @@ it("copies only custom providers into an editable new-provider dialog without ch
     const page = await browser.newPage()
     await page.addInitScript(() =>
       Object.assign(window, {
-        acquireVsCodeApi: () => ({
-          postMessage: (message: unknown) =>
-            window.dispatchEvent(new CustomEvent("fixture-outgoing", { detail: message })),
-          getState: () => undefined,
-          setState: () => undefined,
-        }),
+        acquireVsCodeApi: () => {
+          const channel = new MessageChannel()
+          channel.port2.onmessage = (event) =>
+            window.dispatchEvent(new CustomEvent("fixture-outgoing", { detail: event.data }))
+          return {
+            postMessage: (message: unknown) => channel.port1.postMessage(message),
+            getState: () => undefined,
+            setState: () => undefined,
+          }
+        },
       }),
     )
     page.setDefaultTimeout(5000)
@@ -148,7 +152,14 @@ it("copies only custom providers into an editable new-provider dialog without ch
       await dialog.getByRole("textbox", { name: "Name", exact: true }).last().fill("Added Model")
       await dialog.getByRole("button", { name: "Submit", exact: true }).click()
       await check(dialog.getByRole("button", { name: "Saving...", exact: true })).toBeDisabled()
+      await check.poll(() => page.evaluate(() => document.body.dataset.saved)).toBeTruthy()
       const expired = await page.evaluate(() => JSON.parse(document.body.dataset.saved!))
+      expect(expired.config.models["model-one"]).toEqual({
+        name: "Model One",
+        reasoning: true,
+        modalities: { input: ["text", "image"], output: ["text"] },
+        variants: { high: { thinking: { type: "adaptive" }, customOption: true } },
+      })
       expect(expired.config.models["added-model"]).toMatchObject({ name: "Added Model" })
       expect(expired.apiKeyChanged).toBe(false)
       await page.clock.fastForward(30_000)
@@ -158,6 +169,9 @@ it("copies only custom providers into an editable new-provider dialog without ch
       await check(dialog.getByRole("textbox", { name: "Base URL", exact: true })).toHaveValue("https://example.com/v1")
       await check(page.getByText(/The save could not be confirmed/)).toBeVisible()
       await dialog.getByRole("button", { name: "Submit", exact: true }).click()
+      await check
+        .poll(() => page.evaluate(() => JSON.parse(document.body.dataset.saved!).requestId))
+        .not.toBe(expired.requestId)
       const retry = await page.evaluate(() => JSON.parse(document.body.dataset.saved!))
       expect(retry.requestId).not.toBe(expired.requestId)
       await page.evaluate(
@@ -188,6 +202,9 @@ it("copies only custom providers into an editable new-provider dialog without ch
       await check(dialog.getByRole("button", { name: "Submit", exact: true })).toBeEnabled()
       await check(dialog.getByRole("textbox", { name: "ID", exact: true }).last()).toHaveValue("added-model")
       await dialog.getByRole("button", { name: "Submit", exact: true }).click()
+      await check
+        .poll(() => page.evaluate(() => JSON.parse(document.body.dataset.saved!).requestId))
+        .not.toBe(retry.requestId)
       const saved = await page.evaluate(() => JSON.parse(document.body.dataset.saved!))
       await page.evaluate(
         (requestId) =>

@@ -53,6 +53,7 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "chat.workedFor": "Worked for {{duration}}",
   "chat.image.alt": "Image attachment",
   "chat.image.preview": "Preview {{name}}",
   "chat.image.copy": "Copy image",

@@ -1,3 +1,21 @@
+html[data-theme="kilo-vscode"] [data-component="tool-part-wrapper"][data-part-type="tool"][data-tool="question"] {
+  border: 1px solid color-mix(in srgb, var(--vscode-charts-green, #89d185) 45%, transparent);
+  border-radius: var(--radius-sm);
+
+  [data-component="collapsible"].tool-collapsible > [data-slot="collapsible-trigger"] {
+    box-sizing: border-box;
+    margin-inline: 0;
+    width: 100%;
+    padding: 6px 10px;
+    border-radius: inherit;
+    background-color: color-mix(in srgb, var(--vscode-charts-green, #89d185) 10%, transparent);
+
+    &:hover {
+      background-color: color-mix(in srgb, var(--vscode-charts-green, #89d185) 16%, transparent);
+    }
+  }
+}
+
 /* ============================================
    Task Tool (sub-agent, v1.0.25 style)
    tool-output scrollable container size override

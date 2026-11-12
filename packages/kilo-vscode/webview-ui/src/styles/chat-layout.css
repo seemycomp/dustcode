@@ -102,7 +102,10 @@ body.vscode-high-contrast-light .chat-view {
   max-height: 45%;
   overflow: auto;
   overscroll-behavior: contain;
-  padding: 8px calc(var(--chat-gutter, 16px) + 4px) 0;
+  padding-block: 8px 0;
+  /* Match the row inset and the transcript's half-scrollbar centering offset. */
+  padding-inline: calc(var(--chat-gutter, 16px) + 4px + var(--chat-scrollbar-width, 10px) / 2)
+    calc(var(--chat-gutter, 16px) + 4px - var(--chat-scrollbar-width, 10px) / 2);
   background: var(--background-base, var(--vscode-editor-background));
 }
 
@@ -513,11 +516,27 @@ body.vscode-high-contrast-light .chat-view {
   width: 100%;
 }
 
+.turn-work-trigger[data-component="button"] {
+  height: auto;
+  min-height: 24px;
+  padding: 2px 0;
+  gap: 6px;
+  color: var(--text-weak);
+  font-size: var(--kilo-font-size-12);
+  font-weight: 400;
+}
+
 .vscode-session-turn-assistant {
   display: flex;
   flex-direction: column;
   gap: 6px;
   width: 100%;
+}
+
+.chat-view [data-component="user-message"] [data-slot="user-message-copy-wrapper"],
+.chat-view [data-component="text-part"] [data-slot="assistant-copy-wrapper"] {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 [data-component="assistant-throughput"],
@@ -541,6 +560,7 @@ body.vscode-high-contrast-light .chat-view {
 
 /* Treat every chat host as a readable document. User messages, assistant
    prose, tool calls, diffs, and the composer all share one centered lane. */
+.turn-work,
 .chat-view .vscode-session-turn-user,
 .chat-view .vscode-session-turn-diffs,
 .chat-view .error-card,

@@ -28,6 +28,7 @@ Paths are relative to `packages/kilo-vscode/`. Expand these prefixes before usin
 | User bubble, clamp, Undo, editing | `C/VscodeUserMessage.tsx`; `C/UserMessageEditor.tsx` | `C/user-message.css`; `C/user-message-editor.css` |
 | To-Dos attached to a user prompt | `C/todo/TurnTodos.tsx` | `S/todo-dock.css`; `C/VscodeUserMessage.tsx` |
 | Assistant text, thinking, tool cards | `C/AssistantMessage.tsx`; `C/VscodeToolOverrides.tsx` | `S/tool-overrides.css`; `K/components/message-part.tsx` |
+| Completed work disclosure and final answer | `W/context/transcript-rows.ts`; `C/TranscriptRow.tsx` | `C/MessageList.tsx`; `S/chat-layout.css` |
 | Prompt history navigation rail | `C/PromptRail.tsx`; `C/prompt-rail.ts` | `S/prompt-rail.css`; `C/MessageList.tsx` |
 | Search input, highlights, jump to result | `C/TranscriptSearch.tsx`; `W/context/transcript-search.tsx` | `C/TaskHeader.tsx`; `C/transcript-search-highlight.ts`; `S/task-header.css` |
 | Composer editor, send/queue/stop, attachments | `C/PromptInput.tsx` | `S/prompt-input.css`; `W/utils/prompt-drafts.ts`; `W/utils/draft-store.ts` |
@@ -89,6 +90,7 @@ App / AgentManagerApp
 
 - Keep transcript scrolling in `.message-list`, not the outer webview. Preserve `min-height: 0` through flex ancestors.
 - `MessageList` coordinates Virtua history, live-row handoff, per-session restoration, auto-follow, sticky prompt, and rail. For geometry bugs, inspect its measurement logic before changing row markup.
+- Completed turns with intermediate work show a collapsed duration disclosure above the final answer. `transcript-rows.ts` separates process rows from the conclusion; `MessageList` filters the rendered projection while retaining canonical rows for search and timeline navigation, which reveal hidden targets before scrolling.
 - Sticky prompts are absolute siblings of the scroller. Pinning, expanding their To-Dos, or opening toolbar overlays must not change transcript scroll height or the bottom anchor.
 - Readable width/gutters belong to `.chat-view` in `S/chat-layout.css`: `--chat-readable-width`, `--chat-gutter`, `--chat-scrollbar-width`, `--prompt-gutter`. Avoid independent hardcoded widths on individual rows.
 - User-message To-Dos are turn-scoped: `TurnTodos` reads the last completed `todowrite` in that user's turn, not the latest session-wide list. Transcript copies initially expand inline; sticky copies initially collapse and expand with absolute positioning, not a portal.

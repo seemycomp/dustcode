@@ -21,11 +21,23 @@
 }
 
 .turn-todos {
+  --todo-color: var(--vscode-editorWarning-foreground, #cca700);
   position: relative;
   min-width: 0;
   padding: 2px 4px 4px;
+  border: 1px solid color-mix(in srgb, var(--todo-color) 45%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--todo-color) 14%, transparent);
   color: var(--text-base);
   font-size: var(--kilo-font-size-12);
+}
+
+.vscode-user-message [data-slot="user-message-card"] > .turn-todos {
+  border-radius: 0 0 11px 11px;
+}
+
+.vscode-user-message [data-slot="user-message-card"] > .turn-todos[data-floating][data-open] {
+  border-radius: 0;
 }
 
 .turn-todos-toggle[data-component="button"] {
@@ -37,11 +49,16 @@
   justify-content: flex-start;
   gap: 6px;
   padding: 2px 6px;
-  color: var(--vscode-textLink-foreground, var(--text-base));
+  color: var(--todo-color);
   font-size: inherit;
   font-weight: normal;
   text-align: start;
   white-space: normal;
+}
+
+.turn-todos-toggle[data-component="button"][data-variant="ghost"]:hover:not(:disabled):not([aria-disabled="true"]) {
+  background-color: color-mix(in srgb, var(--todo-color) 14%, transparent);
+  color: var(--todo-color);
 }
 
 .turn-todos-list {

@@ -56,6 +56,8 @@ import {
   type MessageTurn,
 } from "../../context/session-queue"
 import {
+  disclosedRows,
+  disclosure,
   partitionRows,
   retainTurn,
   transcriptRows,
@@ -217,6 +219,21 @@ export const MessageList: Component<MessageListProps> = (props) => {
   })
 
   const search = useTranscriptSearch()
+  const [expanded, setExpanded] = createSignal<ReadonlySet<string>>(new Set())
+  const expand = (row: TranscriptRow, open: boolean) => {
+    const key = disclosure(row)
+    setExpanded((prev) => {
+      if (prev.has(key) === open) return prev
+      const next = new Set(prev)
+      if (open) next.add(key)
+      if (!open) next.delete(key)
+      return next
+    })
+  }
+  const reveal = (key: string) => {
+    const row = lookup().get(key)
+    if (row?.type === "assistant" && row.process) expand(row, true)
+  }
 
   function rangeAt(ranges: SearchTextRange[], index: number): SearchTextRange | undefined {
     return ranges.find((r) => index >= r.start && index < r.end)
@@ -457,6 +474,7 @@ export const MessageList: Component<MessageListProps> = (props) => {
         const match = m[idx]
         if (!match) return
         autoScroll.pause()
+        reveal(match.key)
         pendingCenter = true
         const el = scrollEl()
         const mounted = el?.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(match.key)}"]`)
@@ -498,7 +516,7 @@ export const MessageList: Component<MessageListProps> = (props) => {
   })
   // Virtua continues to own completed history and stable live chunks, but not
   // the growing assistant suffix whose measurements would produce visible jumps.
-  const partition = createMemo(() => partitionRows(rows(), direct()))
+  const partition = createMemo(() => partitionRows(disclosedRows(rows(), expanded()), direct()))
   const tail = createMemo(() => partition().direct.map((row) => row.key))
   const lookup = createMemo(() => new Map(rows().map((row) => [row.key, row])))
   const keys = createMemo(() => partition().virtual.map((row) => row.key))
@@ -539,6 +557,7 @@ export const MessageList: Component<MessageListProps> = (props) => {
   // the transcript scroller. Pauses auto-follow first so the jump isn't snapped back.
   const jump = (key: string) => {
     autoScroll.pause()
+    reveal(key)
     const index = indexes().get(key)
     if (index !== undefined) {
       const handle = virtualizer()
@@ -922,6 +941,11 @@ export const MessageList: Component<MessageListProps> = (props) => {
           activeSearch={activeKey() === key}
           readonly={props.readonly}
           interactivePrompts={props.interactivePrompts}
+          expanded={expanded().has(disclosure(row()))}
+          onDisclosure={(open) => {
+            autoScroll.pause()
+            expand(row(), open)
+          }}
         />
       ) as HTMLElement
     })

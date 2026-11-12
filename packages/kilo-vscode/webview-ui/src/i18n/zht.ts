@@ -55,6 +55,7 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "chat.workedFor": "已工作 {{duration}}",
   "review.changes": "變更區域",
   "review.sessionFiles": "{{count}} 個已變更的檔案",
   "review.undoAll": "全部復原",

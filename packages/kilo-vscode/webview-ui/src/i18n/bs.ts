@@ -54,6 +54,7 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "chat.workedFor": "Radio {{duration}}",
   "review.changes": "Izmijenjeni dijelovi",
   "review.sessionFiles": "{{count}} izmijenjenih datoteka",
   "review.undoAll": "Poništi sve",

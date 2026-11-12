@@ -55,6 +55,7 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "chat.workedFor": "{{duration}} 作業しました",
   "review.changes": "変更箇所",
   "review.sessionFiles": "{{count}} 個の変更されたファイル",
   "review.undoAll": "すべて元に戻す",

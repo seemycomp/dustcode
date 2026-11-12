@@ -349,6 +349,19 @@ html[data-theme="kilo-vscode"]
   color: var(--am-activity-color);
 }
 
+.am-local-item-active
+  .am-local-status[data-activity]:not([data-activity="idle"], [data-activity="busy"], [data-activity="retry"])
+  [data-component="icon"],
+.am-worktree-item-active
+  .am-wt-icon[data-activity]:not([data-activity="idle"], [data-activity="busy"], [data-activity="retry"])
+  [data-component="icon"],
+.am-history-row[aria-current="page"]
+  .am-history-status:not([data-activity="busy"], [data-activity="retry"])
+  [data-component="icon"] {
+  background-color: var(--background-base);
+  border-radius: 50%;
+}
+
 .am-local-text {
   display: flex;
   flex-direction: column;

@@ -54,6 +54,7 @@ export const anacondaDesktopDict = {
 } as const
 
 export const dict = {
+  "chat.workedFor": "A travaillé pendant {{duration}}",
   "review.changes": "Zones modifiées",
   "review.sessionFiles": "{{count}} fichiers modifiés",
   "review.undoAll": "Tout annuler",

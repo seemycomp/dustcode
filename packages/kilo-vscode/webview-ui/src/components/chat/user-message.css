@@ -84,10 +84,6 @@ body.vscode-high-contrast-light .vscode-user-message [data-slot="user-message-ca
   -webkit-line-clamp: unset;
 }
 
-.message-list-sticky-prompt [data-slot="user-message-copy-wrapper"] {
-  display: none;
-}
-
 .message-list-sticky-prompt .vscode-user-message [data-component="user-message"] {
   flex-direction: column;
   align-items: stretch;

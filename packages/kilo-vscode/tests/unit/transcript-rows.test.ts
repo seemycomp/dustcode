@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import { messageTurns } from "../../webview-ui/src/context/session-queue"
-import { partitionRows, retainTurn, transcriptRows } from "../../webview-ui/src/context/transcript-rows"
+import { disclosedRows, partitionRows, retainTurn, transcriptRows } from "../../webview-ui/src/context/transcript-rows"
 import type { Message, Part } from "../../webview-ui/src/types/messages"
 
 const base = {
@@ -29,6 +29,143 @@ const tool = (id: string, messageID: string): Part => ({
 const lookup = (values: Record<string, Part[]>) => (id: string) => values[id] ?? []
 
 describe("transcriptRows", () => {
+  it("keeps trailing tools inside work and all final text outside, across messages and chunks", () => {
+    const turns = messageTurns([
+      user("u1"),
+      assistant("a1", "u1"),
+      assistant("a2", "u1", { finish: "stop", time: { created: 2, completed: 10 } }),
+    ])
+    for (const size of [1, 8]) {
+      const rows = transcriptRows(
+        turns,
+        lookup({
+          a1: [tool("before", "a1"), part("answer1", "a1"), part("answer2", "a1"), tool("after", "a1")],
+          a2: [tool("last", "a2")],
+        }),
+        { size },
+      )
+      expect(
+        disclosedRows(rows, new Set()).flatMap((row) =>
+          row.type === "assistant" ? row.parts.map((part) => part.id) : [],
+        ),
+      ).toEqual(["answer1", "answer2"])
+      expect(
+        rows
+          .filter((row) => row.type === "assistant" && row.process)
+          .flatMap((row) => row.parts.map((part) => part.id)),
+      ).toEqual(["before", "after", "last"])
+    }
+  })
+
+  it("leaves partially reverted work visible without promoting commentary to a final answer", () => {
+    const u1 = user("message_1")
+    const a1 = assistant("message_2", "message_1", { finish: "stop", time: { created: 2, completed: 10 } })
+    const revert = { messageID: "message_2", partID: "next" }
+    const rows = transcriptRows(
+      messageTurns([u1, a1], revert),
+      lookup({
+        message_2: [
+          tool("first", "message_2"),
+          part("commentary", "message_2"),
+          tool("next", "message_2"),
+          part("final", "message_2"),
+        ],
+      }),
+      { revert },
+    )
+    expect(rows.some((row) => row.type === "work")).toBe(false)
+    expect(disclosedRows(rows, new Set())).toEqual(rows)
+  })
+
+  it("does not create a work disclosure for reasoning hidden by the renderer", () => {
+    const turns = messageTurns([
+      user("u1"),
+      assistant("a1", "u1", { finish: "stop", time: { created: 2, completed: 10 } }),
+    ])
+    const rows = transcriptRows(
+      turns,
+      lookup({
+        a1: [{ id: "redacted", messageID: "a1", type: "reasoning", text: "[REDACTED]" }, part("answer", "a1")],
+      }),
+    )
+    expect(rows.some((row) => row.type === "work")).toBe(false)
+  })
+
+  it("does not create an empty work disclosure for todos summarized on the user prompt", () => {
+    const turns = messageTurns([
+      user("u1"),
+      assistant("a1", "u1", { finish: "stop", time: { created: 2, completed: 10 } }),
+    ])
+    const rows = transcriptRows(
+      turns,
+      lookup({
+        a1: [
+          {
+            ...tool("todos", "a1"),
+            tool: "todowrite",
+            state: { status: "completed", input: { todos: [] }, output: "" },
+          },
+          part("answer", "a1"),
+        ],
+      }),
+    )
+    expect(rows.some((row) => row.type === "work")).toBe(false)
+  })
+
+  it("groups completed work separately from the final answer, even within one chunk", () => {
+    const turns = messageTurns([
+      user("u1", { time: { created: 1_000 } }),
+      assistant("a1", "u1", { finish: "stop", time: { created: 1_500, completed: 5_000 } }),
+    ])
+    const rows = transcriptRows(
+      turns,
+      lookup({ a1: [part("progress", "a1"), tool("edit", "a1"), part("answer", "a1")] }),
+    )
+    expect(rows.map((row) => row.type)).toEqual(["work", "assistant", "assistant"])
+    expect(rows[0]).toMatchObject({ timing: { durationMs: 4_000 } })
+    expect(rows[1]).toMatchObject({ process: true, parts: [{ id: "progress" }, { id: "edit" }] })
+    expect(rows[2]).toMatchObject({ process: false, copy: "answer", parts: [{ id: "answer" }] })
+    expect(disclosedRows(rows, new Set()).map((row) => row.type)).toEqual(["work", "assistant"])
+    expect(disclosedRows(rows, new Set(["session:u1"]))).toEqual(rows)
+    expect(disclosedRows(rows, new Set(["another-session:u1"]))).toHaveLength(2)
+  })
+
+  it("keeps all text in the final response outside the preceding work", () => {
+    const turns = messageTurns([
+      user("u1"),
+      assistant("a1", "u1", { finish: "tool-calls" }),
+      assistant("a2", "u1", { finish: "stop", time: { created: 2, completed: 10 } }),
+    ])
+    const rows = transcriptRows(
+      turns,
+      lookup({
+        a1: [part("progress", "a1"), tool("edit", "a1")],
+        a2: [part("answer1", "a2"), part("answer2", "a2")],
+      }),
+      { size: 1 },
+    )
+    expect(
+      rows.filter((row) => row.type === "assistant" && !row.process).flatMap((row) => row.parts.map((part) => part.id)),
+    ).toEqual(["answer1", "answer2"])
+    expect(rows.filter((row) => row.type === "assistant" && row.process)).toHaveLength(2)
+  })
+
+  it("does not collapse live, failed, interrupted, partial, or answer-only turns", () => {
+    for (const opts of [{ live: new Set(["u1"]) }, {}, { partial: true }]) {
+      for (const error of [undefined, { name: "ProviderError" }, { name: "MessageAbortedError" }]) {
+        const msg = assistant("a1", "u1", { finish: "stop", error, time: { created: 2, completed: 10 } })
+        const turns = messageTurns(opts.partial ? [msg] : [user("u1"), msg])
+        const rows = transcriptRows(turns, lookup({ a1: [tool("edit", "a1"), part("answer", "a1")] }), opts)
+        if (opts.live || opts.partial || error) expect(rows.some((row) => row.type === "work")).toBe(false)
+      }
+    }
+    const rows = transcriptRows(
+      messageTurns([user("u1"), assistant("a1", "u1", { finish: "stop", time: { created: 2, completed: 10 } })]),
+      lookup({ a1: [part("answer", "a1")] }),
+    )
+    expect(rows.map((row) => row.type)).toEqual(["assistant"])
+  })
+
   it("preserves turn order across user, bounded assistant, diff, and error rows", () => {
     const u1 = user("u1", { summary: { diffs: [{ file: "a.ts" }] } })
     const a1 = assistant("a1", "u1")
@@ -326,8 +463,11 @@ describe("transcriptRows", () => {
     const assistants = rows.filter((row) => row.type === "assistant")
 
     expect(assistants).toHaveLength(2)
-    expect(assistants[0]?.timing).toEqual({ completedAt: 3_500, durationMs: 2_500 })
-    expect(assistants[1]?.timing).toBeUndefined()
+    expect(assistants.find((row) => row.parts.some((part) => part.id === "p1"))?.timing).toEqual({
+      completedAt: 3_500,
+      durationMs: 2_500,
+    })
+    expect(assistants.find((row) => row.parts.some((part) => part.id === "t2"))?.timing).toBeUndefined()
   })
 
   it("keeps timing on the copy row when a later assistant message has no visible parts", () => {

@@ -58,6 +58,7 @@ export const anacondaDesktopDict = {
 type Keys = keyof typeof en
 
 export const dict = {
+  "chat.workedFor": "{{duration}} 동안 작업함",
   "review.changes": "변경된 영역",
   "review.sessionFiles": "변경된 파일 {{count}}개",
   "review.undoAll": "모두 실행 취소",

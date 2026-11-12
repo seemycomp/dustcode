@@ -8,7 +8,7 @@ import { Spinner } from "@kilocode/kilo-ui/spinner"
 import { TextField } from "@kilocode/kilo-ui/text-field"
 import { showToast } from "@kilocode/kilo-ui/toast"
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
-import { createStore, reconcile } from "solid-js/store"
+import { createStore, reconcile, unwrap } from "solid-js/store"
 import { useConfig } from "../../context/config"
 import { useLanguage } from "../../context/language"
 import { useProvider } from "../../context/provider"
@@ -536,7 +536,7 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
       {
         type: "saveCustomProvider",
         providerID: result.providerID,
-        config: result.config,
+        config: unwrap(result.config),
         apiKey: apiTouched() ? result.key : undefined,
         apiKeyChanged: apiTouched(),
       },

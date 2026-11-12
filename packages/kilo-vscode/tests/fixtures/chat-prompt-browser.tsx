@@ -16,6 +16,9 @@ import { ContextUsagePanel } from "../../webview-ui/src/components/chat/ContextU
 import { LocalTabsProvider } from "../../webview-ui/src/context/local-tabs"
 import { SessionTabStrip } from "../../webview-ui/src/components/chat/SessionTabStrip"
 import { getVSCodeAPI } from "../../webview-ui/src/context/vscode"
+import { ActivityIcon } from "../../webview-ui/src/components/shared/ActivityIcon"
+import type { Activity } from "../../webview-ui/src/utils/session-activity"
+import "../../webview-ui/agent-manager/agent-manager.css"
 
 applyKiloTheme("kilo-vscode", applyVscodeTheme("dark-modern"))
 const sid = "prompt-browser"
@@ -166,7 +169,49 @@ if (location.search.includes("updates")) {
   })
 }
 
+if (location.search.includes("disclosure")) {
+  for (const i of [29, 30]) {
+    const msg = messages.find((msg) => msg.id === `assistant-${i}`)!
+    if (i === 29) msg.time = { created: 2_950, completed: 6_900 }
+    parts[msg.id] = [
+      { id: `progress-${i}`, messageID: msg.id, type: "text", text: `Intermediate progress ${i}` },
+      { id: `thinking-${i}`, messageID: msg.id, type: "reasoning", text: "Inspect the file before editing it." },
+      {
+        id: `edit-${i}`,
+        messageID: msg.id,
+        type: "tool",
+        tool: "bash",
+        callID: `call-${i}`,
+        state: { status: "completed", input: { command: "echo version 1.0" }, output: "version 1.0" },
+      },
+      { id: `answer-${i}`, messageID: msg.id, type: "text", text: `Final conclusion ${i}` },
+    ]
+  }
+}
+
 function App() {
+  if (location.search.includes("activity")) {
+    const states: Activity[] = ["idle", "busy", "retry", "waiting", "error", "done", "scheduled"]
+    return states.map((state) => (
+      <div data-testid={`activity-${state}`}>
+        <div class="am-local-item am-local-item-active">
+          <span class="am-local-status" data-activity={state}>
+            <ActivityIcon state={state} />
+          </span>
+        </div>
+        <div class="am-worktree-item am-worktree-item-active">
+          <span class="am-wt-icon" data-activity={state}>
+            <ActivityIcon state={state} />
+          </span>
+        </div>
+        <div class="am-history-row" aria-current="page">
+          <span class="am-history-status am-local-status" data-activity={state}>
+            <ActivityIcon state={state} />
+          </span>
+        </div>
+      </div>
+    ))
+  }
   const [revision, refresh] = createSignal(0)
   const [work, update] = createSignal({
     type: "busy" as SessionStatus,
@@ -178,13 +223,21 @@ function App() {
   const timing = { active: 2000, since: Date.now() }
   const change = (event: Event) => {
     const next = (event as CustomEvent<Partial<ReturnType<typeof work>>>).detail
+    if (location.search.includes("disclosure") && next.type === "idle") {
+      const index = messages.findIndex((msg) => msg.id === "assistant-30")
+      messages[index] = { ...messages.at(index)!, finish: "stop", time: { created: 3_050, completed: 7_000 } }
+      refresh((value) => value + 1)
+    }
     update((prev) => ({ ...prev, ...next }))
   }
   window.addEventListener("fixtureStatus", change)
   onCleanup(() => window.removeEventListener("fixtureStatus", change))
   const session = {
     ...mockSessionValue({ id: sid, status: "busy" }),
-    messages: () => messages,
+    messages: () => {
+      revision()
+      return [...messages]
+    },
     visibleMessages: () => messages,
     contextUsage: () => ({ tokens: 25533, percentage: 13 }),
     status: () => (working ? work().type : location.search.includes("composer") ? "idle" : "busy"),
@@ -252,6 +305,9 @@ function App() {
           </button>
         </Show>
         <div class="chat-view" style={{ height: "100vh" }}>
+          <Show when={location.search.includes("disclosure")}>
+            <TaskHeader />
+          </Show>
           <Show
             when={location.search.includes("composer")}
             fallback={<MessageList blocked={working && work().blocked} />}

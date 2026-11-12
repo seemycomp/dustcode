@@ -33,6 +33,14 @@ export interface TranscriptAssistantRow extends TranscriptMeta {
   parts: Part[]
   copy?: string
   timing?: TurnTiming
+  process?: boolean
+}
+
+export interface TranscriptWorkRow extends TranscriptMeta {
+  type: "work"
+  key: string
+  message: Message
+  timing: TurnTiming
 }
 
 export interface TranscriptDiffRow extends TranscriptMeta {
@@ -49,7 +57,12 @@ export interface TranscriptErrorRow extends TranscriptMeta {
   error: NonNullable<Message["error"]>
 }
 
-export type TranscriptRow = TranscriptUserRow | TranscriptAssistantRow | TranscriptDiffRow | TranscriptErrorRow
+export type TranscriptRow =
+  | TranscriptUserRow
+  | TranscriptAssistantRow
+  | TranscriptDiffRow
+  | TranscriptErrorRow
+  | TranscriptWorkRow
 
 export interface TranscriptOptions {
   size?: number
@@ -98,6 +111,16 @@ function sameTiming(a?: TurnTiming, b?: TurnTiming) {
   return a?.completedAt === b?.completedAt && a?.durationMs === b?.durationMs
 }
 
+function sameAssistant(a: TranscriptAssistantRow, b: TranscriptAssistantRow) {
+  return (
+    a.message === b.message &&
+    same(a.parts, b.parts) &&
+    a.copy === b.copy &&
+    a.process === b.process &&
+    sameTiming(a.timing, b.timing)
+  )
+}
+
 function equal(a: TranscriptRow, b: TranscriptRow) {
   if (a.type !== b.type || !meta(a, b)) return false
   if (a.type === "user" && b.type === "user") {
@@ -106,8 +129,9 @@ function equal(a: TranscriptRow, b: TranscriptRow) {
     )
   }
   if (a.type === "assistant" && b.type === "assistant") {
-    return a.message === b.message && same(a.parts, b.parts) && a.copy === b.copy && sameTiming(a.timing, b.timing)
+    return sameAssistant(a, b)
   }
+  if (a.type === "work" && b.type === "work") return a.message === b.message && sameTiming(a.timing, b.timing)
   if (a.type === "diff" && b.type === "diff") {
     return a.message === b.message && same(a.diffs, b.diffs)
   }
@@ -130,8 +154,9 @@ function diffs(msg: Message) {
  * (not-yet-parented) turns whose synthetic user message reuses an assistant
  * timestamp.
  */
-function turnTiming(turn: MessageTurn) {
+function turnTiming(turn: MessageTurn, revert?: RevertBoundary) {
   if (turn.partial) return undefined
+  if (turn.assistant.some((msg) => revert?.partID && msg.id === revert.messageID)) return undefined
   const last = turn.assistant.at(-1)
   if (!last?.finish || last.finish === "tool-calls" || last.finish === "unknown") return undefined
   const end = last.time?.completed
@@ -179,6 +204,63 @@ function copy(messages: Message[], getParts: (id: string) => Part[], live: boole
   return undefined
 }
 
+function conclusion(
+  turn: MessageTurn,
+  parts: (id: string) => Part[],
+  copied: string | undefined,
+  timing: TurnTiming | undefined,
+  live: boolean,
+) {
+  if (live || !timing || !copied || turn.assistant.some((msg) => msg.error)) return undefined
+  const index = turn.assistant.findIndex((msg) => parts(msg.id).some((part) => part.id === copied))
+  const msg = turn.assistant.at(index)
+  if (!msg) return undefined
+  const visible = parts(msg.id)
+  const end = visible.findIndex((part) => part.id === copied)
+  const boundary = visible.slice(0, end).findLastIndex((part) => part.type === "tool" || part.type === "reasoning") + 1
+  const start = visible
+    .slice(boundary, end + 1)
+    .find((part) => part.type === "text" && !part.synthetic && part.text.trim())
+  if (!start) return undefined
+  const content = (part: Part) => {
+    if (part.type === "tool") {
+      return !(
+        part.tool === "todowrite" &&
+        part.state.status === "completed" &&
+        Array.isArray(part.state.metadata?.todos ?? part.state.input.todos)
+      )
+    }
+    if (part.type === "reasoning") return !!part.text.replace("[REDACTED]", "").trim()
+    return part.type === "text" && !part.synthetic && !!part.text.trim()
+  }
+  const prefix = visible.indexOf(start)
+  const work = turn.assistant.some((msg, i) =>
+    i === index ? visible.some((part, j) => (j < prefix || j > end) && content(part)) : parts(msg.id).some(content),
+  )
+  return work ? start.id : undefined
+}
+
+function chunks(parts: Part[], size: number, final: string | undefined, copied: string | undefined) {
+  const boundary = final === undefined ? -1 : parts.findIndex((part) => part.id === final)
+  const finish = boundary < 0 ? -1 : parts.findIndex((part) => part.id === copied) + 1
+  const result: Part[][] = []
+  for (let start = 0; start < parts.length; ) {
+    const limit = boundary > start ? boundary : finish > start ? finish : parts.length
+    const end = Math.min(start + size, limit)
+    result.push(parts.slice(start, end))
+    start = end
+  }
+  return result
+}
+
+export function disclosure(row: TranscriptRow) {
+  return `${row.message.sessionID}:${row.turn}`
+}
+
+export function disclosedRows(rows: TranscriptRow[], expanded: ReadonlySet<string>) {
+  return rows.filter((row) => row.type !== "assistant" || !row.process || expanded.has(disclosure(row)))
+}
+
 export function transcriptRows(
   turns: MessageTurn[],
   getParts: (id: string) => Part[],
@@ -198,6 +280,8 @@ export function transcriptRows(
       live: opts.live?.has(turn.id) === true,
     }
     const copied = copy(turn.assistant, parts, meta.live)
+    const timing = turnTiming(turn, opts.revert)
+    const final = conclusion(turn, parts, copied, timing, meta.live)
     const user = turn.partial ? [] : parts(turn.user.id)
 
     if (!turn.partial && userContent(user)) {
@@ -212,36 +296,41 @@ export function transcriptRows(
       })
     }
 
+    if (final) rows.push({ ...meta, type: "work", key: `${turn.id}:work`, message: turn.user, timing: timing! })
+    let process = !!final
     const assistant: TranscriptAssistantRow[] = []
     for (const msg of turn.assistant) {
       const visible = parts(msg.id)
       if (visible.length === 0) {
-        rows.push({
+        assistant.push({
           ...meta,
           type: "assistant",
           key: `${turn.id}:assistant:${msg.id}:empty`,
           message: msg,
           parts: visible,
           copy: copied,
+          process,
         })
         continue
       }
-      for (let start = 0; start < visible.length; start += size) {
-        const chunk = visible.slice(start, start + size)
+      for (const chunk of chunks(visible, size, final, copied)) {
+        if (chunk.at(0)!.id === final) process = false
         const row: TranscriptAssistantRow = {
           ...meta,
           type: "assistant",
-          key: `${turn.id}:assistant:${msg.id}:${chunk[0]!.id}`,
+          key: `${turn.id}:assistant:${msg.id}:${chunk.at(0)!.id}`,
           message: msg,
           parts: chunk,
           copy: copied,
+          process,
         }
         assistant.push(row)
-        rows.push(row)
+        if (chunk.some((part) => part.id === copied)) process = !!final
       }
     }
 
-    attachTiming(assistant, copied, turnTiming(turn))
+    attachTiming(assistant, copied, timing)
+    rows.push(...assistant.filter((row) => row.process), ...assistant.filter((row) => !row.process))
 
     const changes = diffs(turn.user)
     if (changes.length > 0) {

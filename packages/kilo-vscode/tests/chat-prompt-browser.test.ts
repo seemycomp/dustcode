@@ -73,6 +73,36 @@ it("keeps prompts in the readable lane, clamps display, and pins live and virtua
   })
   const browser = await chromium.launch({ headless: true })
   try {
+    const activity = await browser.newPage()
+    await activity.goto(`${server.url}?activity`)
+    for (const state of ["idle", "busy", "retry", "waiting", "error", "done", "scheduled"]) {
+      const icons = activity.getByTestId(`activity-${state}`).locator('[data-component="icon"]')
+      await check(icons).toHaveCount(3)
+      const selected = await icons.evaluateAll((nodes) =>
+        nodes.map((node) => ({
+          glyph: node.querySelector("use")?.getAttribute("href"),
+          background: getComputedStyle(node).backgroundColor,
+        })),
+      )
+      await activity.getByTestId(`activity-${state}`).evaluate((node) => {
+        node.querySelector(".am-local-item")!.classList.remove("am-local-item-active")
+        node.querySelector(".am-worktree-item")!.classList.remove("am-worktree-item-active")
+        node.querySelector(".am-history-row")!.removeAttribute("aria-current")
+      })
+      const idle = await icons.evaluateAll((nodes) =>
+        nodes.map((node) => ({
+          glyph: node.querySelector("use")?.getAttribute("href"),
+          background: getComputedStyle(node).backgroundColor,
+        })),
+      )
+      expect(selected.map((icon) => icon.glyph)).toEqual(idle.map((icon) => icon.glyph))
+      if (state === "busy" || state === "retry") {
+        expect(selected).toEqual(idle)
+        expect(selected.every((icon) => icon.glyph?.includes("dot-grid"))).toBe(true)
+        expect(selected.every((icon) => icon.background === "rgba(0, 0, 0, 0)")).toBe(true)
+      }
+    }
+    await activity.close()
     for (const width of [1300, 420]) {
       const page = await browser.newPage({ viewport: { width, height: 850 } })
       page.on("pageerror", (error) => console.error(error))
@@ -102,6 +132,13 @@ it("keeps prompts in the readable lane, clamps display, and pins live and virtua
       expect(thumbnail!.width).toBe(32)
       expect(thumbnail!.height).toBe(32)
       expect(Math.abs(bounds!.width - lane!.width)).toBeLessThanOrEqual(3)
+      expect(Math.abs(bounds!.x - lane!.x)).toBeLessThanOrEqual(1)
+      expect(Math.abs(bounds!.x + bounds!.width - lane!.x - lane!.width)).toBeLessThanOrEqual(1)
+      await page.mouse.move(0, 0)
+      const actions = sticky.locator('[data-slot="user-message-copy-wrapper"]')
+      await check(actions).toBeVisible()
+      await check(actions).toHaveCSS("opacity", "1")
+      await check(actions).toHaveCSS("pointer-events", "auto")
       const card = (await sticky.locator('[data-slot="user-message-card"]').boundingBox())!
       const content = (await bubble.locator('[data-slot="user-message-content"]').boundingBox())!
       expect(thumbnail!.x).toBeGreaterThan(card.x)
@@ -129,7 +166,7 @@ it("keeps prompts in the readable lane, clamps display, and pins live and virtua
       })
       expect(clamp.whitespace).toBe("nowrap")
       expect(Math.abs(clamp.height - clamp.line)).toBeLessThanOrEqual(1)
-      expect((await sticky.boundingBox())!.height).toBeLessThan(110)
+      expect((await sticky.boundingBox())!.height).toBeLessThan(140)
       expect(clamp.text).toContain("Prompt line 8")
       await bubble.click()
       const editor = sticky.locator("textarea")
@@ -169,6 +206,15 @@ it("keeps prompts in the readable lane, clamps display, and pins live and virtua
         list.scrollTop += row.getBoundingClientRect().top - list.getBoundingClientRect().top
       })
       await check(sticky).toBeHidden()
+      await page.mouse.move(0, 0)
+      await check(user.locator('[data-slot="user-message-copy-wrapper"]')).toHaveCSS("opacity", "1")
+      await check(user.locator(".user-message-revert button")).toBeDisabled()
+      const normal = (await user.locator('[data-slot="user-message-card"]').boundingBox())!
+      expect(Math.abs(normal.x - card.x)).toBeLessThanOrEqual(1)
+      expect(Math.abs(normal.width - card.width)).toBeLessThanOrEqual(1)
+      const assistant = list.locator('[data-message="assistant-15"] [data-slot="assistant-copy-wrapper"]').first()
+      await check(assistant).toHaveCSS("opacity", "1")
+      await check(assistant.locator("button").first()).toBeVisible()
       const clipped = await user.locator('[data-slot="user-message-content"]').evaluate((el) => {
         const style = getComputedStyle(el)
         return {
@@ -405,6 +451,52 @@ it("keeps prompts in the readable lane, clamps display, and pins live and virtua
     await check(panel).toBeHidden()
     await todos.close()
     for (const width of [420, 1000]) {
+      const work = await browser.newPage({ viewport: { width, height: 850 } })
+      await work.goto(`${server.url}?working&disclosure`)
+      const transcript = work.locator(".message-list")
+      const disclosure = transcript.locator('[data-row="work"][data-turn="user-30"] button')
+      await check(transcript.getByText("Intermediate progress 30", { exact: true })).toBeVisible()
+      await check(disclosure).toHaveCount(0)
+      await work.evaluate(() => window.dispatchEvent(new CustomEvent("fixtureStatus", { detail: { type: "idle" } })))
+      await check(disclosure).toHaveText("Worked for 4s")
+      await check(disclosure).toHaveAttribute("aria-expanded", "false")
+      await check(transcript.getByText("Intermediate progress 30", { exact: true })).toHaveCount(0)
+      const conclusion = transcript.getByText("Final conclusion 30", { exact: true })
+      await check(conclusion).toBeVisible()
+      await disclosure.click()
+      await check(disclosure).toHaveAttribute("aria-expanded", "true")
+      await check(transcript.getByText("Intermediate progress 30", { exact: true })).toBeVisible()
+      await check(conclusion).toBeVisible()
+      await disclosure.press("Enter")
+      await check(disclosure).toHaveAttribute("aria-expanded", "false")
+      await check(conclusion).toBeVisible()
+      // A timeline jump must reveal the hidden process, including virtual history.
+      for (const i of [29, 30]) {
+        await work.evaluate(
+          (i) =>
+            window.dispatchEvent(
+              new CustomEvent("scrollToMessage", { detail: { id: `assistant-${i}`, partId: `progress-${i}` } }),
+            ),
+          i,
+        )
+        await check(transcript.getByText(`Intermediate progress ${i}`, { exact: true })).toBeInViewport()
+        await check(transcript.locator(`[data-row="work"][data-turn="user-${i}"] button`)).toHaveAttribute(
+          "aria-expanded",
+          "true",
+        )
+      }
+      const trigger = (await disclosure.boundingBox())!
+      expect(trigger.x).toBeGreaterThanOrEqual(0)
+      expect(trigger.x + trigger.width).toBeLessThanOrEqual(width)
+      await disclosure.click()
+      await check(disclosure).toHaveAttribute("aria-expanded", "false")
+      await work.evaluate(() => window.dispatchEvent(new CustomEvent("focusTranscriptSearch")))
+      await work.locator('[data-slot="transcript-search-input"]').fill("Intermediate progress 30")
+      await check(work.locator('[data-slot="transcript-search-counter"]')).toHaveText("1 / 1")
+      await check(disclosure).toHaveAttribute("aria-expanded", "true")
+      await check(transcript.getByText("Intermediate progress 30", { exact: true })).toBeInViewport()
+      await work.close()
+
       const page = await browser.newPage({ viewport: { width, height: 850 } })
       await page.goto(`${server.url}?working`)
       const list = page.locator(".message-list")
