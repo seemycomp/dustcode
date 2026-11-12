@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises"
 import * as os from "node:os"
 import * as path from "node:path"
 import { sizes } from "../../src/agent-manager/orphans/size"
+import { links } from "../fixtures/symlink"
 
 const tempDirs: string[] = []
 
@@ -28,7 +29,17 @@ describe("orphan-size sizes", () => {
     expect(result.get(root)).toBe(30)
   })
 
-  it("never follows symlinks and skips them from the total", async () => {
+  it("never follows directory aliases and skips them from the total", async () => {
+    const root = await tempDir()
+    await fs.writeFile(path.join(root, "real.txt"), "x".repeat(100))
+    const outside = await tempDir()
+    await fs.writeFile(path.join(outside, "big.txt"), "y".repeat(5000))
+    await fs.symlink(outside, path.join(root, "alias"), process.platform === "win32" ? "junction" : "dir")
+
+    expect((await sizes([root])).get(root)).toBe(100)
+  })
+
+  it.skipIf(!links)("never follows file symlinks and skips them from the total", async () => {
     const root = await tempDir()
     await fs.writeFile(path.join(root, "real.txt"), "x".repeat(100))
     const outside = await tempDir()
@@ -48,24 +59,26 @@ describe("orphan-size sizes", () => {
     expect(result.has(missing)).toBe(false)
   })
 
-  it("omits an unreadable directory's contents without failing the whole path", async () => {
-    if (process.platform === "win32") return // chmod semantics differ; covered on posix CI runners.
-    const root = await tempDir()
-    await fs.writeFile(path.join(root, "visible.txt"), "z".repeat(10))
-    const locked = path.join(root, "locked")
-    await fs.mkdir(locked)
-    await fs.writeFile(path.join(locked, "hidden.txt"), "h".repeat(1000))
-    await fs.chmod(locked, 0)
+  it.skipIf(process.platform === "win32")(
+    "omits an unreadable directory's contents without failing the whole path",
+    async () => {
+      const root = await tempDir()
+      await fs.writeFile(path.join(root, "visible.txt"), "z".repeat(10))
+      const locked = path.join(root, "locked")
+      await fs.mkdir(locked)
+      await fs.writeFile(path.join(locked, "hidden.txt"), "h".repeat(1000))
+      await fs.chmod(locked, 0)
 
-    try {
-      const result = await sizes([root])
-      // The visible file is still counted; the unreadable subtree is silently skipped rather than
-      // making the whole path fail.
-      expect(result.get(root)).toBe(10)
-    } finally {
-      await fs.chmod(locked, 0o755)
-    }
-  })
+      try {
+        const result = await sizes([root])
+        // The visible file is still counted; the unreadable subtree is silently skipped rather than
+        // making the whole path fail.
+        expect(result.get(root)).toBe(10)
+      } finally {
+        await fs.chmod(locked, 0o755)
+      }
+    },
+  )
 
   it("computes several paths with bounded concurrency", async () => {
     const roots = await Promise.all(

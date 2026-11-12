@@ -1,22 +1,29 @@
-import { describe, expect, it } from "bun:test"
+import { afterEach, describe, expect, it } from "bun:test"
 import * as fs from "fs"
 import * as os from "os"
 import * as path from "path"
-import { simpleGit } from "simple-git"
+import { GitOps } from "../../src/agent-manager/GitOps"
 import {
   canonicalizePath,
   findTrackedBranch,
   resolveProjectRoot,
   samePath,
 } from "../../src/agent-manager/project/paths"
+import { deadline } from "../fixtures/deadline"
+
+const cleanups: Array<() => Promise<void>> = []
+
+afterEach(async () => {
+  for (const cleanup of cleanups.splice(0)) await cleanup()
+})
 
 describe("project-paths", () => {
   it("canonicalizePath resolves a symlink alias to its realpath", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pp-root-"))
     const target = fs.mkdtempSync(path.join(os.tmpdir(), "pp-target-"))
     const alias = path.join(root, "alias")
-    fs.symlinkSync(target, alias)
     try {
+      fs.symlinkSync(target, alias, process.platform === "win32" ? "junction" : "dir")
       expect(canonicalizePath(alias)).toBe(canonicalizePath(target))
       expect(canonicalizePath(alias)).not.toBe(alias)
     } finally {
@@ -36,8 +43,8 @@ describe("project-paths", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pp-tracked-"))
     const target = fs.mkdtempSync(path.join(os.tmpdir(), "pp-target-"))
     const alias = path.join(root, "alias")
-    fs.symlinkSync(target, alias)
     try {
+      fs.symlinkSync(target, alias, process.platform === "win32" ? "junction" : "dir")
       // git worktree list --porcelain realpath-resolves registration, so the
       // tracked key is the realpath, not the lexical alias a session was
       // registered with.
@@ -54,8 +61,8 @@ describe("project-paths", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pp-lexical-"))
     const target = fs.mkdtempSync(path.join(os.tmpdir(), "pp-lexical-target-"))
     const alias = path.join(root, "alias")
-    fs.symlinkSync(target, alias)
     try {
+      fs.symlinkSync(target, alias, process.platform === "win32" ? "junction" : "dir")
       // A map keyed by the lexical alias (as older code paths produced) must
       // still match a probe path that canonicalizes to the same realpath.
       const tracked = new Map<string, string>([[alias, "branch-a"]])
@@ -135,37 +142,54 @@ describe("project-paths", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pp-git-"))
     const root = path.join(dir, "\u76ee\u5f55 primary")
     const linked = path.join(dir, "\u76ee\u5f55 linked")
-    fs.mkdirSync(root)
-    try {
-      const git = simpleGit(root)
-      await git.init()
-      await git.raw([
-        "-c",
-        "user.name=Test",
-        "-c",
-        "user.email=test@example.com",
-        "commit",
-        "--allow-empty",
-        "-m",
-        "init",
-      ])
-      await git.raw(["worktree", "add", "-b", "linked", linked])
-      for (const checkout of [root, linked]) {
-        const subdir = path.join(checkout, "server")
-        fs.mkdirSync(subdir)
-        const result = await resolveProjectRoot(subdir, (cwd, args) => {
-          expect(args.some((arg) => arg.startsWith("--path-format"))).toBe(false)
-          return simpleGit(cwd).raw(args)
-        })
-        expect(result).toBe(canonicalizePath(root))
-      }
-      const fallback = await resolveProjectRoot(path.join(linked, "server"), (cwd, args) => {
-        if (args.includes("-z")) throw new Error("unsupported option: -z")
-        return simpleGit(cwd).raw(args)
-      })
-      expect(fallback).toBe(canonicalizePath(root))
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true })
+    const git = new GitOps({ log: () => {} })
+    const run = async (cwd: string, args: string[]) => {
+      const result = await git.execGit(args, cwd)
+      if (result.code) throw new Error(result.stderr)
+      return result.stdout
     }
-  })
+    const pending = deadline(
+      async () => {
+        fs.mkdirSync(root)
+        await run(root, ["-c", "init.templateDir=", "init"])
+        await run(root, [
+          "-c",
+          "user.name=Test",
+          "-c",
+          "user.email=test@example.com",
+          "commit",
+          "--allow-empty",
+          "-m",
+          "init",
+        ])
+        await run(root, ["worktree", "add", "-b", "linked", linked])
+        for (const checkout of [root, linked]) {
+          const subdir = path.join(checkout, "server")
+          fs.mkdirSync(subdir)
+          const result = await resolveProjectRoot(subdir, (cwd, args) => {
+            expect(args.some((arg) => arg.startsWith("--path-format"))).toBe(false)
+            return run(cwd, args)
+          })
+          expect(result).toBe(canonicalizePath(root))
+        }
+        const fallback = await resolveProjectRoot(path.join(linked, "server"), (cwd, args) => {
+          if (args.includes("-z")) throw new Error("unsupported option: -z")
+          return run(cwd, args)
+        })
+        expect(fallback).toBe(canonicalizePath(root))
+      },
+      () => git.dispose(),
+      25_000,
+    )
+    const settled = pending.then(
+      () => {},
+      () => {},
+    )
+    cleanups.push(async () => {
+      git.dispose()
+      await settled
+      fs.rmSync(dir, { recursive: true, force: true })
+    })
+    await pending
+  }, 30_000)
 })

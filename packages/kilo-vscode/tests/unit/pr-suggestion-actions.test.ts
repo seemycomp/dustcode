@@ -1,13 +1,39 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test"
+import { afterAll, afterEach, beforeEach, describe, expect, it as test, spyOn } from "bun:test"
 import * as fs from "node:fs/promises"
 import * as disk from "node:fs"
 import * as path from "node:path"
 import { tmpdir } from "node:os"
 import * as gh from "../../src/agent-manager/gh"
-import { exec } from "../../src/util/process"
+import * as proc from "../../src/util/process"
 import { PRSuggestionActions } from "../../src/agent-manager/pr/suggestion-actions"
 import type { PRReviewContext } from "../../src/agent-manager/pr/review-context"
 import type { PRReviewResult } from "../../src/shared/pr-comment-actions"
+import { links } from "../fixtures/symlink"
+import { deadline } from "../fixtures/deadline"
+
+let controller: AbortController
+const exec = proc.exec
+let execution: ReturnType<typeof spyOn<typeof proc, "exec">>
+
+// These cases own real repositories; measured Git round trips exceed Bun's 5s default.
+const owned = (run: () => Promise<void> | void) => () =>
+  deadline(
+    async () => run(),
+    () => controller.abort(),
+    25_000,
+  )
+const it = Object.assign((name: string, run: () => Promise<void> | void) => test(name, owned(run), 30_000), {
+  each:
+    <T>(values: T[]) =>
+    (name: string, run: (value: T) => Promise<void>) =>
+      test.each(values)(name, (value) => owned(() => run(value))(), 30_000),
+  skipIf: (skip: boolean) => (name: string, run: () => Promise<void>) => test.skipIf(skip)(name, owned(run), 30_000),
+})
+const restores: Array<() => void> = []
+function track<T extends { mockRestore(): void }>(spy: T) {
+  restores.push(() => spy.mockRestore())
+  return spy
+}
 
 const execute = spyOn(gh, "execGhRead")
 afterAll(() => execute.mockRestore())
@@ -37,7 +63,7 @@ describe("working-tree PR suggestions", () => {
   }
 
   async function git(...args: string[]) {
-    return (await exec("git", args, { cwd: directory })).stdout.trim()
+    return (await proc.exec("git", args, { cwd: directory })).stdout.trim()
   }
 
   async function send(fields: Record<string, unknown>) {
@@ -71,9 +97,14 @@ describe("working-tree PR suggestions", () => {
   }
 
   beforeEach(async () => {
+    controller = new AbortController()
+    execution = spyOn(proc, "exec").mockImplementation((cmd, args, opts) =>
+      exec(cmd, args, { ...opts, signal: controller.signal }),
+    )
     pending.clear()
-    directory = await fs.mkdtemp(path.join(tmpdir(), "kilo-suggestion-"))
-    await git("init", "-b", "feature")
+    directory = await fs.realpath(await fs.mkdtemp(path.join(tmpdir(), "kilo-suggestion-")))
+    await git("-c", "init.templateDir=", "init", "-b", "feature")
+    await git("config", "core.autocrlf", "false")
     await fs.writeFile(path.join(directory, "file.txt"), "first\nold\nthird\nfourth\nfifth\nlast\n")
     await fs.writeFile(path.join(directory, "other.txt"), "unrelated\n")
     await git("add", ".")
@@ -153,6 +184,11 @@ describe("working-tree PR suggestions", () => {
 
   afterEach(async () => {
     actions.dispose()
+    controller.abort()
+    // Token disposal is not settlement: queued actions still own their files and spies.
+    await (actions as unknown as { queue: Promise<void> }).queue
+    for (const restore of restores.splice(0).reverse()) restore()
+    execution.mockRestore()
     await fs.rm(directory, { recursive: true, force: true })
   })
 
@@ -192,19 +228,19 @@ describe("working-tree PR suggestions", () => {
       const entries = await fs.readdir(directory)
       const write = disk.writeSync
       const calls = { writes: 0 }
-      const writing = spyOn(disk, "writeSync")
+      const writing = track(spyOn(disk, "writeSync"))
       if (failure === "write" || failure === "zero")
         writing.mockImplementation((fd, buffer, offset, length, position) => {
           if (failure === "zero") return 0
           if (calls.writes++ === 0) return write(fd, buffer as Buffer, offset as number, 1, position as number)
           throw Object.assign(new Error("No space left"), { code: "ENOSPC" })
         })
-      const flushing = spyOn(disk, "fsyncSync")
+      const flushing = track(spyOn(disk, "fsyncSync"))
       if (failure === "flush")
         flushing.mockImplementation(() => {
           throw new Error("Flush failed")
         })
-      const renaming = spyOn(disk, "renameSync")
+      const renaming = track(spyOn(disk, "renameSync"))
       if (failure === "rename")
         renaming.mockImplementation(() => {
           throw new Error("Rename failed")
@@ -233,7 +269,7 @@ describe("working-tree PR suggestions", () => {
     const stat = await fs.stat(file)
     const entries = await fs.readdir(directory)
     const write = disk.writeSync
-    const writing = spyOn(disk, "writeSync").mockImplementation((fd, buffer, offset, length, position) => {
+    const writing = track(spyOn(disk, "writeSync")).mockImplementation((fd, buffer, offset, length, position) => {
       expect(disk.readFileSync(file, "utf8")).toBe(before)
       return write(fd, buffer as Buffer, offset as number, Math.min(length as number, 3), position as number)
     })
@@ -249,18 +285,26 @@ describe("working-tree PR suggestions", () => {
     }
   })
 
-  it("replaces the target atomically while old readers retain the original", async () => {
+  it("preserves old readers and fails closed when the OS locks atomic replacement", async () => {
     const file = path.join(directory, "file.txt")
     const value = await token()
     const before = await fs.readFile(file, "utf8")
     const reader = await fs.open(file, "r")
+    let blocked = false
     try {
-      expect((await apply(value)).success).toBe(true)
-      expect(await fs.readFile(file, "utf8")).toBe(before.replace("old", "new"))
+      const result = await apply(value)
+      // Windows may deny replacing an open file; it must never fall back to truncating it.
+      blocked = process.platform === "win32" && result.error?.startsWith("EPERM:") === true
+      if (!blocked) expect(result.error).toBeUndefined()
+      expect(result.success).toBe(!blocked)
+      expect(await fs.readFile(file, "utf8")).toBe(blocked ? before : before.replace("old", "new"))
       expect(await reader.readFile("utf8")).toBe(before)
     } finally {
       await reader.close()
     }
+    if (!blocked) return
+    expect((await apply(await token())).success).toBe(true)
+    expect(await fs.readFile(file, "utf8")).toBe(before.replace("old", "new"))
   })
 
   it.each(["source", "content", "unsaved"])("revalidates %s after preparing the replacement", async (change) => {
@@ -268,7 +312,7 @@ describe("working-tree PR suggestions", () => {
     const value = await token()
     const entries = await fs.readdir(directory)
     const flush = disk.fsyncSync
-    const flushing = spyOn(disk, "fsyncSync").mockImplementation((fd) => {
+    const flushing = track(spyOn(disk, "fsyncSync")).mockImplementation((fd) => {
       flush(fd)
       if (change === "source") source.comments.nodes[1]!.body = "```suggestion\nchanged remotely\n```"
       if (change === "content") disk.appendFileSync(file, "concurrent local edit\n")
@@ -285,47 +329,60 @@ describe("working-tree PR suggestions", () => {
     }
   })
 
-  it.each(["content", "HEAD", "source", "anchor", "branch", "route", "unsaved", "symlink", "replacement", "mode"])(
-    "rejects stale %s at apply without writing",
-    async (change) => {
-      const value = await token()
-      const file = path.join(directory, "file.txt")
-      if (change === "content") await fs.appendFile(file, "later edit\n")
-      if (change === "HEAD")
-        await git(
-          "-c",
-          "user.name=Test",
-          "-c",
-          "user.email=test@example.invalid",
-          "commit",
-          "--allow-empty",
-          "-m",
-          "new head",
-        )
-      if (change === "source") source.comments.nodes[1]!.body = "```suggestion\nchanged\n```"
-      if (change === "anchor") source.line = 3
-      if (change === "branch") await git("switch", "-c", "other")
-      if (change === "unsaved") dirty = [file]
-      if (change === "mode") await fs.chmod(file, 0o755)
-      if (change === "symlink") {
-        await fs.unlink(file)
-        await fs.symlink("other.txt", file)
-      }
-      if (change === "replacement") {
-        await fs.rename(file, path.join(directory, "saved.txt"))
-        await fs.copyFile(path.join(directory, "saved.txt"), file)
-      }
-      const before = await fs.readFile(file)
-      const result = await apply(value, change === "route" ? { projectId: "other", requestId: "wrong" } : {})
-      expect(result.success).toBe(false)
-      expect(result.projectId).toBe(change === "route" ? "other" : route.projectId)
-      expect(result.requestId).toBe(change === "route" ? "wrong" : "request")
-      expect(await fs.readFile(file)).toEqual(before)
-      expect((await apply(value)).success).toBe(false)
-    },
-  )
+  describe.each([
+    "content",
+    "HEAD",
+    "source",
+    "anchor",
+    "branch",
+    "route",
+    "unsaved",
+    "symlink",
+    "replacement",
+    "mode",
+  ])("stale %s at apply", (change) => {
+    it.skipIf((change === "symlink" && !links) || (change === "mode" && process.platform === "win32"))(
+      "rejects without writing",
+      async () => {
+        const value = await token()
+        const file = path.join(directory, "file.txt")
+        if (change === "content") await fs.appendFile(file, "later edit\n")
+        if (change === "HEAD")
+          await git(
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "new head",
+          )
+        if (change === "source") source.comments.nodes[1]!.body = "```suggestion\nchanged\n```"
+        if (change === "anchor") source.line = 3
+        if (change === "branch") await git("switch", "-c", "other")
+        if (change === "unsaved") dirty = [file]
+        if (change === "mode") await fs.chmod(file, 0o755)
+        if (change === "symlink") {
+          await fs.unlink(file)
+          await fs.symlink("other.txt", file)
+        }
+        if (change === "replacement") {
+          await fs.rename(file, path.join(directory, "saved.txt"))
+          await fs.copyFile(path.join(directory, "saved.txt"), file)
+        }
+        const before = await fs.readFile(file)
+        const result = await apply(value, change === "route" ? { projectId: "other", requestId: "wrong" } : {})
+        expect(result.success).toBe(false)
+        expect(result.projectId).toBe(change === "route" ? "other" : route.projectId)
+        expect(result.requestId).toBe(change === "route" ? "wrong" : "request")
+        expect(await fs.readFile(file)).toEqual(before)
+        expect((await apply(value)).success).toBe(false)
+      },
+    )
+  })
 
-  it.each([
+  describe.each([
     "left",
     "outdated",
     "missing",
@@ -342,34 +399,36 @@ describe("working-tree PR suggestions", () => {
     "parent",
     "unsaved",
     "head",
-  ])("rejects unsafe %s previews", async (change) => {
-    const file = path.join(directory, "file.txt")
-    if (change === "left") source.diffSide = "LEFT"
-    if (change === "outdated") source.isOutdated = true
-    if (change === "missing") source.line = null
-    if (change === "ambiguous") source.comments.nodes.push(source.comments.nodes[1]!)
-    if (change === "offset") source.comments.nodes[1]!.body = "```suggestion:-1+1\nnew\n```"
-    if (change === "nested") source.comments.nodes[1]!.body = "> ```suggestion\n> new\n> ```"
-    if (change === "changed") await fs.writeFile(file, "first\nmodified\nthird\n")
-    if (change === "shifted") await fs.writeFile(file, "inserted\nfirst\nold\nthird\n")
-    if (change === "binary") await fs.writeFile(file, Buffer.from([65, 0, 66]))
-    if (change === "oversize") await fs.writeFile(file, "a".repeat(1024 * 1024 + 1))
-    if (change === "escape") source.path = "../escape"
-    if (change === "git") source.path = ".git/config"
-    if (change === "symlink") {
-      await fs.unlink(file)
-      await fs.symlink("other.txt", file)
-    }
-    if (change === "parent") {
-      await fs.symlink(directory, path.join(directory, "alias"))
-      source.path = "alias/file.txt"
-    }
-    if (change === "unsaved") {
-      await fs.symlink(file, path.join(directory, "editor"))
-      dirty = [path.join(directory, "editor")]
-    }
-    if (change === "head") source.pullRequest.headRefOid = "a".repeat(40)
-    expect((await preview()).success).toBe(false)
+  ])("unsafe %s previews", (change) => {
+    it.skipIf((change === "symlink" || change === "unsaved") && !links)("rejects the preview", async () => {
+      const file = path.join(directory, "file.txt")
+      if (change === "left") source.diffSide = "LEFT"
+      if (change === "outdated") source.isOutdated = true
+      if (change === "missing") source.line = null
+      if (change === "ambiguous") source.comments.nodes.push(source.comments.nodes[1]!)
+      if (change === "offset") source.comments.nodes[1]!.body = "```suggestion:-1+1\nnew\n```"
+      if (change === "nested") source.comments.nodes[1]!.body = "> ```suggestion\n> new\n> ```"
+      if (change === "changed") await fs.writeFile(file, "first\nmodified\nthird\n")
+      if (change === "shifted") await fs.writeFile(file, "inserted\nfirst\nold\nthird\n")
+      if (change === "binary") await fs.writeFile(file, Buffer.from([65, 0, 66]))
+      if (change === "oversize") await fs.writeFile(file, "a".repeat(1024 * 1024 + 1))
+      if (change === "escape") source.path = "../escape"
+      if (change === "git") source.path = ".git/config"
+      if (change === "symlink") {
+        await fs.unlink(file)
+        await fs.symlink("other.txt", file)
+      }
+      if (change === "parent") {
+        await fs.symlink(directory, path.join(directory, "alias"), process.platform === "win32" ? "junction" : "dir")
+        source.path = "alias/file.txt"
+      }
+      if (change === "unsaved") {
+        await fs.symlink(file, path.join(directory, "editor"))
+        dirty = [path.join(directory, "editor")]
+      }
+      if (change === "head") source.pullRequest.headRefOid = "a".repeat(40)
+      expect((await preview()).success).toBe(false)
+    })
   })
 
   it("selects the UI top-level index and rejects offset syntax without shifting indexes", async () => {
@@ -383,12 +442,14 @@ describe("working-tree PR suggestions", () => {
   })
 
   it("treats Git path arguments literally and returns a bounded patch", async () => {
-    const file = path.join(directory, "file*.txt")
+    const name = "file[ab].txt"
+    const file = path.join(directory, name)
     const content = Array.from({ length: 10_000 }, (_, index) => `line ${index}`).join("\n") + "\n"
     await fs.writeFile(file, content)
-    await git("add", "--", "file*.txt")
+    await fs.writeFile(path.join(directory, "filea.txt"), "matching sibling\n")
+    await git("--literal-pathspecs", "add", "--", name, "filea.txt")
     await git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "literal path")
-    source.path = "file*.txt"
+    source.path = name
     source.line = 5000
     source.pullRequest.headRefOid = await git("rev-parse", "HEAD")
     const result = await preview()
@@ -397,6 +458,7 @@ describe("working-tree PR suggestions", () => {
     expect(result.preview.patch).toContain("-line 4999\n+new")
     expect((await apply(result.preview.token)).success).toBe(true)
     expect(await fs.readFile(file, "utf8")).toBe(content.replace("line 4999\n", "new\n"))
+    expect(await fs.readFile(path.join(directory, "filea.txt"), "utf8")).toBe("matching sibling\n")
     expect(await fs.readFile(path.join(directory, "file.txt"), "utf8")).toContain("\nold\n")
   })
 
@@ -499,7 +561,7 @@ describe("working-tree PR suggestions", () => {
   it("expires and disposes previews without writes", async () => {
     const value = await token()
     const now = Date.now()
-    const clock = spyOn(Date, "now").mockReturnValue(now + 120_001)
+    const clock = track(spyOn(Date, "now")).mockReturnValue(now + 120_001)
     expect((await apply(value)).success).toBe(false)
     clock.mockRestore()
     const another = await token()

@@ -1,19 +1,16 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test"
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test"
+import * as fs from "fs/promises"
 import * as path from "path"
+import { isWindowsDrivePath, normalizeLegacyPath } from "../../../src/legacy-migration/sessions/lib/path"
 
-const realpath = mock(async (input: string) => input)
-
-mock.module("fs/promises", () => ({
-  realpath,
-}))
-
-const { isWindowsDrivePath, normalizeLegacyPath } = await import("../../../src/legacy-migration/sessions/lib/path")
+let realpath: ReturnType<typeof spyOn<typeof fs, "realpath">>
 
 describe("legacy migration path", () => {
   beforeEach(() => {
-    realpath.mockReset()
-    realpath.mockImplementation(async (input: string) => input)
+    realpath = spyOn(fs, "realpath").mockImplementation(async (input) => String(input))
   })
+
+  afterEach(() => realpath.mockRestore())
 
   it("returns an empty string for empty legacy paths", async () => {
     expect(await normalizeLegacyPath("   ")).toBe("")
@@ -27,8 +24,6 @@ describe("legacy migration path", () => {
   })
 
   it("uppercases the Windows drive letter before resolving the final path", async () => {
-    realpath.mockImplementation(async (input: string) => input)
-
     const value = await normalizeLegacyPath("c:/repo/../repo/file.txt")
     const expected = path.normalize(path.resolve("c:/repo/../repo/file.txt"))
 

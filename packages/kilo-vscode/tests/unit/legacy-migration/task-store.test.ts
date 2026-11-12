@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import * as path from "node:path"
 import * as vscode from "vscode"
 import { listSessions, resolveSession, scanTaskStore } from "../../../src/legacy-migration/task-store"
 
@@ -6,7 +7,7 @@ type Fs = typeof vscode.workspace.fs
 const fs = vscode.workspace.fs as Fs
 const original = { readDirectory: fs.readDirectory, readFile: fs.readFile, stat: fs.stat }
 const dir = "/storage/kilocode.kilo-code/tasks"
-const api = (id: string) => `${dir}/${id}/api_conversation_history.json`
+const api = (id: string) => vscode.Uri.file(path.join(dir, id, "api_conversation_history.json")).fsPath
 
 describe("task store history scan", () => {
   afterEach(() => {

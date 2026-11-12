@@ -4,6 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import { Window } from "happy-dom"
 import { capture, locate } from "../../src/services/browser-automation/browser-element"
+import { links } from "../fixtures/symlink"
 
 const windows: Window[] = []
 
@@ -132,7 +133,11 @@ describe("browser element context", () => {
       await writeFile(path.join(project, "src", "Button.tsx"), "export const Button = () => {\n\n\n  return null\n}")
       await writeFile(path.join(root, "private.ts"), "export const privateValue = true")
       await writeFile(path.join(project, ".env"), "SECRET=value")
-      await symlink(path.join(root, "private.ts"), path.join(project, "src", "external.ts"))
+      await mkdir(path.join(root, "outside"))
+      await writeFile(path.join(root, "outside", "private.ts"), "export const privateValue = true")
+      const kind = process.platform === "win32" ? "junction" : "dir"
+      await symlink(path.join(root, "outside"), path.join(project, "external"), kind)
+      await symlink(path.join(project, "src"), path.join(project, "alias"), kind)
       expect(await locate(project, { file: "src/Button.tsx", line: 4, column: 2 })).toEqual({
         file: "src/Button.tsx",
         line: 4,
@@ -145,11 +150,39 @@ describe("browser element context", () => {
       })
       expect(await locate(project, { file: "src/missing.tsx" })).toBeUndefined()
       expect(await locate(project, { file: "../private.ts" })).toBeUndefined()
-      expect(await locate(project, { file: "src/external.ts" })).toBeUndefined()
+      expect(await locate(project, { file: "external/private.ts" })).toBeUndefined()
+      expect(await locate(project, { file: "alias/Button.tsx", line: 4, column: 2 })).toEqual({
+        file: "src/Button.tsx",
+        line: 4,
+        column: 2,
+      })
       expect(await locate(project, { file: ".env" })).toBeUndefined()
       expect(await locate(project, { file: "https://example.com/Button.tsx" })).toBeUndefined()
     } finally {
       await rm(root, { recursive: true, force: true })
     }
   })
+
+  test.skipIf(!links)(
+    "contains file symlinks within the owning workspace (requires file-link capability)",
+    async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "kilo-browser-source-link-"))
+      try {
+        const project = path.join(root, "project")
+        await mkdir(path.join(project, "src"), { recursive: true })
+        await writeFile(path.join(project, "src", "Button.tsx"), "export const Button = () => null")
+        await writeFile(path.join(root, "private.ts"), "export const privateValue = true")
+        await symlink(path.join(root, "private.ts"), path.join(project, "src", "external.ts"), "file")
+        await symlink(path.join(project, "src", "Button.tsx"), path.join(project, "src", "alias.tsx"), "file")
+        expect(await locate(project, { file: "src/external.ts" })).toBeUndefined()
+        expect(await locate(project, { file: "src/alias.tsx" })).toEqual({
+          file: "src/Button.tsx",
+          line: undefined,
+          column: undefined,
+        })
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    },
+  )
 })

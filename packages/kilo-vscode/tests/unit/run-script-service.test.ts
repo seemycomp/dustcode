@@ -3,6 +3,7 @@ import * as fs from "node:fs"
 import * as os from "node:os"
 import * as path from "node:path"
 import { buildRunTaskCommand, RunScriptService } from "../../src/agent-manager/run/service"
+import { links } from "../fixtures/symlink"
 
 function tmpdir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "run-script-service-test-"))
@@ -73,14 +74,14 @@ describe("RunScriptService", () => {
     expect(new RunScriptService(root).resolveScript("darwin")).toBeUndefined()
   })
 
-  it("rejects symlinks pointing outside the .kilo directory", () => {
+  it.skipIf(!links)("rejects symlinks pointing outside the .kilo directory", () => {
     const outside = path.join(root, "evil.sh")
     fs.writeFileSync(outside, "echo pwned")
     fs.symlinkSync(outside, path.join(dir, "run-script"))
     expect(new RunScriptService(root).resolveScript("darwin")).toBeUndefined()
   })
 
-  it("accepts symlinks pointing inside the .kilo directory", () => {
+  it.skipIf(!links)("accepts symlinks pointing inside the .kilo directory", () => {
     const target = path.join(dir, "real-script")
     fs.writeFileSync(target, "bun test")
     fs.symlinkSync(target, path.join(dir, "run-script"))

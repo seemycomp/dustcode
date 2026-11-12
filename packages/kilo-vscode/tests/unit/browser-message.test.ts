@@ -2,6 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import { EventEmitter } from "node:events"
 import { browserMessage, handleBrowserMessage } from "../../src/agent-manager/browser-message"
 import { createBrowserLifecycle } from "../../src/agent-manager/browser-lifecycle"
+import { canonicalizePath } from "../../src/agent-manager/project/paths"
 import type { Host } from "../../src/agent-manager/host"
 import type { ProjectContexts } from "../../src/agent-manager/project/contexts"
 import type { AgentManagerInMessage, AgentManagerOutMessage } from "../../src/agent-manager/types"
@@ -15,6 +16,7 @@ afterEach(async () => {
 
 async function fixture() {
   let attempts = 0
+  const directory = canonicalizePath("/fixture")
   const state = { trusted: true, enabled: true }
   const protocol = Object.assign(new EventEmitter(), {
     send: async (method: string, params?: Record<string, unknown>) => {
@@ -50,14 +52,11 @@ async function fixture() {
     }),
   })
   brokers.push(broker)
-  const current = await broker.open(
-    { projectId: "project", sessionId: "session", directory: "/fixture" },
-    "http://localhost:3000/",
-  )
-  const context = { id: "project", root: "/fixture", peekState: () => undefined, sessions: () => [{ id: "session" }] }
+  const current = await broker.open({ projectId: "project", sessionId: "session", directory }, "http://localhost:3000/")
+  const context = { id: "project", root: directory, peekState: () => undefined, sessions: () => [{ id: "session" }] }
   const contexts = {
     resolve: (id: string) => (id === "project" ? context : undefined),
-    byDirectory: (directory: string) => (directory === "/fixture" ? context : undefined),
+    byDirectory: (root: string) => (root === directory ? context : undefined),
     active: () => context,
   } as unknown as ProjectContexts
   const host = { isTrusted: () => state.trusted, browserAutomation: () => state.enabled } as unknown as Host

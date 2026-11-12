@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, spyOn } from "bun:test"
+import { afterEach, beforeEach, describe, expect, it as test, spyOn } from "bun:test"
 import os from "node:os"
 import path from "node:path"
 import fs from "node:fs/promises"
@@ -14,12 +14,83 @@ import { WorktreeStateManager } from "../../src/agent-manager/WorktreeStateManag
 import { GitOps } from "../../src/agent-manager/GitOps"
 import type { PRInfo } from "../../src/agent-manager/git-import"
 import { BUDGET } from "../../src/agent-manager/command-budget"
-import { simpleGit } from "simple-git"
+import * as factory from "simple-git"
+import { deadline } from "../fixtures/deadline"
+
+const original = factory.simpleGit
+const simpleGit: typeof original = (...args) => factory.simpleGit(...args)
+const managers: WorktreeManager[] = []
+const operations: Promise<unknown>[] = []
+const removals = new Set<Promise<unknown>>()
+let controller: AbortController
+let spawn: ReturnType<typeof spyOn<typeof factory, "simpleGit">>
+let removal: ReturnType<typeof spyOn<typeof fs, "rm">>
+const remove = fs.rm
+
+function owned<T extends unknown[]>(run: (...args: T) => unknown, ms: number) {
+  return (...args: T) => {
+    const pending = deadline(
+      async () => run(...args),
+      () => controller.abort(),
+      ms - 5_000,
+    )
+    operations.push(
+      pending.then(
+        () => undefined,
+        () => undefined,
+      ),
+    )
+    return pending
+  }
+}
+
+// Real creation alone measured 4.64s; multi-command integration cases need headroom.
+const integration = Object.assign(
+  (name: string, run: () => unknown, ms = 30_000) => test(name, owned(run, Math.max(ms, 30_000)), Math.max(ms, 30_000)),
+  {
+    each:
+      <T>(values: T[]) =>
+      (name: string, run: (value: T) => unknown, ms = 30_000) =>
+        test.each(values)(name, owned(run, Math.max(ms, 30_000)), Math.max(ms, 30_000)),
+    skipIf:
+      (skip: boolean) =>
+      (name: string, run: () => unknown, ms = 30_000) =>
+        test.skipIf(skip)(name, owned(run, Math.max(ms, 30_000)), Math.max(ms, 30_000)),
+  },
+)
+const it = test
+
+beforeEach(() => {
+  controller = new AbortController()
+  spawn = spyOn(factory, "simpleGit").mockImplementation((base, opts) =>
+    original(base, { ...opts, abort: controller.signal }),
+  )
+  removal = spyOn(fs, "rm").mockImplementation((...args) => {
+    const pending = remove(...args)
+    const settled = pending
+      .then(
+        () => undefined,
+        () => undefined,
+      )
+      .finally(() => removals.delete(settled))
+    removals.add(settled)
+    return pending
+  })
+})
 
 // Each test gets its own temp directory -- no shared state, safe to run in parallel.
 const tempDirs: string[] = []
 
 afterEach(async () => {
+  controller.abort()
+  await Promise.all(operations.splice(0))
+  for (const manager of managers.splice(0)) {
+    await manager.disposePool()
+    await manager.settle()
+  }
+  while (removals.size) await Promise.all([...removals])
+  removal.mockRestore()
+  spawn.mockRestore()
   await Promise.all(
     tempDirs.splice(0, tempDirs.length).map(async (dir) => {
       await fs.rm(dir, { recursive: true, force: true })
@@ -50,7 +121,9 @@ async function createTempRepo(): Promise<string> {
 
 function createManager(root: string, ops?: GitOps): WorktreeManager {
   const logs: string[] = []
-  return new WorktreeManager(root, (msg) => logs.push(msg), ops)
+  const manager = new WorktreeManager(root, (msg) => logs.push(msg), ops)
+  managers.push(manager)
+  return manager
 }
 
 // Test-only helper to verify metadata writes keep the temp worktree checkout clean.
@@ -264,6 +337,7 @@ describe("WorktreeStateManager.updateWorktreeLabel", () => {
 // ---------------------------------------------------------------------------
 
 describe("WorktreeManager.createWorktree", () => {
+  const it = integration
   it.each([
     "Feature/My_fix.v2",
     "Release_" + "a".repeat(60),
@@ -514,7 +588,13 @@ describe("WorktreeManager.createWorktree", () => {
     const result = await createManager(root).createWorktree({ branchName: "hook-failure" })
 
     expect(existsSync(result.path)).toBe(true)
-    expect((await simpleGit(root).raw(["worktree", "list", "--porcelain"])).includes(result.path)).toBe(true)
+    const listed = await simpleGit(root).raw(["worktree", "list", "--porcelain"])
+    expect(
+      listed
+        .split(/\r?\n/)
+        .filter((line) => line.startsWith("worktree "))
+        .map((line) => path.normalize(line.slice(9))),
+    ).toContain(path.normalize(result.path))
   })
 })
 
@@ -523,6 +603,7 @@ describe("WorktreeManager.createWorktree", () => {
 // ---------------------------------------------------------------------------
 
 describe("WorktreeManager.removeWorktree", () => {
+  const it = integration
   it("removes an existing worktree", async () => {
     const root = await createTempRepo()
     const mgr = createManager(root)
@@ -747,65 +828,57 @@ describe("WorktreeManager.removeWorktree", () => {
     expect(after.all).toContain(result.branch)
   })
 
-  it(
-    "returns quickly even with a dirty worktree",
-    async () => {
-      const root = await createTempRepo()
-      const mgr = createManager(root)
+  it("returns quickly even with a dirty worktree", async () => {
+    const root = await createTempRepo()
+    const mgr = createManager(root)
 
-      const result = await mgr.createWorktree({ prompt: "dirty-wt" })
+    const result = await mgr.createWorktree({ prompt: "dirty-wt" })
 
-      // Make the worktree dirty with uncommitted files
-      await fs.writeFile(path.join(result.path, "dirty.txt"), "uncommitted")
-      for (let i = 0; i < 20; i++) {
-        await fs.writeFile(path.join(result.path, `bulk-${i}.txt`), "x".repeat(1000))
-      }
+    // Make the worktree dirty with uncommitted files
+    await fs.writeFile(path.join(result.path, "dirty.txt"), "uncommitted")
+    for (let i = 0; i < 20; i++) {
+      await fs.writeFile(path.join(result.path, `bulk-${i}.txt`), "x".repeat(1000))
+    }
 
-      const start = Date.now()
-      await mgr.removeWorktree(result.path)
-      const elapsed = Date.now() - start
+    const start = Date.now()
+    await mgr.removeWorktree(result.path)
+    const elapsed = Date.now() - start
 
-      // The blocking portion (rename + prune) should complete well under 3s.
-      // Old approach with git worktree remove (non-force then force) was much slower.
-      expect(elapsed).toBeLessThan(3000)
+    // The blocking portion (rename + prune) should complete well under 3s.
+    // Old approach with git worktree remove (non-force then force) was much slower.
+    expect(elapsed).toBeLessThan(3000)
 
-      // Original path should be gone immediately
-      const exists = await fs
-        .stat(result.path)
-        .then(() => true)
-        .catch(() => false)
-      expect(exists).toBe(false)
-    },
-    { timeout: 15000 },
-  )
+    // Original path should be gone immediately
+    const exists = await fs
+      .stat(result.path)
+      .then(() => true)
+      .catch(() => false)
+    expect(exists).toBe(false)
+  }, 15_000)
 
-  it(
-    "eventual cleanup: files are fully deleted after background rm",
-    async () => {
-      const root = await createTempRepo()
-      const mgr = createManager(root)
+  it("eventual cleanup: files are fully deleted after background rm", async () => {
+    const root = await createTempRepo()
+    const mgr = createManager(root)
 
-      const result = await mgr.createWorktree({ prompt: "eventual" })
-      await fs.writeFile(path.join(result.path, "data.txt"), "content")
+    const result = await mgr.createWorktree({ prompt: "eventual" })
+    await fs.writeFile(path.join(result.path, "data.txt"), "content")
 
-      await mgr.removeWorktree(result.path)
+    await mgr.removeWorktree(result.path)
 
-      // Poll until background rm finishes (up to 5s)
-      const worktreesDir = path.join(root, ".dustcode", "worktrees")
-      const deadline = Date.now() + 5000
-      while (Date.now() < deadline) {
-        const entries = await fs.readdir(worktreesDir)
-        if (!entries.some((e) => e.startsWith(".kilo-delete-"))) break
-        await new Promise((r) => setTimeout(r, 100))
-      }
-
-      // No .kilo-delete-* temp dirs should remain
+    // Poll until background rm finishes (up to 5s)
+    const worktreesDir = path.join(root, ".dustcode", "worktrees")
+    const deadline = Date.now() + 5000
+    while (Date.now() < deadline) {
       const entries = await fs.readdir(worktreesDir)
-      const orphans = entries.filter((e) => e.startsWith(".kilo-delete-"))
-      expect(orphans).toHaveLength(0)
-    },
-    { timeout: 10000 },
-  )
+      if (!entries.some((e) => e.startsWith(".kilo-delete-"))) break
+      await new Promise((r) => setTimeout(r, 100))
+    }
+
+    // No .kilo-delete-* temp dirs should remain
+    const entries = await fs.readdir(worktreesDir)
+    const orphans = entries.filter((e) => e.startsWith(".kilo-delete-"))
+    expect(orphans).toHaveLength(0)
+  }, 10_000)
 })
 
 // ---------------------------------------------------------------------------
@@ -813,6 +886,7 @@ describe("WorktreeManager.removeWorktree", () => {
 // ---------------------------------------------------------------------------
 
 describe("WorktreeManager.discoverWorktrees orphan cleanup", () => {
+  const it = integration
   it("cleans up .kilo-delete-* dirs left by interrupted deletions", async () => {
     const root = await createTempRepo()
     const mgr = createManager(root)
@@ -847,6 +921,7 @@ describe("WorktreeManager.discoverWorktrees orphan cleanup", () => {
 // ---------------------------------------------------------------------------
 
 describe("WorktreeManager.createWorktree cleanup", () => {
+  const it = integration
   it("cleans up leftover worktree directory before re-creation", async () => {
     const root = await createTempRepo()
     const mgr = createManager(root)
@@ -884,6 +959,7 @@ describe("WorktreeManager.createWorktree cleanup", () => {
 // ---------------------------------------------------------------------------
 
 describe("WorktreeManager metadata", () => {
+  const it = integration
   it("round-trips writeMetadata / readMetadata with parentBranch", async () => {
     const root = await createTempRepo()
     const mgr = createManager(root)
@@ -939,6 +1015,7 @@ describe("WorktreeManager metadata", () => {
 // ---------------------------------------------------------------------------
 
 describe("WorktreeManager.discoverWorktrees", () => {
+  const it = integration
   it("discovers worktrees with session IDs", async () => {
     const root = await createTempRepo()
     const mgr = createManager(root)
@@ -1020,6 +1097,7 @@ describe("WorktreeManager.discoverWorktrees", () => {
 // ---------------------------------------------------------------------------
 
 describe("WorktreeManager.scanWorktrees", () => {
+  const it = integration
   it("keeps the reason a directory is not usable", async () => {
     const root = await createTempRepo()
     const mgr = createManager(root)
@@ -1057,6 +1135,7 @@ describe("WorktreeManager.scanWorktrees", () => {
 })
 
 describe("WorktreeManager.restoreWorktree", () => {
+  const it = integration
   it("recreates a deleted worktree from its branch", async () => {
     const root = await createTempRepo()
     const mgr = createManager(root)
@@ -1089,6 +1168,7 @@ describe("WorktreeManager.restoreWorktree", () => {
 })
 
 describe("WorktreeManager.createFromPR", () => {
+  const it = integration
   it("reports a timed-out gh lookup as a timeout, not as an unexplained failure", async () => {
     // The import path a user reaches by pasting a PR url ran gh on a 30s budget and classified the
     // failure from text a killed process never produces, so a hang read as "Failed to fetch PR info".
@@ -1112,6 +1192,7 @@ describe("WorktreeManager.createFromPR", () => {
 })
 
 describe("WorktreeManager.detachOrphanDirectory", () => {
+  const it = integration
   it("removes an untracked leftover directory", async () => {
     const root = await createTempRepo()
     const mgr = createManager(root)
@@ -1196,6 +1277,7 @@ describe("WorktreeManager.detachOrphanDirectory", () => {
 // ---------------------------------------------------------------------------
 
 describe("WorktreeManager.ensureGitExclude", () => {
+  const it = integration
   it("adds Agent Manager state and worktrees to .git/info/exclude", async () => {
     const root = await createTempRepo()
     const mgr = createManager(root)
@@ -1405,6 +1487,7 @@ describe("WorktreeManager.removeWorktree safety", () => {
 // ---------------------------------------------------------------------------
 
 describe("WorktreeManager.listBranches", () => {
+  const it = integration
   it("returns the current branch", async () => {
     const root = await createTempRepo()
     const mgr = createManager(root)
@@ -1445,6 +1528,7 @@ describe("WorktreeManager.listBranches", () => {
 // ---------------------------------------------------------------------------
 
 describe("WorktreeManager.checkedOutBranches", () => {
+  const it = integration
   it("includes the main branch", async () => {
     const root = await createTempRepo()
     const mgr = createManager(root)
@@ -1482,6 +1566,7 @@ describe("WorktreeManager.checkedOutBranches", () => {
 // ---------------------------------------------------------------------------
 
 describe("WorktreeManager helpers", () => {
+  const it = integration
   it("refExistsLocally verifies refs", async () => {
     const root = await createTempRepo()
     const git = simpleGit(root)
@@ -1513,6 +1598,7 @@ describe("WorktreeManager helpers", () => {
 })
 
 describe("WorktreeManager.resolveStartPoint", () => {
+  const it = integration
   it("falls back to local branch when no remote exists", async () => {
     const root = await createTempRepo()
     const git = simpleGit(root)
@@ -1589,6 +1675,7 @@ describe("WorktreeManager.resolveStartPoint", () => {
 // ---------------------------------------------------------------------------
 
 describe("WorktreeManager.resolveBaseBranch", () => {
+  const it = integration
   it("uses the shared remote default instead of stale local metadata", async () => {
     const { clone } = await createTempRepoWithOrigin()
     gitExec(["git", "-C", clone, "branch", "master"])
@@ -1644,6 +1731,7 @@ describe("WorktreeManager.resolveBaseBranch", () => {
 })
 
 describe("WorktreeManager.createWorktree advanced", () => {
+  const it = integration
   it("returns startPointSource in result", async () => {
     const root = await createTempRepo()
     const mgr = createManager(root)
@@ -1915,6 +2003,7 @@ describe("WorktreeManager.createWorktree advanced", () => {
 // ---------------------------------------------------------------------------
 
 describe("WorktreeManager git lock serialization", () => {
+  const it = integration
   it("concurrent worktree creations both succeed", async () => {
     const root = await createTempRepo()
     const mgr = createManager(root)

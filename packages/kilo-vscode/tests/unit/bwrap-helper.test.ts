@@ -21,7 +21,8 @@ afterEach(() => {
 })
 
 describe("local Bubblewrap helper", () => {
-  it("copies the configured helper to a cache outside the extension", async () => {
+  // The Linux helper cache requires POSIX ownership and executable permissions.
+  it.skipIf(process.platform !== "linux")("copies the configured helper to a cache outside the extension", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "kilo-vscode-bwrap-"))
     try {
       const source = path.join(root, "source", "bwrap")
@@ -83,7 +84,7 @@ describe("local Bubblewrap helper", () => {
     }
   })
 
-  it("rejects a symlinked or public cache", async () => {
+  it.skipIf(process.platform !== "linux")("rejects a symlinked or public cache", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "kilo-vscode-bwrap-"))
     try {
       const source = path.join(root, "source")
