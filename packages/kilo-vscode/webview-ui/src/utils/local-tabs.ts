@@ -195,9 +195,15 @@ export function tabsForLoadedSessions(
   message: { sessions: { id: string }[]; preserveSessionIds?: string[]; append?: boolean; hasMore?: boolean },
   fresh: Iterable<string>,
   pending: PendingTabFactory,
+  selected?: string,
 ): LocalTabState | undefined {
   if (!complete(message)) return undefined
-  const loaded = [...message.sessions.map((item) => item.id), ...(message.preserveSessionIds ?? []), ...fresh]
+  const loaded = [
+    ...message.sessions.map((item) => item.id),
+    ...(message.preserveSessionIds ?? []),
+    ...fresh,
+    ...(selected ? [selected] : []),
+  ]
   return reconcileTabs(state, loaded, pending)
 }
 

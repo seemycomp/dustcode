@@ -40,6 +40,15 @@ Before saying an implementation is ready, run the smallest relevant checks that 
 
 Never run root `bun test`; the root script prints `do not run tests from root` and exits with code 1. Use package-level tests instead.
 
+## Worktree Updates
+
+- Treat a request to update a worktree from its base as Git maintenance, not an implementation or repository health audit. Preserve local edits and staging state, use the requested base, and resolve only conflicts caused by the update.
+- For a clean fast-forward or conflict-free merge with no agent-authored code changes, verify the branch, merged commit ancestry, absence of unresolved conflicts, and restoration of local edits. Do not automatically run tests, lint, typechecks, builds, or package-wide guards merely because incoming base commits touched those packages. This is an exception to the implementation quality checks above; explicit user-requested checks still apply.
+- When conflict resolution changes code, run the smallest relevant checks for that resolution. Do not expand to the whole monorepo or unrelated products.
+- Do not fix pre-existing or incoming-base bugs, remove unused code, refactor, install toolchains, or change user configuration just to make an update pass checks. Report unrelated failures separately and leave unrelated files untouched.
+- Do not repeat a failing, hanging, or timed-out check without new evidence and a specific reason the next run will differ. Report the failure or timeout instead of repeatedly increasing time limits or launching overlapping suites. Required checks that fail remain failed; do not claim success or push when passing checks are a condition of pushing.
+- Keep preservation proportional: use one update-specific recovery copy and verify it before clearing edits. Avoid redundant full checkouts or repeated backup methods after preservation is verified. Never weaken preservation requirements or use the shared stash stack to save time.
+
 ## Products
 
 All products are clients of the **CLI** (`packages/opencode/`), which contains the AI agent runtime, HTTP server, and session management. Each client spawns or connects to a `kilo serve` process and communicates via HTTP + SSE using `@kilocode/sdk`.

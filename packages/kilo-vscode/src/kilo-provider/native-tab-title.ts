@@ -8,15 +8,16 @@ const icons: Record<Activity, string> = {
   idle: "",
   busy: "◔",
   retry: "◔",
-  waiting: "⚠",
+  waiting: "?",
   error: "⚠",
   done: "✓",
   scheduled: "◷",
 }
 
-export const nativeTitle = (session: Session | null, state: Activity = "idle", label?: string) => {
+export const nativeTitle = (session: Session | null, state: Activity = "idle", label?: string, context?: string) => {
   const value = session?.title?.trim()
   const title = label ?? (!value || DEFAULT_SESSION_TITLE.test(value) ? EXTENSION_DISPLAY_NAME : value)
   const text = label || title.length <= TITLE_LIMIT ? title : `${title.slice(0, TITLE_LIMIT)}...`
-  return icons[state] ? `${icons[state]} ${text}` : text
+  const caption = label == null && context ? `${text} [${context}]` : text
+  return icons[state] ? `${icons[state]} ${caption}` : caption
 }

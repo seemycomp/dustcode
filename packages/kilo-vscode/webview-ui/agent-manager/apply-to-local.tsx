@@ -16,6 +16,7 @@ import { groupApplyConflicts } from "./apply-conflicts"
 import { ApplyDialog } from "./ApplyDialog"
 import { composeDiffId } from "./diff-scope-state"
 import { diffDataKey } from "./worktree-diffs"
+import { routeDialog } from "./dialog-routing"
 import type { tracker } from "./telemetry"
 import type { useDialog } from "@kilocode/kilo-ui/context/dialog"
 import type { useLanguage } from "../src/context/language"
@@ -36,9 +37,9 @@ interface ApplyToLocalOptions {
   selection: Accessor<string | null>
   /** Sentinel id for the local repo selection. */
   local: string
-  worktrees: Accessor<{ id: string }[]>
+  worktrees: (projectId?: string) => { id: string }[]
   diffDatas: Accessor<Record<string, WorktreeFileDiff[]>>
-  diffLoading: Accessor<boolean>
+  diffLoading: (projectId?: string, worktreeId?: string) => boolean
   /** Telemetry: metrics.track(name, surface, data). */
   track: ReturnType<typeof tracker>["track"]
   projectId?: Accessor<string | undefined>
@@ -49,13 +50,14 @@ export function createApplyToLocal(opts: ApplyToLocalOptions) {
 
   const [applyStates, setApplyStates] = createSignal<Record<string, ApplyState>>({})
   const [applyTarget, setApplyTarget] = createSignal<string | undefined>()
+  const [project, setProject] = createSignal<string>()
   const [applySelectedFiles, setApplySelectedFiles] = createSignal<string[]>([])
   const [applySelectionTouched, setApplySelectionTouched] = createSignal(false)
 
   const applyStateForSelection = createMemo(() => {
     const sel = selection()
     if (!sel || sel === local) return undefined
-    return applyStates()[sel]
+    return applyStates()[diffDataKey(opts.projectId?.(), sel)]
   })
 
   const applyBusyForSelection = createMemo(() => {
@@ -75,13 +77,13 @@ export function createApplyToLocal(opts: ApplyToLocalOptions) {
   const applyDiffs = createMemo(() => {
     const key = applyDiffKey()
     if (!key) return [] as WorktreeFileDiff[]
-    return diffDatas()[diffDataKey(opts.projectId?.(), key)] ?? ([] as WorktreeFileDiff[])
+    return diffDatas()[diffDataKey(project(), key)] ?? ([] as WorktreeFileDiff[])
   })
 
   const applyStateForTarget = createMemo(() => {
     const target = applyTarget()
     if (!target) return undefined
-    return applyStates()[target]
+    return applyStates()[diffDataKey(project(), target)]
   })
 
   const applyBusyForTarget = createMemo(() => {
@@ -112,7 +114,7 @@ export function createApplyToLocal(opts: ApplyToLocalOptions) {
   const applyToLocal = (worktreeId: string, selectedFiles: string[]) => {
     setApplyStates((prev) => ({
       ...prev,
-      [worktreeId]: {
+      [diffDataKey(project(), worktreeId)]: {
         status: "checking",
         message: t("agentManager.apply.checking"),
         conflicts: [],
@@ -120,7 +122,7 @@ export function createApplyToLocal(opts: ApplyToLocalOptions) {
     }))
     vscode.postMessage({
       type: "agentManager.applyWorktreeDiff",
-      projectId: opts.projectId?.(),
+      projectId: project(),
       worktreeId,
       selectedFiles,
     })
@@ -172,19 +174,24 @@ export function createApplyToLocal(opts: ApplyToLocalOptions) {
     applyToLocal(target, applySelectedFiles())
   }
 
-  const openApplyDialog = () => {
-    const sel = selection()
+  const openApplyDialog = (sel = selection(), projectId = opts.projectId?.()) => {
     if (!sel || sel === local) return
+    if (
+      routeDialog(vscode.postMessage, { type: "agentManager.openDialog", dialog: "apply", projectId, worktreeId: sel })
+    )
+      return
+    setProject(projectId)
+    const key = diffDataKey(projectId, sel)
     setApplyStates((prev) => {
-      if (!prev[sel]) return prev
+      if (!prev[key]) return prev
       const next = { ...prev }
-      delete next[sel]
+      delete next[key]
       return next
     })
     setApplyTarget(sel)
     setApplySelectionTouched(false)
     setApplySelectedFiles([])
-    vscode.postMessage({ type: "agentManager.requestWorktreeDiff", projectId: opts.projectId?.(), sessionId: sel })
+    vscode.postMessage({ type: "agentManager.requestWorktreeDiff", projectId, sessionId: sel })
 
     setApplySelectedFiles(applyDiffs().map((diff) => diff.file))
 
@@ -192,7 +199,7 @@ export function createApplyToLocal(opts: ApplyToLocalOptions) {
       () => (
         <ApplyDialog
           diffs={applyDiffs()}
-          loading={diffLoading()}
+          loading={diffLoading(project(), applyTarget())}
           selectedFiles={applySelectedSet()}
           selectedCount={applySelectionStats().selected}
           additions={applySelectionStats().additions}
@@ -244,9 +251,12 @@ export function createApplyToLocal(opts: ApplyToLocalOptions) {
   // Drop apply state for worktrees that no longer exist, and close a dialog
   // whose target disappeared.
   createEffect(() => {
-    const ids = new Set(worktrees().map((wt) => wt.id))
+    const ids = new Set(worktrees(project()).map((wt) => wt.id))
     setApplyStates((prev) => {
-      const next = Object.fromEntries(Object.entries(prev).filter(([id]) => ids.has(id)))
+      const prefix = diffDataKey(project(), "")
+      const next = Object.fromEntries(
+        Object.entries(prev).filter(([key]) => !key.startsWith(prefix) || ids.has(key.slice(prefix.length))),
+      )
       if (Object.keys(next).length === Object.keys(prev).length) return prev
       return next
     })
@@ -261,7 +271,7 @@ export function createApplyToLocal(opts: ApplyToLocalOptions) {
     const count = ev.conflicts?.length ?? 0
     setApplyStates((prev) => ({
       ...prev,
-      [ev.worktreeId]: {
+      [diffDataKey(ev.projectId ?? opts.projectId?.(), ev.worktreeId)]: {
         status: ev.status,
         message: ev.message,
         conflicts: ev.conflicts ?? [],
@@ -270,7 +280,7 @@ export function createApplyToLocal(opts: ApplyToLocalOptions) {
 
     if (ev.status === "success") {
       showToast({ variant: "success", title: t("agentManager.apply.success"), description: ev.message })
-      if (applyTarget() === ev.worktreeId) closeApplyDialog()
+      if (applyTarget() === ev.worktreeId && project() === (ev.projectId ?? opts.projectId?.())) closeApplyDialog()
     }
     if (ev.status === "conflict") {
       const summary =
@@ -283,6 +293,7 @@ export function createApplyToLocal(opts: ApplyToLocalOptions) {
   }
 
   return {
+    project: () => (applyTarget() ? project() : undefined),
     applyStateForSelection,
     applyBusyForSelection,
     openApplyDialog,

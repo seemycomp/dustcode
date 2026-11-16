@@ -90,6 +90,7 @@ export class SourceController {
     private readonly listAvailable: (ctx: PanelContext) => DiffSourceDescriptor[],
     private readonly post: (msg: unknown) => void,
     private readonly messages: Messages = viewerMessages,
+    private readonly background: (task: () => void) => void = (task) => task(),
   ) {}
 
   setContext(ctx: PanelContext): void {
@@ -293,15 +294,18 @@ export class SourceController {
   private startPolling(source: DiffSource, epoch: number): void {
     this.stopPolling()
     let busy = false
-    this.interval = setInterval(async () => {
-      if (busy) return
-      busy = true
-      // Self-cancel when the tick reports the source is done
-      const keep = await this.fetch(source, epoch, false).finally(() => {
-        busy = false
-      })
-      if (!keep && this.epoch === epoch && this.active === source) this.stopPolling()
-    }, DIFF_POLL_INTERVAL_MS)
+    // Polling outlives the request that activated or resumed this source.
+    this.background(() => {
+      this.interval = setInterval(async () => {
+        if (busy) return
+        busy = true
+        // Self-cancel when the tick reports the source is done
+        const keep = await this.fetch(source, epoch, false).finally(() => {
+          busy = false
+        })
+        if (!keep && this.epoch === epoch && this.active === source) this.stopPolling()
+      }, DIFF_POLL_INTERVAL_MS)
+    })
   }
 
   private stopPolling(): void {

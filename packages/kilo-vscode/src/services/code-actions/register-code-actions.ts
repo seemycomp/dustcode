@@ -3,41 +3,25 @@ import type { KiloProvider } from "../../KiloProvider"
 import type { AgentManagerProvider } from "../../agent-manager/AgentManagerProvider"
 import { getEditorContext } from "./editor-utils"
 import { createPrompt } from "./support-prompt"
+import { ready, type ChatTarget } from "./chat-target"
 
 export function registerCodeActions(
   context: vscode.ExtensionContext,
-  provider: KiloProvider,
+  sidebar: () => ChatTarget,
   agentManager?: AgentManagerProvider,
   activeTabProvider?: () => KiloProvider | undefined,
   lastFocusedChat?: () => KiloProvider | AgentManagerProvider | undefined,
 ): void {
-  const target = () => (agentManager?.isActive() ? agentManager : (activeTabProvider?.() ?? provider))
-  const reveal = async () => {
-    await vscode.commands.executeCommand("dustcode.SidebarProvider.focus")
-    await provider.waitForReady()
+  const target = async (remember = false) => {
+    const fallback = sidebar()
+    const view =
+      (remember ? lastFocusedChat?.() : undefined) ??
+      (agentManager?.isActive() ? agentManager : (activeTabProvider?.() ?? fallback))
+    return (await ready(view, view === fallback)) ? view : undefined
   }
-  // Only the sidebar `provider` branch used to await readiness before
-  // posting. An editor-tab webview or the Agent Manager panel can still be
-  // opening/restoring when one of these commands fires, and postMessage()
-  // does not queue — it silently drops the message if the webview hasn't
-  // installed its listener yet. Wait for the selected target's own
-  // readiness too before posting to it.
-  //
-  // AgentManagerProvider.waitForReady() resolves `false` instead of hanging
-  // forever when the selected panel closes or is replaced while waiting.
-  // Propagate that so callers skip posting instead of delivering the
-  // message to whatever panel happens to be active by the time the wait
-  // settles.
-  const revealTarget = async (view: KiloProvider | AgentManagerProvider): Promise<boolean> => {
-    if (view === provider) {
-      await reveal()
-      return true
-    }
-    if (view === agentManager) {
-      return agentManager.waitForReady()
-    }
-    await view.waitForReady()
-    return true
+  const reveal = async () => {
+    const view = sidebar()
+    return (await ready(view, true)) ? view : undefined
   }
 
   context.subscriptions.push(
@@ -51,8 +35,8 @@ export function registerCodeActions(
         selectedText: ctx.selectedText,
         userInput: "",
       })
-      await reveal()
-      provider.postMessage({ type: "triggerTask", text: prompt, injectedTitle: "Explain selected code" })
+      const view = await reveal()
+      view?.postMessage({ type: "triggerTask", text: prompt, injectedTitle: "Explain selected code" })
     }),
 
     vscode.commands.registerCommand("dustcode.fixCode", async () => {
@@ -66,8 +50,8 @@ export function registerCodeActions(
         diagnostics: ctx.diagnostics,
         userInput: "",
       })
-      await reveal()
-      provider.postMessage({ type: "triggerTask", text: prompt, injectedTitle: "Fix code problems" })
+      const view = await reveal()
+      view?.postMessage({ type: "triggerTask", text: prompt, injectedTitle: "Fix code problems" })
     }),
 
     vscode.commands.registerCommand("dustcode.improveCode", async () => {
@@ -80,15 +64,15 @@ export function registerCodeActions(
         selectedText: ctx.selectedText,
         userInput: "",
       })
-      await reveal()
-      provider.postMessage({ type: "triggerTask", text: prompt, injectedTitle: "Improve selected code" })
+      const view = await reveal()
+      view?.postMessage({ type: "triggerTask", text: prompt, injectedTitle: "Improve selected code" })
     }),
 
     vscode.commands.registerCommand("dustcode.addToContext", async () => {
       const ctx = getEditorContext()
       if (!ctx) return
-      const view = lastFocusedChat?.() ?? target()
-      if (!(await revealTarget(view))) return
+      const view = await target(true)
+      if (!view) return
       view.postMessage({
         type: "appendChatContext",
         context: {
@@ -102,8 +86,8 @@ export function registerCodeActions(
     }),
 
     vscode.commands.registerCommand("dustcode.focusChatInput", async () => {
-      const view = target()
-      if (!(await revealTarget(view))) return
+      const view = await target()
+      if (!view) return
       view.postMessage({ type: "action", action: "focusInput" })
     }),
 
@@ -114,8 +98,8 @@ export function registerCodeActions(
     // entirely, the same way terminalAddToContext etc. do. Toggles: the
     // webview closes the search bar itself if it's already open.
     vscode.commands.registerCommand("dustcode.toggleChatSearch", async () => {
-      const view = target()
-      if (!(await revealTarget(view))) return
+      const view = await target()
+      if (!view) return
       view.postMessage({ type: "action", action: "focusSearch" })
     }),
   )

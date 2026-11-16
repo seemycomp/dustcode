@@ -17,6 +17,7 @@ type Ctx = {
   post: (msg: unknown) => void
   browserSettings: () => void
   exportTranscript: (sessionID: string) => Promise<void>
+  openSessionInTab?: (sessionID: string) => Promise<void>
   resume: (sessionID: string, messageID: string, requestID: string) => Promise<void>
   copy: (text: string) => PromiseLike<void>
   openSessions: (ids: string[]) => void
@@ -35,6 +36,10 @@ async function routeBackgroundMessage(
   message: { type: string; sessionID?: unknown; jobID?: unknown; requestID?: unknown },
   ctx: Ctx,
 ): Promise<boolean | undefined> {
+  if (message.type === "openSessionInTab") {
+    if (typeof message.sessionID === "string") await ctx.openSessionInTab?.(message.sessionID)
+    return true
+  }
   if (message.type === "toggleCaffeination") {
     ctx.caffeination()
     return true

@@ -7,8 +7,10 @@ import type {
   HistoryRequest,
   HistoryRow,
 } from "../../src/shared/agent-history"
+import type { WebviewMessage } from "../src/types/messages"
 
-type Send = (message: HistoryRequest | HistoryOpen) => void
+type Open = HistoryOpen | Extract<WebviewMessage, { type: "agentManager.openSessionInTab" }>
+type Send = (message: HistoryRequest | Open) => void
 
 function page() {
   const [data, set] = createStore({
@@ -25,6 +27,7 @@ function page() {
 /** Metadata and presentation live with the project, never with sortable/accordion row mounts. */
 export function createHistoryState(projectId: string) {
   const contexts = new Map<string, ReturnType<typeof context>>()
+  const deleted = new Set<string>()
   function context(worktreeId: string | null) {
     const pages = new Map([["", page()]])
     const [query, setQuery] = createSignal("")
@@ -34,7 +37,7 @@ export function createHistoryState(projectId: string) {
     const [failure, setFailure] = createSignal<string>()
     let send: Send | undefined
     let timer: ReturnType<typeof setTimeout> | undefined
-    let opening: HistoryOpen | undefined
+    let opening: Open | undefined
     const request = (opts: { more?: boolean; refresh?: boolean } = {}) => {
       if (!send) return
       const value = current()
@@ -110,7 +113,13 @@ export function createHistoryState(projectId: string) {
         batch(() => {
           // Failed revalidation/pagination must not replace successfully loaded rows.
           if (!message.error && (!message.loading || message.rows.length > 0))
-            value.set("rows", reconcile(message.rows, { key: "id" }))
+            value.set(
+              "rows",
+              reconcile(
+                message.rows.filter((row) => !deleted.has(row.id)),
+                { key: "id" },
+              ),
+            )
           value.set({
             generation: message.generation,
             loading: message.loading,
@@ -121,17 +130,18 @@ export function createHistoryState(projectId: string) {
         })
       },
       retry: () => request({ more: current().paging }),
-      open: (sessionId: string) => {
+      open: (sessionId: string, native = true) => {
         if (!send) return
         setFailure(undefined)
-        opening = {
-          type: "agentManager.openHistorySession",
+        const message: Open = {
+          type: native ? "agentManager.openSessionInTab" : "agentManager.openHistorySession",
           projectId,
           worktreeId,
           sessionId,
           requestId: crypto.randomUUID(),
         }
-        send(opening)
+        opening = message
+        send(message)
       },
       failed: (message: HistoryOpenFailed) => {
         if (opening?.requestId === message.requestId) setFailure(message.error)
@@ -141,6 +151,16 @@ export function createHistoryState(projectId: string) {
       },
       revalidate: () => {
         if (send) request()
+      },
+      remove: (id: string) => {
+        for (const value of pages.values()) {
+          value.set("rows", (rows) => rows.filter((row) => row.id !== id))
+          if (value.focus === id) value.focus = ""
+        }
+        if (opening?.sessionId === id) {
+          opening = undefined
+          setFailure(undefined)
+        }
       },
       dispose: () => {
         clearTimeout(timer)
@@ -157,6 +177,12 @@ export function createHistoryState(projectId: string) {
   }
   return {
     context: get,
+    remove: (id: string) => {
+      deleted.add(id)
+      batch(() => {
+        for (const value of contexts.values()) value.remove(id)
+      })
+    },
     receive: (message: HistoryMessage | HistoryOpenFailed) => {
       if (message.projectId !== projectId) return
       const value = contexts.get(message.worktreeId ?? "local")

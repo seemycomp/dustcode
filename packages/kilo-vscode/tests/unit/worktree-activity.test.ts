@@ -418,13 +418,13 @@ describe("WorktreeActivity", () => {
     const conn = connection(client)
     const posted: string[][] = []
     const statuses: unknown[] = []
-    const lifecycle: unknown[] = []
+    const lifecycle: Array<{ event: unknown; directory?: string }> = []
     const wrapper = createWorktreeActivity({
       connection: conn as never,
       paths: () => ["/repo"],
       post: (active) => posted.push(active),
       status: (event) => statuses.push(event),
-      lifecycle: (event) => lifecycle.push(event),
+      lifecycle: (event, directory) => lifecycle.push({ event, directory }),
       log: () => {},
     })
 
@@ -435,6 +435,7 @@ describe("WorktreeActivity", () => {
     expect(conn.emit(status("s1", "idle"), "/repo")).toBeUndefined()
     expect(statuses).toHaveLength(1)
     expect(lifecycle).toHaveLength(1)
+    expect(lifecycle[0]?.directory).toBe("/repo")
     expect(posted.at(-1)).toEqual([])
 
     conn.change("disconnected")

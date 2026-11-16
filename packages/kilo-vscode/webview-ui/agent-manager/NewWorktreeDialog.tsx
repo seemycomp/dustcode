@@ -182,7 +182,7 @@ export const NewWorktreeDialog: Component<{
   projectId?: string
   projects?: () => AgentProjectSnapshot[]
   activeProjectId?: string
-  onCreate?: (projectId: string) => void
+  onCreate?: (projectId: string, count?: number) => void
   worktrees?: () => WorktreeReference[]
   mode: ModeRouter
 }> = (props) => {
@@ -540,7 +540,7 @@ export const NewWorktreeDialog: Component<{
     const count = total()
     const sel = isCompare ? null : model()
     const target = project()
-    if (target) props.onCreate?.(target)
+    if (target) props.onCreate?.(target, count)
 
     vscode.postMessage({
       type: "agentManager.createMultiVersion",

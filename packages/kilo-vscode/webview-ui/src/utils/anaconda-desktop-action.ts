@@ -22,7 +22,12 @@ type Handlers = {
 export function createAnacondaDesktopAction(vscode: Transport) {
   const pending = new Map<string, Handlers>()
   const unsubscribe = vscode.onMessage((message) => {
-    if (!message.type.startsWith("anacondaDesktop") || !("requestId" in message)) return
+    if (
+      !message.type.startsWith("anacondaDesktop") ||
+      !("requestId" in message) ||
+      typeof message.requestId !== "string"
+    )
+      return
     const handlers = pending.get(message.requestId)
     if (!handlers) return
     pending.delete(message.requestId)

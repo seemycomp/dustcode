@@ -12,6 +12,9 @@ import type { Session } from "@kilocode/sdk/v2/client"
 import type { ProjectRef, SessionRef, WorktreeRef } from "./project/route"
 import type { PRMergeMethod } from "./types"
 import type { SessionPage } from "../kilo-provider/session-page"
+import type { NativeSessionTarget } from "../kilo-provider/native-session-tabs"
+import type { ProjectRouteService } from "./project/route"
+import type { AgentManagerOpenSessionInTabRequest } from "../../webview-ui/src/types/messages/agent-manager"
 
 // ---------------------------------------------------------------------------
 // Primitives
@@ -90,6 +93,7 @@ export interface SessionProvider {
 
 /** Result of opening a panel — bundles the messaging handle + session provider. */
 export interface PanelContext {
+  readonly presentation?: import("./presentations").ManagerPresentation
   /** Send a message to the webview. */
   postMessage(msg: unknown): void
 
@@ -122,6 +126,24 @@ export interface PanelContext {
 }
 
 export interface Host {
+  /** Focus the stable Activity Bar view without creating an editor panel. */
+  showSidebar?(preserveFocus?: boolean): void | Promise<void>
+  hasNativeSession?(ref: SessionRef, directory: string): boolean
+  deleteNativeSession?(ref: SessionRef): void
+  setNativeScopeResolver?(
+    resolve: (
+      binding: import("./project/native").NativeScopeBinding,
+    ) => Promise<import("../kilo-provider/options").NativeSessionScope>,
+  ): void
+  /** Attach an already validated target through the extension's existing native panel factory. */
+  openSessionInTab?(target: NativeSessionTarget): Promise<void>
+  openDraftInTab?(scope: import("../kilo-provider/options").NativeSessionScope): void
+  setNativeSessionResolver?(
+    resolve: (request: AgentManagerOpenSessionInTabRequest) => Promise<NativeSessionTarget>,
+  ): void
+  projectRoutes?(): ProjectRouteService
+  /** Metadata through the shared backend, independent of a manager webview's lifetime. */
+  historySessions?(): Pick<SessionProvider, "getSessionInfo" | "listSessionPage">
   /**
    * Create (or restore) a webview panel wired with a session provider.
    * The host handles HTML generation, icon paths, CSP, and KiloProvider setup.

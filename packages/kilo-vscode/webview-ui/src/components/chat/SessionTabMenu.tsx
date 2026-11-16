@@ -1,5 +1,6 @@
 import { ContextMenu } from "@kilocode/kilo-ui/context-menu"
 import { Icon } from "@kilocode/kilo-ui/icon"
+import { Tooltip } from "@kilocode/kilo-ui/tooltip"
 import { Show, type JSX, type ParentComponent } from "solid-js"
 import { useLanguage } from "../../context/language"
 
@@ -25,12 +26,12 @@ export const SessionTabMenu: ParentComponent<{
 }> = (props) => {
   const { t } = useLanguage()
   return (
-    <ContextMenu>
+    <ContextMenu slide overlap fitViewport>
       <ContextMenu.Trigger as="div" style={{ display: "contents" }}>
         {props.children}
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
-        <ContextMenu.Content class="session-tab-menu am-ctx-menu">
+        <ContextMenu.Content class="session-tab-menu am-ctx-menu am-session-menu">
           <Show when={props.leading}>
             {(items) => (
               <>
@@ -61,18 +62,20 @@ export const SessionTabMenu: ParentComponent<{
                 </ContextMenu.Item>
               }
             >
-              <ContextMenu.Sub>
+              <ContextMenu.Sub slide overlap fitViewport>
                 <ContextMenu.SubTrigger disabled={!props.onMoveToWorktree}>
                   <Icon name="branch" size="small" />
-                  <span>{t("sidebar.session.moveToWorktree")}</span>
+                  <span data-slot="context-menu-item-label">{t("sidebar.session.moveToWorktree")}</span>
                 </ContextMenu.SubTrigger>
                 <ContextMenu.Portal>
-                  <ContextMenu.SubContent>
+                  <ContextMenu.SubContent class="session-tab-menu am-ctx-menu am-session-menu">
                     <ContextMenu.Item onSelect={() => props.onMoveToWorktree?.(true)}>
-                      {props.transferOptions?.new}
+                      <Icon name="plus" size="small" />
+                      <ContextMenu.ItemLabel>{props.transferOptions?.new}</ContextMenu.ItemLabel>
                     </ContextMenu.Item>
                     <ContextMenu.Item onSelect={() => props.onMoveToWorktree?.(false)}>
-                      {props.transferOptions?.existing}
+                      <Icon name="folder" size="small" />
+                      <ContextMenu.ItemLabel>{props.transferOptions?.existing}</ContextMenu.ItemLabel>
                     </ContextMenu.Item>
                   </ContextMenu.SubContent>
                 </ContextMenu.Portal>
@@ -80,18 +83,20 @@ export const SessionTabMenu: ParentComponent<{
             </Show>
           </Show>
           <Show when={props.showCopyToWorktree}>
-            <ContextMenu.Sub>
+            <ContextMenu.Sub slide overlap fitViewport>
               <ContextMenu.SubTrigger disabled={!props.onCopyToWorktree}>
                 <Icon name="copy" size="small" />
-                <span>{props.transferOptions?.copy}</span>
+                <span data-slot="context-menu-item-label">{props.transferOptions?.copy}</span>
               </ContextMenu.SubTrigger>
               <ContextMenu.Portal>
-                <ContextMenu.SubContent>
+                <ContextMenu.SubContent class="session-tab-menu am-ctx-menu am-session-menu">
                   <ContextMenu.Item onSelect={() => props.onCopyToWorktree?.(true)}>
-                    {props.transferOptions?.new}
+                    <Icon name="plus" size="small" />
+                    <ContextMenu.ItemLabel>{props.transferOptions?.new}</ContextMenu.ItemLabel>
                   </ContextMenu.Item>
                   <ContextMenu.Item onSelect={() => props.onCopyToWorktree?.(false)}>
-                    {props.transferOptions?.existing}
+                    <Icon name="folder" size="small" />
+                    <ContextMenu.ItemLabel>{props.transferOptions?.existing}</ContextMenu.ItemLabel>
                   </ContextMenu.Item>
                 </ContextMenu.SubContent>
               </ContextMenu.Portal>
@@ -106,13 +111,14 @@ export const SessionTabMenu: ParentComponent<{
             <ContextMenu.Separator />
           </Show>
           <Show when={props.onTogglePin}>
-            <ContextMenu.Item onSelect={() => props.onTogglePin?.()}>
-              <Icon name={props.pinned ? "pin-filled" : "pin"} size="small" />
-              <ContextMenu.ItemLabel>
-                {props.pinned ? t("agentManager.tab.unpin") : t("agentManager.tab.pin")}
-              </ContextMenu.ItemLabel>
-              <span class="session-tab-menu-hint">{t("session.tabs.pinHint")}</span>
-            </ContextMenu.Item>
+            <Tooltip value={t("session.tabs.pinHint")} placement="top">
+              <ContextMenu.Item onSelect={() => props.onTogglePin?.()}>
+                <Icon name={props.pinned ? "pin-filled" : "pin"} size="small" />
+                <ContextMenu.ItemLabel>
+                  {props.pinned ? t("agentManager.tab.unpin") : t("agentManager.tab.pin")}
+                </ContextMenu.ItemLabel>
+              </ContextMenu.Item>
+            </Tooltip>
             <Show when={props.closeable !== false || props.onCloseOthers}>
               <ContextMenu.Separator />
             </Show>

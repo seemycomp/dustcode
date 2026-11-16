@@ -36,6 +36,11 @@ function setup(active = false) {
   }
   const agent = {
     isActive: () => active,
+    waitForReady: async () => {
+      events.push("wait")
+      waits.push("agent")
+      return true
+    },
     postMessage: (msg: unknown) => {
       events.push("post")
       posts.push(msg)
@@ -51,7 +56,7 @@ function setup(active = false) {
     executed.push(args)
   }
 
-  registerTerminalActions(context, provider as never, agent as never)
+  registerTerminalActions(context, () => provider, agent as never)
 
   return { commands, events, executed, posts, waits }
 }
@@ -62,6 +67,36 @@ afterEach(() => {
 })
 
 describe("registerTerminalActions", () => {
+  it("resolves terminal command fallbacks lazily without awaiting an unattached legacy provider", async () => {
+    const state = setup()
+    const legacy = Promise.withResolvers<void>()
+    const waits: string[] = []
+    const posts: unknown[] = []
+    let destination = {
+      waitForReady: () => {
+        waits.push("legacy")
+        return legacy.promise
+      },
+      postMessage: (_msg: unknown) => {
+        throw new Error("legacy provider must not receive terminal actions")
+      },
+    }
+    registerTerminalActions({ subscriptions: [] } as unknown as vscode.ExtensionContext, (() => destination) as never)
+    destination = {
+      waitForReady: async () => {
+        waits.push("manager")
+      },
+      postMessage: (msg) => {
+        posts.push(msg)
+      },
+    }
+    for (const command of ["terminalAddToContext", "terminalFixCommand", "terminalExplainCommand"]) {
+      await state.commands.get(`dustcode.${command}`)?.({ selection: "bun test" })
+    }
+    expect(waits).toEqual(Array(3).fill("manager"))
+    expect(posts).toHaveLength(4)
+    expect(state.executed).toEqual(Array(3).fill(["dustcode.SidebarProvider.focus"]))
+  })
   it("reveals the sidebar before adding terminal output to context", async () => {
     const state = setup()
 
@@ -84,9 +119,9 @@ describe("registerTerminalActions", () => {
 
     await state.commands.get("dustcode.terminalAddToContext")?.({ selection: "bun test" })
 
-    expect(state.events).toEqual(["post", "post"])
+    expect(state.events).toEqual(["wait", "post", "post"])
     expect(state.executed).toEqual([])
-    expect(state.waits).toEqual([])
+    expect(state.waits).toEqual(["agent"])
     expect(state.posts).toEqual([
       {
         type: "appendChatBoxMessage",

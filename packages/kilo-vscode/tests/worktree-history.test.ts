@@ -6,6 +6,97 @@ import { historyBrowser } from "./helpers/history-browser"
 const context = (page: Page, scope = "a:local") => page.locator(`[data-history-context="${scope}"]`)
 const command = (page: Page, action: string) =>
   page.evaluate((action) => window.dispatchEvent(new CustomEvent("history-fixture", { detail: { action } })), action)
+const control = (page: Page, action: string) =>
+  page.evaluate((detail) => window.dispatchEvent(new CustomEvent("history-control", { detail })), action)
+
+it.each(["local", "w-0"])(
+  "renders every history loading/error state inside the %s item without Retry",
+  async (id) => {
+    const server = await historyBrowser()
+    const browser = await chromium.launch({ headless: true })
+    const page = await browser.newPage({ viewport: { width: 300, height: 1000 } })
+    try {
+      await page.goto(`${server.url}?collapsed&total=75`)
+      await page.evaluate(() =>
+        document.documentElement.style.setProperty("--vscode-editorWarning-foreground", "rgb(255, 193, 7)"),
+      )
+      const scope = context(page, `a:${id}`)
+      const item = scope.locator(id === "local" ? ".am-local-item" : ".am-worktree-item")
+      const handle = await item.elementHandle()
+      const slot = item.locator(".am-worktree-status")
+      const height = await slot.evaluate((el) => el.getBoundingClientRect().height)
+      const refresh = scope.getByRole("button", { name: /Refresh chat history/ })
+      await control(page, "hold")
+      await scope.getByRole("button", { name: /Toggle chat history/ }).click()
+      await check(item.getByRole("status")).toContainText("Loading history")
+      await check(slot.locator(".am-history-note")).toHaveCount(1)
+      expect(await slot.evaluate((el) => el.getBoundingClientRect().height)).toBe(height)
+      await check(item.locator(".am-worktree-status > [role='status']")).toBeVisible()
+      await check(item.getByRole("status").locator('[data-component="spinner"]')).toHaveCount(0)
+      const loading = await item.getByRole("status").evaluate((el) => ({
+        x: el.getBoundingClientRect().x,
+        size: getComputedStyle(el).fontSize,
+        height: getComputedStyle(el).lineHeight,
+      }))
+      await check(scope.locator(".am-history [role='status']")).toHaveCount(0)
+      await control(page, "fail")
+      await check(item.getByRole("alert")).toContainText("Could not load history.")
+      expect(await slot.evaluate((el) => el.getBoundingClientRect().height)).toBe(height)
+      await check(item.locator(".am-worktree-status > [role='alert']")).toBeVisible()
+      expect(
+        await item.getByRole("alert").evaluate((el) => ({
+          x: el.getBoundingClientRect().x,
+          size: getComputedStyle(el).fontSize,
+          height: getComputedStyle(el).lineHeight,
+        })),
+      ).toEqual(loading)
+      expect(await item.getByRole("alert").evaluate((el) => getComputedStyle(el).color)).toBe("rgb(255, 193, 7)")
+      await refresh.click()
+      await check(scope.locator(".am-history-row")).toHaveCount(30)
+      await control(page, "hold")
+      await refresh.click()
+      await check(item.getByRole("status")).toContainText("Loading history")
+      await check(item.getByRole("status")).not.toContainText("older")
+      await control(page, "fail")
+      await check(item.getByRole("alert")).toContainText("Could not load history.")
+      await refresh.click()
+      await check(item.getByRole("alert")).toHaveCount(0)
+      await check(item.getByRole("status")).toHaveCount(0)
+      await control(page, "hold")
+      await scope.getByRole("button", { name: "Load older conversations", exact: true }).click()
+      await check(item.getByRole("status")).toContainText("Loading older")
+      await control(page, "fail")
+      await check(item.getByRole("alert")).toContainText("Could not load older conversations.")
+      await refresh.click()
+      await check(item.getByRole("alert")).toHaveCount(0)
+      await check(item.getByRole("status")).toHaveCount(0)
+      await control(page, "hold")
+      await scope.locator(".am-history-row").first().click()
+      await check(item.getByRole("alert")).toHaveText("Could not open conversation")
+      await refresh.click()
+      await check(item.getByRole("status")).toContainText("Loading history")
+      await check(item.getByRole("alert")).toHaveCount(0)
+      await check(slot.locator(".am-history-note")).toHaveCount(1)
+      expect(await slot.evaluate((el) => el.getBoundingClientRect().height)).toBe(height)
+      await control(page, "fail")
+      await check(item.getByRole("alert")).toBeVisible()
+      await check(item.getByRole("status")).toHaveCount(0)
+      await check(slot.locator(".am-history-note")).toHaveCount(1)
+      expect(await slot.evaluate((el) => el.getBoundingClientRect().height)).toBe(height)
+      await check(scope.locator(".am-history [role='alert']")).toHaveCount(0)
+      await check(scope.getByRole("button", { name: "Retry", exact: true })).toHaveCount(0)
+      expect(await handle!.evaluate((el) => el.isConnected)).toBe(true)
+      await control(page, "release")
+      await refresh.click()
+      await scope.locator(".am-history-row").first().click()
+      await check(item.getByRole("alert")).toHaveCount(0)
+    } finally {
+      await browser.close()
+      await server.stop(true)
+    }
+  },
+  120_000,
+)
 
 it("reuses chat tab menus for closed and open history rows without selecting on right click", async () => {
   const server = await historyBrowser()
@@ -129,6 +220,82 @@ it("reuses chat tab menus for closed and open history rows without selecting on 
   }
 }, 120000)
 
+it.each([240, 300])(
+  "keeps chat menu labels and pin tooltips readable at %dpx",
+  async (width) => {
+    const server = await historyBrowser()
+    const browser = await chromium.launch({ headless: true })
+    const page = await browser.newPage({ viewport: { width, height: 850 } })
+    try {
+      for (const theme of ["light-modern", "dark-modern"]) {
+        await page.goto(`${server.url}?total=6&transfer&width=${width}&theme=${theme}`)
+        await page.evaluate(() => (document.body.dataset.agentManagerPresentation = "sidebar"))
+        await command(page, "menu-tabs")
+        for (const scope of ["a:local", "a:w-0"]) {
+          const row = context(page, scope).locator('[data-history-session="history-00000"]')
+          await row.click({ button: "right" })
+          const menu = page.locator(".session-tab-menu[data-component='context-menu-content']")
+          await check(menu).toBeVisible()
+          const readable = async () => {
+            const menus = page.locator(".session-tab-menu:visible")
+            for (const el of await menus.all()) {
+              const rect = (await el.boundingBox())!
+              expect(rect.x).toBeGreaterThanOrEqual(0)
+              expect(rect.x + rect.width).toBeLessThanOrEqual(width)
+              expect(
+                await el.evaluate((node) => ({
+                  overflow: node.scrollWidth > node.clientWidth,
+                  width: node.clientWidth,
+                  scroll: node.scrollWidth,
+                  items: [...node.querySelectorAll('[role="menuitem"]')].map((item) => ({
+                    text: item.textContent,
+                    width: item.clientWidth,
+                    scroll: item.scrollWidth,
+                  })),
+                })),
+              ).toMatchObject({ overflow: false })
+              for (const item of await el.getByRole("menuitem").all()) {
+                const label = item.locator('[data-slot="context-menu-item-label"]')
+                await check(label).toHaveCount(1)
+                expect((await label.boundingBox())!.width).toBeGreaterThan(10)
+                expect(await label.evaluate((node) => getComputedStyle(node).whiteSpace)).toBe("nowrap")
+                expect((await item.locator('[data-component="icon"]').first().boundingBox())!.width).toBeGreaterThan(10)
+                expect((await item.boundingBox())!.height).toBeLessThan(40)
+                expect(await item.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true)
+              }
+            }
+          }
+          await readable()
+          const pin = menu.getByRole("menuitem", { name: "Pin", exact: true })
+          await check(pin).toHaveText("Pin")
+          await pin.hover()
+          const tooltip = page.locator('[data-component="tooltip"]')
+          await check(tooltip).toContainText("Shift+click")
+          expect(await pin.locator('[data-component="tooltip"]').count()).toBe(0)
+          await check(menu).not.toContainText("Shift+click")
+          for (const name of ["Move to Worktree", "Copy to worktree"]) {
+            const trigger = menu.getByRole("menuitem", { name, exact: true })
+            await trigger.hover()
+            await trigger.press("ArrowRight")
+            const sub = page.locator('[data-component="context-menu-sub-content"]')
+            await check(sub).toBeVisible()
+            await check(sub.getByRole("menuitem")).toHaveCount(2)
+            await readable()
+            await page.keyboard.press("ArrowLeft")
+          }
+          await page.keyboard.press("Escape")
+          await check(row).toBeFocused()
+          expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width)
+        }
+      }
+    } finally {
+      await browser.close()
+      await server.stop(true)
+    }
+  },
+  120_000,
+)
+
 it("renders real six-row geometry, scoped events/search, remount state and bounded virtual keyboard navigation", async () => {
   const server = await historyBrowser()
   const browser = await chromium.launch({ headless: true })
@@ -189,8 +356,10 @@ it("renders real six-row geometry, scoped events/search, remount state and bound
     await page.goto(`${server.url}?total=5000`)
     const local = context(page)
     await check(local.locator(".am-history-row")).toHaveCount(30)
-    await local.getByRole("button", { name: "Search chat history for local", exact: true }).click()
     const input = local.getByRole("textbox", { name: "Search chat history for local", exact: true })
+    await check(input).toBeVisible()
+    await check(input).toHaveAttribute("placeholder", "Search titles...")
+    await check(local.getByRole("button", { name: "Search chat history for local", exact: true })).toHaveCount(0)
     await input.fill("Needle")
     await check(local.locator(".am-history-row")).toHaveCount(1)
     await check(local.locator(".am-history-row")).toContainText("Needle beyond discovery limit")
@@ -204,14 +373,19 @@ it("renders real six-row geometry, scoped events/search, remount state and bound
     await input.fill("nothing matches this")
     await check(local.getByRole("status")).toHaveText("No matching conversations.")
     await input.press("Escape")
-    await check(input).toHaveCount(0)
-    await check(local.getByRole("button", { name: "Search chat history for local", exact: true })).toBeFocused()
+    await check(input).toBeVisible()
+    await check(input).toHaveValue("")
+    await check(input).toBeFocused()
     await check(local.locator(".am-history-row")).toHaveCount(30)
     await command(page, "next-fail")
     await local.getByRole("button", { name: "Load older conversations", exact: true }).click()
     await check(local.getByRole("alert")).toContainText("Could not load older conversations.")
     await check(local.locator(".am-history-row")).toHaveCount(30)
-    await local.getByRole("button", { name: "Retry", exact: true }).click()
+    await check(local.locator(".am-local-item [role='alert']")).toContainText("Could not load older conversations.")
+    await check(local.locator(".am-history [role='alert']")).toHaveCount(0)
+    await check(local.getByRole("button", { name: "Retry", exact: true })).toHaveCount(0)
+    await local.getByRole("button", { name: "Refresh chat history for local", exact: true }).click()
+    await local.getByRole("button", { name: "Load older conversations", exact: true }).click()
     await check(local.getByRole("alert")).toHaveCount(0)
     expect(await local.locator(".am-history-row").count()).toBeLessThan(31)
     const first = local.locator(".am-history-row").first()
@@ -230,7 +404,6 @@ it("renders real six-row geometry, scoped events/search, remount state and bound
     expect(await local.locator(".am-history-viewport").evaluate((el) => el.scrollTop)).toBe(top)
 
     const worktree = context(page, "a:w-0")
-    await worktree.getByRole("button", { name: "Search chat history for Task 0", exact: true }).click()
     await worktree.getByRole("textbox").fill("Conversation")
     await check(worktree.locator(".am-history-row")).toHaveCount(30)
     for (const action of ["pin", "section", "accordion", "accordion"]) await command(page, action)
@@ -261,7 +434,9 @@ it("renders real six-row geometry, scoped events/search, remount state and bound
     await collapsed.getByRole("button", { name: "Toggle chat history for local", exact: true }).click()
     await check(collapsed.getByRole("alert")).toContainText("Could not load history.")
     await command(page, "recover")
-    await collapsed.getByRole("button", { name: "Retry", exact: true }).click()
+    await check(collapsed.locator(".am-local-item [role='alert']")).toContainText("Could not load history.")
+    await check(collapsed.locator(".am-history [role='alert']")).toHaveCount(0)
+    await collapsed.getByRole("button", { name: "Refresh chat history for local", exact: true }).click()
     await check(collapsed.locator(".am-history-row")).toHaveCount(30)
     expect(errors).toEqual([])
   } finally {
@@ -289,7 +464,8 @@ it.serial(
       expect(await local.locator(".am-history-row").count()).toBeLessThan(31)
       expect(Number(await page.locator("body").getAttribute("data-history-requests"))).toBeLessThanOrEqual(2)
       const last = local.locator('[data-history-session="history-00029"]')
-      await last.focus()
+      // Do not scroll into pagination while setting up the disclosure benchmark.
+      await last.evaluate((el) => (el as HTMLElement).focus({ preventScroll: true }))
       await check(last).toBeFocused()
       expect(await local.locator(".am-history-row").count()).toBeLessThan(31)
       await toggle.click()

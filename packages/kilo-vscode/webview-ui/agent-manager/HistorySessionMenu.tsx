@@ -1,4 +1,6 @@
 import type { ParentComponent } from "solid-js"
+import { ContextMenu } from "@kilocode/kilo-ui/context-menu"
+import { Icon } from "@kilocode/kilo-ui/icon"
 import { SessionTabMenu } from "../src/components/chat/SessionTabMenu"
 import { useVSCode } from "../src/context/vscode"
 import { useLanguage } from "../src/context/language"
@@ -8,11 +10,13 @@ import type { ProjectStore } from "./project/store"
 import { applyPinnedTabs, applyTabOrder } from "./tab-order"
 import { createTabPersistence } from "./tab-persistence"
 import { PENDING_PREFIX, REVIEW_TAB_ID } from "./tab-ids"
+import { isPendingTab } from "../src/utils/local-tabs"
 
 export interface HistoryMenuActions {
-  new: (projectId: string, worktreeId: string | null) => void
+  new: (projectId: string, worktreeId: string | null, exclusive?: boolean) => void
   close: (projectId: string, sessionId: string) => void
   tabs: (projectId: string, worktreeId: string | null) => CloseToRightDeps | undefined
+  fork?: (projectId: string, worktreeId: string | null, sessionId: string) => void
   transfer?: (
     projectId: string,
     worktreeId: string | null,
@@ -32,6 +36,7 @@ export const HistorySessionMenu: ParentComponent<{
   activity?: Activity
   actions?: HistoryMenuActions
   onOpen: () => void
+  onInspect?: () => void
 }> = (props) => {
   const vscode = useVSCode()
   const { t } = useLanguage()
@@ -58,6 +63,7 @@ export const HistorySessionMenu: ParentComponent<{
   }
   const open = () => ids().includes(props.sessionId)
   const actionable = () => !props.disabled && !running(props.activity ?? "idle") && props.activity !== "waiting"
+  const deletable = () => actionable() && !props.sessionId.startsWith(PENDING_PREFIX) && !isPendingTab(props.sessionId)
   const close = (id: string) => {
     if (props.actions) return props.actions.close(props.store.id, id)
     props.store.tabs.set((rows) => rows.filter((row) => row !== id))
@@ -80,6 +86,23 @@ export const HistorySessionMenu: ParentComponent<{
     }
   return (
     <SessionTabMenu
+      leading={
+        <ContextMenu.Item
+          disabled={!deletable()}
+          onSelect={() => {
+            if (!deletable()) return
+            vscode.postMessage({
+              type: "deleteSession",
+              sessionID: props.sessionId,
+              projectId: props.store.id,
+              worktreeId: props.worktreeId,
+            })
+          }}
+        >
+          <Icon name="trash" size="small" />
+          <ContextMenu.ItemLabel>{t("session.delete.button")}</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+      }
       showNewSession
       onNewSession={
         !props.disabled && (props.actions || props.worktreeId)
@@ -99,6 +122,7 @@ export const HistorySessionMenu: ParentComponent<{
         actionable()
           ? () => {
               if (!actionable()) return
+              if (props.actions?.fork) return props.actions.fork(props.store.id, props.worktreeId, props.sessionId)
               vscode.postMessage({
                 type: "agentManager.forkSession",
                 projectId: props.store.id,
@@ -145,7 +169,7 @@ export const HistorySessionMenu: ParentComponent<{
           : () => {
               const pinned = pin.isPinned(props.sessionId)
               pin.togglePinned(props.sessionId)
-              if (!pinned && !open()) props.onOpen()
+              if (!pinned && !open()) (props.onInspect ?? props.onOpen)()
             }
       }
       closeable={open()}

@@ -89,6 +89,7 @@ export class AgentHistory {
   private readonly listeners = new Map<ProjectContext, () => void>()
   private readonly intents = new Map<string, { projectId: string; token: symbol }>()
   private readonly deleted = new Set<string>()
+  private readonly scoped = new Map<string, Set<string>>()
   private readonly gate = new Semaphore(2)
   private backend = 0
   private generation = 0
@@ -155,41 +156,59 @@ export class AgentHistory {
   }
 
   /** A lifecycle boundary, not a streamed message-part listener. */
-  event(event: unknown): void {
+  event(event: unknown, projectId?: string, qualified = projectId !== undefined): void {
     if (this.disposed) return
     const ev = event as { type?: string; properties?: { info?: Session; sessionID?: string } }
     if (!["session.created", "session.updated", "session.deleted"].includes(ev.type ?? "")) return
     const info = ev.properties?.info
     const id = info?.id ?? ev.properties?.sessionID
     if (!id) return
-    if (ev.type === "session.deleted") this.deleted.add(id)
+    if (qualified && projectId === undefined) return
+    if (ev.type === "session.deleted") {
+      const deleted = projectId ? this.tombstones(projectId) : this.deleted
+      deleted.add(id)
+      if (projectId) this.scoped.set(projectId, deleted)
+    }
     if (ev.type === "session.created") this.deleted.delete(id)
     const revision = ++this.revision
     for (const entry of this.entries.values()) {
-      const change = mutation(entry, id, info, ev.type === "session.deleted", revision)
-      entry.changes.set(id, change)
-      entry.candidates.delete(id)
-      if (change.info) entry.candidates.set(id, change.info)
-      const placed = change.info && resolvePlacement(entry.ctx, id, change.info.directory)
-      entry.rows = entry.rows.flatMap((row) => {
-        if (row.id !== id) return [row]
-        if (
-          !change.info ||
-          placed?.worktreeId !== entry.request.worktreeId ||
-          !matches(change.info.title, entry.request.query)
-        )
-          return []
-        return [{ id, title: change.info.title, updatedAt: change.info.updatedAt }]
-      })
-      this.project(entry)
-      this.schedule(entry, false)
+      if (projectId && entry.ctx.id !== projectId) continue
+      this.applyEvent(entry, id, info, ev.type, revision)
     }
+  }
+
+  private applyEvent(
+    entry: Entry,
+    id: string,
+    info: Session | undefined,
+    type: string | undefined,
+    revision: number,
+  ): void {
+    if (type === "session.created") this.scoped.get(entry.ctx.id)?.delete(id)
+    const change = mutation(entry, id, info, type === "session.deleted", revision)
+    entry.changes.set(id, change)
+    entry.candidates.delete(id)
+    if (change.info) entry.candidates.set(id, change.info)
+    const placed = change.info && resolvePlacement(entry.ctx, id, change.info.directory)
+    entry.rows = entry.rows.flatMap((row) => {
+      if (row.id !== id) return [row]
+      if (
+        !change.info ||
+        placed?.worktreeId !== entry.request.worktreeId ||
+        !matches(change.info.title, entry.request.query)
+      )
+        return []
+      return [{ id, title: change.info.title, updatedAt: change.info.updatedAt }]
+    })
+    this.project(entry)
+    this.schedule(entry, false)
   }
 
   /** A reconnect invalidates cursors even if the same directory is still selected. */
   reconnect(): void {
     this.backend++
     this.deleted.clear()
+    this.scoped.clear()
     const entries = [...this.entries.values()]
     this.entries.clear()
     for (const entry of entries) {
@@ -247,7 +266,7 @@ export class AgentHistory {
     if (!ctx.isCurrent(version) || backend !== this.backend || epoch !== this.epoch || this.disposed)
       throw new Error("The project changed while opening this conversation.")
     if (
-      this.deleted.has(request.sessionId) ||
+      this.removed(request.sessionId, ctx.id) ||
       !info ||
       info.id !== request.sessionId ||
       !info.time ||
@@ -271,6 +290,14 @@ export class AgentHistory {
 
   private now(): number {
     return (this.deps.now ?? Date.now)()
+  }
+
+  private tombstones(projectId: string): Set<string> {
+    return this.scoped.get(projectId) ?? new Set<string>()
+  }
+
+  private removed(id: string, projectId: string): boolean {
+    return this.deleted.has(id) || this.scoped.get(projectId)?.has(id) === true
   }
 
   private directory(ctx: ProjectContext, id: string | null): string | undefined {
@@ -501,7 +528,7 @@ export class AgentHistory {
     }
     const rows = [...entry.candidates.values()]
       .filter((info) => {
-        if (this.deleted.has(info.id)) return false
+        if (this.removed(info.id, entry.ctx.id)) return false
         const placement = resolvePlacement(entry.ctx, info.id, info.directory)
         return (
           placement?.worktreeId === entry.request.worktreeId &&

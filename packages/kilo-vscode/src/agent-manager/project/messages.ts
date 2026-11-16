@@ -22,9 +22,12 @@ import type { HistoryOpen } from "../../shared/agent-history"
 import type { KiloClient } from "@kilocode/sdk/v2/client"
 import { handleTransfer } from "./transfer"
 import type { SessionProvider } from "../host"
+import { isDeepStrictEqual } from "node:util"
+import { deleteHistorySession, type SessionDeletion } from "./delete-session"
 
 const pending = new WeakSet<ProjectMessageDeps>()
 const selections = new WeakMap<ProjectMessageDeps, symbol>()
+const opens = new WeakMap<ProjectMessageDeps, { ref: string; selection?: symbol }>()
 
 /** Route one session to a directory inside a project via the shared session provider. */
 export function routeProjectSession(
@@ -48,6 +51,14 @@ export function routeProjectSession(
 }
 
 export interface ProjectMessageDeps {
+  deletion?: SessionDeletion
+  draft?: (
+    request: import("../../../webview-ui/src/types/messages/agent-manager").AgentManagerOpenDraftInTabRequest,
+  ) => Promise<void>
+  native?: (
+    request: import("../../../webview-ui/src/types/messages/agent-manager").AgentManagerOpenSessionInTabRequest,
+    current: () => boolean,
+  ) => Promise<void>
   history?: AgentHistory
   transfer?: {
     client: (directory: string) => Promise<KiloClient>
@@ -92,6 +103,23 @@ export interface ProjectMessageDeps {
 }
 
 async function handleHistoryMessage(m: AgentManagerInMessage, deps: ProjectMessageDeps): Promise<boolean> {
+  if (m.type === "deleteSession" && m.projectId !== undefined) {
+    await deleteHistorySession(m, deps)
+    return true
+  }
+  if (m.type === "agentManager.openDraftInTab") {
+    try {
+      if (!deps.draft) throw new Error("Native chat tabs are unavailable. Reload the extension and try again.")
+      await deps.draft(m)
+    } catch (err) {
+      deps.error(`Unable to open New Session: ${err instanceof Error ? err.message : String(err)}`)
+    }
+    return true
+  }
+  if (m.type === "agentManager.openSessionInTab") {
+    await openNative(m, deps)
+    return true
+  }
   if (m.type === "agentManager.requestHistory") {
     await deps.history?.request(m)
     return true
@@ -187,21 +215,44 @@ export async function handleProjectMessage(m: AgentManagerInMessage, deps: Proje
   return false
 }
 
+async function openNative(
+  m: Extract<AgentManagerInMessage, { type: "agentManager.openSessionInTab" }>,
+  deps: ProjectMessageDeps,
+): Promise<void> {
+  const request = { ...m }
+  const ref = JSON.stringify([request.projectId, request.sessionId])
+  const previous = opens.get(deps)
+  const selection = selections.get(deps)
+  const opening = previous?.ref === ref ? previous : { ref, selection }
+  opening.selection = selection
+  opens.set(deps, opening)
+  const current = () => opens.get(deps) === opening && selections.get(deps) === opening.selection
+  try {
+    if (!deps.native) throw new Error("Native chat tabs are unavailable.")
+    await deps.native(request, current)
+  } catch (err) {
+    if (!current()) return
+    const error = err instanceof Error ? err.message : "Could not open this conversation."
+    if (request.requestId && request.worktreeId !== undefined)
+      deps.post({
+        type: "agentManager.historyOpenFailed",
+        projectId: request.projectId,
+        worktreeId: request.worktreeId,
+        requestId: request.requestId,
+        error,
+      })
+    deps.error(error)
+  }
+}
+
 async function openHistory(request: HistoryOpen, deps: ProjectMessageDeps): Promise<void> {
   const token = Symbol()
   selections.set(deps, token)
   try {
     if (!deps.history) throw new Error("History is unavailable.")
-    const { ctx, info, directory } = await deps.history.validate(request)
+    const target = await deps.history.validate(request)
     if (selections.get(deps) !== token) return
-    const state = ctx.peekState()
-    if (!state) throw new Error("The project is not ready.")
-    if (!state.getSession(info.id)) state.addSession(info.id, request.worktreeId)
-    deps.routeSession?.(ctx.id, info.id, directory, ctx.generation)
-    ctx.upsertSession({ ...sessionToWebview(info), parentID: null, worktreeId: request.worktreeId })
-    deps.pushState?.(ctx)
-    deps.post({ type: "agentManager.projectSessions", projectId: ctx.id, sessions: [...ctx.sessions()] })
-    finish({ projectId: ctx.id, kind: "session", sessionId: info.id }, deps)
+    adoptHistory(target, request.worktreeId, deps)
   } catch (err) {
     if (selections.get(deps) !== token) return
     deps.post({
@@ -212,6 +263,29 @@ async function openHistory(request: HistoryOpen, deps: ProjectMessageDeps): Prom
       error: err instanceof Error ? err.message : "Could not open this conversation.",
     })
   }
+}
+
+/** Preserve the existing history adoption/selection protocol for validated native history opens. */
+export function adoptHistory(
+  target: Awaited<ReturnType<AgentHistory["validate"]>>,
+  worktreeId: string | null,
+  deps: ProjectMessageDeps,
+): void {
+  const { ctx, info, directory } = target
+  const state = ctx.peekState()
+  if (!state) throw new Error("The project is not ready.")
+  const added = !state.getSession(info.id)
+  if (added) state.addSession(info.id, worktreeId)
+  deps.routeSession?.(ctx.id, info.id, directory, ctx.generation)
+  const view = { ...sessionToWebview(info), parentID: null, worktreeId }
+  const changed = !isDeepStrictEqual(
+    ctx.sessions().find((session) => session.id === info.id),
+    view,
+  )
+  if (changed) ctx.upsertSession(view)
+  if (added) deps.pushState?.(ctx)
+  if (changed) deps.post({ type: "agentManager.projectSessions", projectId: ctx.id, sessions: [...ctx.sessions()] })
+  finish({ projectId: ctx.id, kind: "session", sessionId: info.id }, deps)
 }
 
 async function activateSelection(requested: SidebarTarget, deps: ProjectMessageDeps, restore = false): Promise<void> {
@@ -275,7 +349,6 @@ async function openSessionLocally(projectId: string, sessionId: string, deps: Pr
   state?.moveSession(sessionId, null)
   deps.routeSession?.(projectId, sessionId, ctx.root, ctx.generation)
   deps.pushState?.(ctx)
-  deps.push()
   finish({ projectId, kind: "session", sessionId }, deps)
 }
 
@@ -288,8 +361,10 @@ function finish(target: SidebarTarget, deps: ProjectMessageDeps): void {
     return
   }
   activated.peekState()?.setActiveTarget(target)
-  if (previous !== activated.id) deps.activate(activated)
-  deps.push()
+  if (previous !== activated.id) {
+    deps.activate(activated)
+    deps.push()
+  }
   deps.selected(target)
 }
 
@@ -412,6 +487,7 @@ function selectProject(id: string, deps: ProjectMessageDeps): void {
     deps.push()
     return
   }
+  selections.set(deps, Symbol())
   deps.activate(ctx)
   ctx.warmPool()
   deps.push()

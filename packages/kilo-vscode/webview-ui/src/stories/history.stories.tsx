@@ -28,6 +28,9 @@ import { dict as kiloEn } from "@kilocode/kilo-i18n/en"
 import { resolveTemplate } from "../context/language-utils"
 import SessionList from "../components/history/SessionList"
 import HistoryView from "../components/history/HistoryView"
+import { SeparateTabAction } from "../components/shared/SeparateTabAction"
+import { LocalTabsProvider, useLocalTabs } from "../context/local-tabs"
+import { Button } from "@kilocode/kilo-ui/button"
 
 const dict: Record<string, string> = { ...appEn, ...uiEn, ...kiloEn }
 function t(key: string, params?: Record<string, string | number | boolean | undefined>) {
@@ -96,10 +99,13 @@ const WithSessions: ParentComponent<{ sessions?: typeof mockSessions }> = (props
     createSession: noop,
     clearCurrentSession: noop,
     loadSessions: noop,
+    trackScopes: () => noop,
+    keepSessions: () => noop,
+    isSubmitting: () => false,
     loadMoreSessions: noop,
     sessionsHasMore: () => false,
     sessionsLoadingMore: () => false,
-    selectSession: noop,
+    selectSession: (id: string) => window.dispatchEvent(new CustomEvent("storySessionSelection", { detail: id })),
     deleteSession: noop,
     renameSession: noop,
     syncSession: noop,
@@ -165,7 +171,7 @@ const SessionListDemo = () => {
   return (
     <WithSessions sessions={mockSessions as any}>
       <div style={{ height: "500px" }}>
-        <SessionList onSelectSession={setSelected} />
+        <SessionList onSelectSession={setSelected} separateTabs />
         <output class="sr-only" data-slot="selected-session">
           {selected()}
         </output>
@@ -209,4 +215,36 @@ const WorktreeSourcesDemo = () => {
 export const WorktreeSources: Story = {
   name: "Current worktree source",
   render: () => <WorktreeSourcesDemo />,
+}
+
+export const SeparateTabStates: Story = {
+  render: () => (
+    <WithSessions sessions={mockSessions}>
+      <SeparateTabAction name="Empty composer" />
+      <SeparateTabAction name="Pending composer" sessionID="sidebar-pending:draft" />
+      <SeparateTabAction name="Loading conversation" sessionID="s2" />
+    </WithSessions>
+  ),
+}
+
+function NativeTabState() {
+  const tabs = useLocalTabs()
+  return (
+    <>
+      <output data-slot="native-active-session">{tabs?.active()}</output>
+      <Button onClick={() => tabs?.open("s1")}>Select s1</Button>
+      <Button onClick={() => tabs?.open("s2")}>Select s2</Button>
+      <Button onClick={() => tabs?.add()}>New conversation</Button>
+    </>
+  )
+}
+
+export const NativeRestore: Story = {
+  render: () => (
+    <WithSessions sessions={mockSessions}>
+      <LocalTabsProvider>
+        <NativeTabState />
+      </LocalTabsProvider>
+    </WithSessions>
+  ),
 }

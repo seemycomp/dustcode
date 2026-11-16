@@ -180,10 +180,10 @@ export function createWorktreeDiffs(
   }
 
   /** Initial summary loading for one composite diff id. Cached results stay visible while refreshing. */
-  const diffLoadingFor = (sessionId: Accessor<string | undefined>) => {
+  const diffLoadingFor = (sessionId: Accessor<string | undefined>, owner = project()) => {
     const id = sessionId()
     if (!id) return false
-    const data = key(id)
+    const data = diffDataKey(owner, id)
     return diffLoadings()[data] === true && !(data in diffDatas())
   }
 

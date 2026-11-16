@@ -1,6 +1,7 @@
 import * as fs from "fs"
 import * as path from "path"
 import type { KiloClient, Session } from "@kilocode/sdk/v2/client"
+import { openDialog } from "./open-dialog"
 import type { KiloConnectionService } from "../services/cli-backend"
 import { getErrorMessage } from "../kilo-provider-utils"
 import { resolveLocalDiffTarget } from "../diff/shared/target"
@@ -13,6 +14,7 @@ import { handleSection } from "./section-handler"
 import { STATE_GATED } from "./project/state-gate"
 import {
   addSessionToLifecycleWorktree,
+  rejectAddition,
   closeLifecycleSession,
   createLifecycleWorktree,
   deleteLifecycleWorktree,
@@ -81,6 +83,8 @@ import { ensureSandbox } from "./sandbox-bootstrap"
 import { Semaphore } from "./semaphore"
 import { PLATFORM } from "./constants"
 import { ProjectRegistry } from "./project/registry"
+import { ManagerPresentations } from "./presentations"
+import { abort } from "./native-session-lifetime"
 import type { ProjectContext } from "./project/context"
 import { ProjectContexts } from "./project/contexts"
 import { hydrateExpanded } from "./project/hydrate"
@@ -106,6 +110,13 @@ import { isRestrictedRoot } from "./home-workspace"
 export class AgentManagerProvider implements Disposable {
   public static readonly viewType = "dustcode.AgentManagerPanel"
   private panel: PanelContext | undefined
+  private readonly presentations = new ManagerPresentations((ctx) => {
+    if (ctx.presentation === "sidebar") return
+    void abort(ctx.sessions, this.contexts.values(), this.panelSessions, this.activeSessionId, this.host).catch((err) =>
+      this.log("Failed to abort sessions on panel close:", err),
+    )
+  })
+  private opening: Promise<void> | undefined
   private outputChannel: OutputHandle
   private readonly registry: ProjectRegistry
   private readonly contexts: ProjectContexts
@@ -231,7 +242,7 @@ export class AgentManagerProvider implements Disposable {
       output: (msg) => this.outputChannel.appendLine(msg),
       activate: (ctx) => this.activateProject(ctx),
       empty: () => this.pushEmptyState(),
-      expand: (ctx) => this.initExpanded(ctx),
+      expand: (ctx) => this.presentations.background(() => this.initExpanded(ctx)),
       ready: (ctx, opts) => initContextState(ctx, (...args) => this.log(...args), opts),
       push: () => this.pushProjects(),
       pushState: (ctx) => this.pushState(ctx),
@@ -269,6 +280,7 @@ export class AgentManagerProvider implements Disposable {
       post: (msg) => this.postToWebview(msg),
       log: (...args) => this.log(...args),
       projectId: () => this.context?.id,
+      background: (task) => this.presentations.background(task),
     })
     const pollers = createPollers({
       dirtyFiles: () => this.host.dirtyFiles(),
@@ -338,24 +350,24 @@ export class AgentManagerProvider implements Disposable {
         [...this.contexts.values()].flatMap((ctx) => ctx.peekState()?.getWorktrees() ?? []).map((wt) => wt.path),
       post: (active) => this.postToWebview({ type: "agentManager.worktreeActivity", active }),
       status: (event) => this.onSessionStatus(event),
-      lifecycle: (event) => this.onSessionLifecycle(event),
+      lifecycle: (event, directory) => this.onSessionLifecycle(event, directory),
       log: (err) => this.log("Failed to load worktree activity:", err),
     })
   }
-  /**
-   * Keep each project's cached sidebar session list in sync with backend
-   * session lifecycle events, so sessions created outside this panel (another
-   * window, the CLI, the API) appear without waiting for a full re-list.
-   */
-  private onSessionLifecycle(event: unknown): void {
-    handleSessionLifecycle(event, {
-      busy: this.busySessions,
-      removed: this.removedSessions,
-      contexts: this.contexts,
-      transfer: this.projects.transfer,
-      post: (message) => this.postToWebview(message),
-    })
-    this.projects.history?.event(event)
+  /** Merge external lifecycle metadata into project caches without re-listing. */
+  private onSessionLifecycle(event: unknown, directory?: string): void {
+    handleSessionLifecycle(
+      event,
+      {
+        busy: this.busySessions,
+        removed: this.removedSessions,
+        contexts: this.contexts,
+        history: this.projects.history,
+        transfer: this.projects.transfer,
+        post: (message) => this.postToWebview(message),
+      },
+      directory,
+    )
   }
   private onSessionStatus(event: unknown): void {
     const props = (event as { properties?: { sessionID?: string; status?: { type?: string } } }).properties
@@ -373,26 +385,24 @@ export class AgentManagerProvider implements Disposable {
   private log(...args: unknown[]) {
     this.outputChannel.appendLine(`${new Date().toISOString()} ${formatLog(args)}`)
   }
-  public openPanel(preserveFocus?: boolean): void {
-    if (this.panel) {
-      this.log("Panel already open, revealing")
-      const panel = this.panel
-      revealPanel(panel, preserveFocus, () =>
-        focusPanelPrompt(panel, this.waitForPanelReady(panel), this.waitForPanelActive(panel)),
-      )
-      return
-    }
-    this.log("Opening Agent Manager panel")
+  public openPanel(preserveFocus?: boolean): void | Promise<void> {
+    if (this.host.showSidebar) return (this.opening = Promise.resolve(this.host.showSidebar(preserveFocus)))
+    this.openInTab(preserveFocus)
+  }
+  public openInTab(preserveFocus?: boolean): void {
     this.host.capture("Agent Manager Opened", { source: PLATFORM })
-    const panel = this.host.openPanel({
-      onBeforeMessage: (msg) => this.onMessage(msg),
-      worktreeDirectories: () => this.getWorktreeDirectories(),
-      workspaceRoot: () => this.getRoot(),
-      projectId: () => this.contexts.active()?.id,
-      sessionProject: () => this.sessionProject(),
-    })
-    this.attachPanel(panel)
-    if (!preserveFocus) focusPanelPrompt(panel, this.waitForPanelReady(panel), this.waitForPanelActive(panel))
+    this.presentations.openEditor(
+      this.host,
+      {
+        onBeforeMessage: (msg, ctx) => this.handleMessage(msg, ctx),
+        worktreeDirectories: () => this.getWorktreeDirectories(),
+        workspaceRoot: () => this.getRoot(),
+        projectId: () => this.contexts.active()?.id,
+        sessionProject: () => this.sessionProject(),
+      },
+      (ctx) => this.attachPresentation(ctx),
+      preserveFocus,
+    )
   }
   public onPanelVisibilityChange(cb: (visible: boolean) => void): void {
     this.onVisibilityChange = cb
@@ -401,34 +411,30 @@ export class AgentManagerProvider implements Disposable {
   /** Restore the Agent Manager panel from a previously serialized state.
    *  The caller (extension.ts / vscode-host.ts) wraps the raw panel before passing it. */
   public deserializePanel(ctx: PanelContext): void {
-    if (this.panel) {
-      this.log("Panel already exists during deserialization, disposing duplicate")
-      ctx.dispose()
-      return
-    }
-    this.log("Deserializing Agent Manager panel")
-    this.attachPanel(ctx)
+    this.presentations.restore(ctx, (context) => this.attachPresentation(context))
   }
 
   /** Message interceptor — exposed for the deserialization path in extension.ts. */
-  public handleMessage(msg: Record<string, unknown>): Promise<Record<string, unknown> | null> {
-    return this.onMessage(msg)
+  public handleMessage(msg: Record<string, unknown>, ctx?: PanelContext): Promise<Record<string, unknown> | null> {
+    if (ctx && msg.type === "webviewFocusChanged" && msg.focused === true) this.presentations.focus(ctx)
+    return ctx ? this.presentations.from(ctx, () => this.onMessage(msg)) : this.onMessage(msg)
+  }
+  private attachPresentation(ctx: PanelContext): void {
+    this.presentations.add(ctx, (visible) => this.onVisibilityChange?.(visible))
+    if (!this.panel) return this.attachPanel(this.presentations.panel)
+    this.stateReady = this.initializeState()
+    this.pushProjects()
+    void this.sendRepoInfo()
+    this.sendKeybindings()
   }
 
   /** Wire up a panel context (shared by openPanel and deserializePanel). */
   private attachPanel(ctx: PanelContext): void {
-    if (this.panel) {
-      this.log("Disposing previous panel before attaching new one")
-      const panel = this.panel
-      this.panel = undefined
-      panel.dispose()
-    }
     this.panel = ctx
     this.browserLifecycle.attach(ctx)
 
     for (const poller of [this.statsPoller, this.projectPollers]) poller.setVisible(ctx.visible)
     this.diffs.setVisible(ctx.visible).catch((err) => this.log("Failed to update diff visibility:", err))
-    this.onVisibilityChange?.(ctx.visible)
     ctx.onDidChangeVisibility((visible) => {
       for (const poller of [this.statsPoller, this.projectPollers]) poller.setVisible(visible)
       this.diffs.setVisible(visible).catch((err) => this.log("Failed to update diff visibility:", err))
@@ -452,11 +458,6 @@ export class AgentManagerProvider implements Disposable {
       if (this.panel === ctx) {
         this.projects.history?.pause()
         this.log("Panel disposed")
-        const ids = [...this.panelSessions]
-        if (this.activeSessionId) ids.push(this.activeSessionId)
-        this.panelSessions.clear()
-        this.busySessions.clear()
-        void ctx.sessions.abortSessions(ids).catch((err) => this.log("Failed to abort sessions on panel close:", err))
         this.statsPoller.stop()
         this.projectPollers.dispose()
         this.prBridge.poller.stop()
@@ -465,10 +466,8 @@ export class AgentManagerProvider implements Disposable {
         this.visiblePresence.clear()
         this.panel = undefined
         void this.terminalRouter.dispose()
-        this.onVisibilityChange?.(false)
       }
       keys?.dispose()
-      ctx.sessions.dispose()
     })
   }
 
@@ -510,7 +509,7 @@ export class AgentManagerProvider implements Disposable {
         if (!result.current) return
         registerProjectSessions(ctx, this.panel?.sessions)
         this.pushState(ctx)
-        this.projectPollers.sync(this.contexts)
+        this.presentations.background(() => this.projectPollers.sync(this.contexts))
       })
       .catch((err) => this.log("Failed to initialize expanded project:", err))
   }
@@ -522,10 +521,16 @@ export class AgentManagerProvider implements Disposable {
     }
     msg = await this.contextMessage(msg)
     const m = msg as unknown as AgentManagerInMessage
+    if (m.type === "agentManager.openDialog") {
+      await openDialog(this, m)
+      return null
+    }
     if (await handleProjectMessage(m, this.projects)) return null
     const ctx = this.messageProject(m)
     if (!ctx) {
       this.log(`dropping ${m.type}: message targets an unknown project`)
+      if (m.type === "agentManager.addSessionToWorktree")
+        return rejectAddition(this.lifecycleHost, m, "The project is unavailable.")
       return null
     }
     return this.projectScope.run(ctx, () => this.dispatchMessage(m, msg, ctx))
@@ -540,6 +545,8 @@ export class AgentManagerProvider implements Disposable {
       const result = await initContextState(ctx, (...args) => this.log(...args))
       if (!result.current || !result.ok) {
         this.log(`dropping ${m.type}: project ${ctx.id} not ready (current=${result.current}, ok=${result.ok})`)
+        if (m.type === "agentManager.addSessionToWorktree")
+          return rejectAddition(this.lifecycleHost, { ...m, projectId: ctx.id }, "The project is not ready.")
         return null
       }
     }
@@ -614,7 +621,8 @@ export class AgentManagerProvider implements Disposable {
     if (m.type === "agentManager.cleanOrphanDirectories") return this.recover(m)
     if (m.type === "agentManager.revealPath") return this.recover(m)
     if (m.type === "agentManager.promoteSession") return this.onPromoteSession(m.sessionId)
-    if (m.type === "agentManager.addSessionToWorktree") return this.onAddSessionToWorktree(m.worktreeId, m.sessionId)
+    if (m.type === "agentManager.addSessionToWorktree" && this.context)
+      return addSessionToLifecycleWorktree(this.context, this.lifecycleHost, m.worktreeId, m.sessionId, m.requestId)
     if (m.type === "agentManager.forkSession") return this.onForkSession(m.sessionId, m.worktreeId, m.messageId)
     if (m.type === "agentManager.closeSession") return this.onCloseSession(m.sessionId)
   }
@@ -929,7 +937,7 @@ export class AgentManagerProvider implements Disposable {
     // unreachable orphans. Kill them here rather than leaking shells until
     // the panel itself is disposed. In-flight creates from the dying
     // instance are reaped by the router's generation guard.
-    void this.terminalRouter.dispose()
+    if (this.presentations.size <= 1) void this.terminalRouter.dispose()
     this.scripts.manager.snapshot()
     void this.activity.sync(true)
     this.log(
@@ -1091,6 +1099,7 @@ export class AgentManagerProvider implements Disposable {
   }
 
   private async waitForStateReady(context: string): Promise<void> {
+    await this.opening
     const ctx = this.projectScope.current()
     // A message scoped to a background project must wait for that project's
     // own initialization; this.stateReady only tracks the active project.
@@ -1214,13 +1223,6 @@ export class AgentManagerProvider implements Disposable {
     const ctx = this.context
     if (!ctx) return null
     return promoteLifecycleSession(ctx, this.lifecycleHost, sessionId)
-  }
-
-  /** Add a new session to an existing worktree. */
-  private async onAddSessionToWorktree(worktreeId: string, sessionId?: string): Promise<null> {
-    const ctx = this.context
-    if (!ctx) return null
-    return addSessionToLifecycleWorktree(ctx, this.lifecycleHost, worktreeId, sessionId)
   }
 
   private onForkSession(sessionId: string, worktreeId?: string, messageId?: string) {
@@ -1436,9 +1438,9 @@ export class AgentManagerProvider implements Disposable {
     // Sync skip set before enabling the poller so the first poll cycle
     // already excludes worktrees in collapsed sections.
     this.syncPollerSkips()
-    this.statsPoller.setEnabled(worktrees.length > 0 || this.panel !== undefined)
+    this.presentations.background(() => this.statsPoller.setEnabled(worktrees.length > 0 || this.panel !== undefined))
     // Start PR polling during state hydration so persisted badges get live status.
-    this.prBridge.poller.setEnabled(this.panel !== undefined)
+    this.presentations.background(() => this.prBridge.poller.setEnabled(this.panel !== undefined))
   }
 
   /** Push empty state when the folder is not a git repo or has no folder open. */
@@ -1592,7 +1594,7 @@ export class AgentManagerProvider implements Disposable {
       this.stateReady = this.initializeState()
     else {
       this.panel?.sessions.refreshSessions()
-      this.projectPollers.sync(this.contexts)
+      this.presentations.background(() => this.projectPollers.sync(this.contexts))
     }
     this.panel?.sessions.refreshGitStatus?.()
     this.panel?.sessions.retryInitialization?.()
@@ -1618,9 +1620,9 @@ export class AgentManagerProvider implements Disposable {
       hydrateExpanded(projects, {
         expand: (id) => this.contexts.expand(id),
         push: (ctx) => this.pushState(ctx),
-        init: (ctx) => this.initExpanded(ctx),
+        init: (ctx) => this.presentations.background(() => this.initExpanded(ctx)),
       })
-    this.projectPollers.sync(this.contexts)
+    this.presentations.background(() => this.projectPollers.sync(this.contexts))
     this.projectPollers.replay()
   }
 
@@ -1691,10 +1693,9 @@ export class AgentManagerProvider implements Disposable {
   }
 
   /** Wait for the current panel's webview to be ready before posting to it. False if there is no panel or it closed while waiting. */
-  public waitForReady(): Promise<boolean> {
-    const panel = this.panel
-    if (!panel) return Promise.resolve(false)
-    return this.waitForPanelReady(panel)
+  public async waitForReady(presentation?: PanelContext["presentation"]): Promise<boolean> {
+    await this.opening
+    return this.presentations.ready(presentation)
   }
 
   public async showMemory(): Promise<void> {
@@ -1781,7 +1782,7 @@ export class AgentManagerProvider implements Disposable {
       return
     }
 
-    this.openPanel()
+    await this.openPanel()
     await this.waitForStateReady("continueFromSidebar")
     await continueInWorktree(
       {
@@ -1815,18 +1816,14 @@ export class AgentManagerProvider implements Disposable {
   }
 
   public async createFromSidebar(baseBranch?: string, branchName?: string): Promise<void> {
-    this.openPanel()
+    await this.openPanel()
     if (!this.panel || !(await this.waitForPanelReady(this.panel))) return
     await this.waitForStateReady("createFromSidebar")
     await this.onCreateWorktree(baseBranch, branchName)
   }
 
   public async openAdvancedWorktree(): Promise<void> {
-    this.openPanel()
-    if (!this.panel || !(await this.waitForPanelActive(this.panel)) || !(await this.waitForPanelReady(this.panel)))
-      return
-    await this.waitForStateReady("openAdvancedWorktree")
-    queueMicrotask(() => this.postToWebview({ type: "action", action: "advancedWorktree" }))
+    await openDialog(this, { type: "agentManager.openDialog", dialog: "worktree", projectId: this.context?.id })
   }
 
   private handleSection(m: AgentManagerInMessage): boolean {
@@ -1847,8 +1844,9 @@ export class AgentManagerProvider implements Disposable {
     })
   }
 
-  public postMessage(message: unknown): void {
-    this.panel?.postMessage(message)
+  public postMessage(message: unknown, presentation?: PanelContext["presentation"]): void {
+    const panel = presentation ? this.presentations.get(presentation) : this.panel
+    panel?.postMessage(message)
   }
 
   public shutdown(): Promise<void> {

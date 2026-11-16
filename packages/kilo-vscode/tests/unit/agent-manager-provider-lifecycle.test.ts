@@ -6,6 +6,7 @@ import type { KiloClient, SessionStatus } from "@kilocode/sdk/v2/client"
 import { ProjectContext } from "../../src/agent-manager/project/context"
 import {
   createLifecycleWorktree,
+  addSessionToLifecycleWorktree,
   closeLifecycleSession,
   deleteLifecycleWorktree,
   removeStaleLifecycleWorktree,
@@ -133,6 +134,100 @@ describe("Agent Manager worktree deletion lifecycle", () => {
   })
 
   const deleteWorktree = async () => deleteLifecycleWorktree(ctx, host, state.getWorktrees()[0]!.id)
+
+  it("qualifies real session-add successes and failures with their owning project and request", async () => {
+    const posted: unknown[] = []
+    host.post = (message) => posted.push(message)
+    const wt = state.getWorktrees().at(0)!
+    Object.assign(client.session, { create: async () => ({ data: { id: "created", directory: worktree } }) })
+    await addSessionToLifecycleWorktree(ctx, host, wt.id, undefined, "success")
+    expect(posted).toContainEqual({
+      type: "agentManager.sessionAdded",
+      projectId: ctx.id,
+      worktreeId: wt.id,
+      sessionId: "created",
+      requestId: "success",
+    })
+    posted.length = 0
+    Object.assign(client.session, {
+      create: async () => {
+        throw new Error("Rejected")
+      },
+    })
+    await addSessionToLifecycleWorktree(ctx, host, wt.id, undefined, "failure")
+    expect(posted).toEqual([
+      {
+        type: "error",
+        projectId: ctx.id,
+        worktreeId: wt.id,
+        requestId: "failure",
+        message: "Failed to create session: Rejected",
+      },
+    ])
+    posted.length = 0
+    await addSessionToLifecycleWorktree(ctx, host, wt.id, "existing", "existing")
+    expect(posted).toEqual([
+      {
+        type: "agentManager.sessionAdded",
+        projectId: ctx.id,
+        worktreeId: wt.id,
+        sessionId: "existing",
+        requestId: "existing",
+      },
+    ])
+  })
+
+  it("echoes individual request IDs when actual backend additions finish in reverse order", async () => {
+    const posted: unknown[] = []
+    host.post = (message) => posted.push(message)
+    const first = Promise.withResolvers<{ data: { id: string } }>()
+    const second = Promise.withResolvers<{ data: { id: string } }>()
+    const queue = [first, second]
+    Object.assign(client.session, { create: () => queue.shift()!.promise })
+    const wt = state.getWorktrees().at(0)!
+    const one = addSessionToLifecycleWorktree(ctx, host, wt.id, undefined, "first")
+    const two = addSessionToLifecycleWorktree(ctx, host, wt.id, undefined, "second")
+    second.resolve({ data: { id: "two" } })
+    await two
+    first.resolve({ data: { id: "one" } })
+    await one
+    expect(posted).toEqual([
+      {
+        type: "agentManager.sessionAdded",
+        projectId: ctx.id,
+        worktreeId: wt.id,
+        sessionId: "two",
+        requestId: "second",
+      },
+      { type: "agentManager.sessionAdded", projectId: ctx.id, worktreeId: wt.id, sessionId: "one", requestId: "first" },
+    ])
+  })
+
+  it("rejects disconnected and missing-worktree additions with exact request scope", async () => {
+    const posted: unknown[] = []
+    host.post = (message) => posted.push(message)
+    await addSessionToLifecycleWorktree(ctx, host, "missing", undefined, "missing")
+    host.client = () => {
+      throw new Error("Offline")
+    }
+    await addSessionToLifecycleWorktree(ctx, host, "w", undefined, "offline")
+    expect(posted).toEqual([
+      {
+        type: "error",
+        projectId: ctx.id,
+        worktreeId: "missing",
+        requestId: "missing",
+        message: "The worktree is unavailable.",
+      },
+      {
+        type: "error",
+        projectId: ctx.id,
+        worktreeId: "w",
+        requestId: "offline",
+        message: "Not connected to CLI backend",
+      },
+    ])
+  })
 
   it("records managed placement before tab removal even when live metadata points elsewhere", async () => {
     const wt = state.getWorktrees().at(0)!

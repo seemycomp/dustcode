@@ -1,9 +1,15 @@
 import { describe, it, expect, spyOn } from "bun:test"
+import { mkdir, mkdtemp, rm } from "node:fs/promises"
+import { join } from "node:path"
+import { tmpdir } from "node:os"
 import type { SessionStatus } from "@kilocode/sdk/v2/client"
+import type { SessionRefreshContext } from "../../src/kilo-provider-utils"
 import * as vscode from "vscode"
 import type { PartUpdate } from "../../src/shared/stream-messages"
 import type { AbortRequest, ClearSessionRequest } from "../../webview-ui/src/types/messages/webview-messages"
 import { REVERT_ERROR_CODE } from "../../src/shared/revert-error"
+import { ProjectContexts } from "../../src/agent-manager/project/contexts"
+import { restoreNativeScope } from "../../src/agent-manager/project/native"
 
 // vscode mock is provided by the shared preload (tests/setup/vscode-mock.ts)
 const { KiloProvider, unwrapSyncEvent } = await import("../../src/KiloProvider")
@@ -154,7 +160,7 @@ function createClient(options?: {
         await options?.abortDeferred?.promise
         return { data: true }
       },
-      messages: async (params: { before?: string; limit?: number }) => {
+      messages: async (params: { before?: string; limit?: number; directory?: string }) => {
         calls.push({ before: params.before, limit: params.limit })
         if (options?.messagesDeferred) return options.messagesDeferred.promise
         return mkResult(options?.messagesData ?? [])
@@ -301,6 +307,8 @@ type ProviderInternals = {
   handleSetSandboxDefault: (enabled: boolean, requestID: string, directory?: string) => Promise<void>
   handleToggleSandbox: (input: { sessionID: string; requestID: string }) => Promise<void>
   refreshGitStatus: (directory?: string, sessionID?: string) => Promise<void>
+  recoverSessionGitStatus: (parts: unknown[], sessionID: string, cursor?: string) => Promise<void>
+  getSessionRefreshContext: (revision: number) => SessionRefreshContext
   handleLoadMessages: (
     sid: string,
     opts?: { mode?: string; before?: string; limit?: number; focus?: boolean },
@@ -335,6 +343,450 @@ function status(internal: ProviderInternals, type: "busy" | "idle", directory = 
 function mockMaxCost(internal: ProviderInternals, value: number) {
   internal.setMaxCost(value)
 }
+
+describe("KiloProvider native tab loading", () => {
+  it("lists and loads cold restored siblings from trusted placement before opening Agent Manager", async () => {
+    const root = await mkdtemp(join(tmpdir(), "native-history-"))
+    const directory = join(root, "tree")
+    await mkdir(directory)
+    const contexts = new ProjectContexts({
+      workspaceRoot: () => undefined,
+      registry: {
+        list: () => [{ id: "cold", root, label: "Cold", expanded: false }],
+        get: (id) => (id === "cold" ? { id, root, label: "Cold", expanded: false } : undefined),
+      },
+      deps: { log: () => {} },
+    })
+    const ctx = contexts.active()!
+    const state = ctx.stateManager()
+    const tree = state.addWorktree({ branch: "feature", path: directory, parentBranch: "main" })
+    state.closeSession("first", tree.id)
+    state.closeSession("second", tree.id)
+    state.closeSession("local", null)
+    const routes = new ProjectRouteService()
+    const scope = await restoreNativeScope(
+      { projectId: ctx.id, root, directory, worktreeId: tree.id },
+      {
+        contexts,
+        routes,
+        ready: (project) => project.ensureReady(async () => ({ ok: true, refsFixed: 0 })),
+      },
+    )
+    const client = Object.assign(
+      createClient({
+        sessionGet: async ({ sessionID, directory: dir }) => {
+          expect(dir).toBe(directory)
+          return { data: { ...mkSession(), id: sessionID, directory: root } }
+        },
+      }),
+      {
+        experimental: {
+          session: {
+            list: async (input: { directory: string }) => {
+              expect(input.directory).toBe(directory)
+              return mkResult(
+                ["first", "second", "local", "foreign"].map((id) => ({ ...mkSession(), id, directory: root })),
+              )
+            },
+          },
+        },
+      },
+    )
+    const { provider, internal, sent } = makeProvider(client, {
+      nativeSessionScope: scope,
+      nativeSessionTab: { restore: true, context: "host-binding" },
+    })
+    const refresh = spyOn(provider, "refreshGitStatus")
+    const recovery = spyOn(internal, "recoverSessionGitStatus")
+    try {
+      const page = await internal.getSessionRefreshContext(0).listSessionPage?.(directory)
+      expect(page?.sessions.map((session) => session.id)).toEqual(["first", "second"])
+      await provider.loadMessages("second")
+      expect(provider.getSelectedSessionId()).toBe("second")
+      expect(provider.getSessionDirectories().get("second")).toBe(directory)
+      const calls = client.calls.length
+      await provider.loadMessages("local")
+      expect(client.calls).toHaveLength(calls)
+      expect(sent).toContainEqual(expect.objectContaining({ type: "error", sessionID: "local" }))
+      expect(state.getSessions()).toEqual([])
+    } finally {
+      // Both fire-and-forget Git paths can retain the fixture as a child process cwd on Windows.
+      await Promise.all([...refresh.mock.results, ...recovery.mock.results].map((result) => result.value))
+      refresh.mockRestore()
+      recovery.mockRestore()
+      provider.dispose()
+      await state.flush()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  function scoped() {
+    const routes = new ProjectRouteService()
+    routes.registerProject("a", "/a", 1)
+    routes.registerProject("b", "/b", 1)
+    routes.registerSession({ projectId: "a", sessionId: "s1" }, "/a/tree", 1)
+    routes.registerSession({ projectId: "b", sessionId: "foreign" }, "/b/tree", 1)
+    const state = { valid: true, registered: [] as string[] }
+    const scope = {
+      projectId: "a",
+      root: "/a",
+      directory: "/a/tree",
+      worktreeId: "tree",
+      projectLabel: "Project A",
+      label: "feature",
+      generation: 1,
+      routes,
+      validate: () => {
+        if (!state.valid) throw new Error("Placement changed")
+      },
+      register: (id: string) => {
+        state.registered.push(id)
+        routes.registerSession({ projectId: "a", sessionId: id }, "/a/tree", 1)
+      },
+    }
+    return { scope, state }
+  }
+
+  it("keeps host project and execution scope after New Task and a manager project switch", async () => {
+    const { scope, state } = scoped()
+    const client = createClient({ sessionData: mkSession() })
+    const { provider, internal } = makeProvider(client, {
+      nativeSessionScope: scope,
+      nativeSessionTab: { sessionID: "s1", restore: false },
+      rootDirectory: () => "/b",
+      projectQualifier: () => ({ projectId: "b" }),
+    })
+    provider.reserveSession("s1", "/a/tree")
+    const listener = Promise.withResolvers<(message: unknown) => Promise<void>>()
+    internal.setupWebviewMessageHandler({
+      onDidReceiveMessage: (callback: (message: unknown) => Promise<void>) => {
+        listener.resolve(callback)
+        return { dispose() {} }
+      },
+    })
+    await (
+      await listener.promise
+    )({ type: "clearSession" })
+    const resolved = await internal.resolveSession(undefined, "new", "local", "/untrusted")
+    expect(resolved).toEqual({ sid: "created", dir: "/a/tree" })
+    expect(client.created.at(0)?.directory).toBe("/a/tree")
+    expect(state.registered).toEqual(["created"])
+    const dirs = provider as unknown as { getRootDirectory(): string; getProjectDirectory(): string }
+    expect(dirs.getRootDirectory()).toBe("/a")
+    expect(dirs.getProjectDirectory()).toBe("/a")
+    provider.dispose()
+  })
+
+  it("never satisfies a scoped load from another project's unique raw route", async () => {
+    const { scope } = scoped()
+    const client = createClient({ sessionData: mkSession() })
+    const { provider, sent } = makeProvider(client, {
+      nativeSessionScope: scope,
+      nativeSessionTab: { sessionID: "foreign", restore: false },
+      routeService: scope.routes,
+    })
+    await provider.loadMessages("foreign")
+    expect(client.calls).toEqual([])
+    expect(sent).toContainEqual(expect.objectContaining({ type: "error", sessionID: "foreign" }))
+    provider.dispose()
+  })
+
+  it("retains trusted worktree placement when backend metadata reports the project root", async () => {
+    const { scope } = scoped()
+    const client = createClient({ sessionData: { ...mkSession(), directory: "/a" } })
+    const messages = spyOn(client.session, "messages")
+    const { provider } = makeProvider(client, {
+      nativeSessionScope: scope,
+      nativeSessionTab: { sessionID: "s1", restore: false },
+    })
+    await provider.loadMessages("s1")
+    expect(messages.mock.calls.every(([params]) => params.directory === "/a/tree")).toBe(true)
+    expect(provider.getSessionDirectories().get("s1")).toBe("/a/tree")
+    messages.mockRestore()
+    provider.dispose()
+  })
+
+  it("reports invalid placement before webview actions can mutate the backend", async () => {
+    const { scope, state } = scoped()
+    const client = createClient()
+    const { provider, internal, sent } = makeProvider(client, { nativeSessionScope: scope })
+    const listener = Promise.withResolvers<(message: unknown) => Promise<void>>()
+    internal.setupWebviewMessageHandler({
+      onDidReceiveMessage: (callback: (message: unknown) => Promise<void>) => {
+        listener.resolve(callback)
+        return { dispose() {} }
+      },
+    })
+    state.valid = false
+    const receive = await listener.promise
+    await receive({ type: "abort", sessionID: "s1" })
+    await receive({ type: "sendMessage", text: "no", draftID: "draft", messageID: "bad" })
+    await receive({ type: "sendCommand", command: "help", arguments: "topic", draftID: "command", messageID: "cmd" })
+    expect(client.aborted).toEqual([])
+    expect(client.created).toEqual([])
+    expect(sent).toContainEqual(expect.objectContaining({ type: "error", message: "Placement changed" }))
+    expect(sent).toContainEqual({
+      type: "sendMessageFailed",
+      error: "Placement changed",
+      text: "no",
+      sessionID: undefined,
+      draftID: "draft",
+      messageID: "bad",
+    })
+    expect(sent).toContainEqual({
+      type: "sendMessageFailed",
+      error: "Placement changed",
+      text: "/help topic",
+      sessionID: undefined,
+      draftID: "command",
+      messageID: "cmd",
+    })
+    provider.dispose()
+  })
+
+  it("routes scoped send, stop, rename, prompts, files, settings and history to its captured placement", async () => {
+    const { scope } = scoped()
+    const requests: Array<{ action: string; directory?: string }> = []
+    const client = Object.assign(createClient({ sessionData: mkSession() }), {
+      permission: {
+        reply: async (input: { directory: string }) => {
+          requests.push({ action: "permission", ...input })
+          return { data: true }
+        },
+      },
+      question: {
+        reply: async (input: { directory: string }) => {
+          requests.push({ action: "question", ...input })
+          return { data: true }
+        },
+      },
+      experimental: {
+        session: {
+          list: async (input: { directory: string }) => {
+            requests.push({ action: "history", ...input })
+            return { data: [mkSession(), { ...mkSession(), id: "foreign" }], response: { headers: new Headers() } }
+          },
+        },
+      },
+    })
+    Object.assign(client.session, {
+      update: async (input: { directory: string; title: string }) => {
+        requests.push({ action: "rename", ...input })
+        return { data: { ...mkSession(), title: input.title } }
+      },
+    })
+    const { provider, internal, connection } = makeProvider(client, {
+      nativeSessionScope: scope,
+      nativeSessionTab: { sessionID: "s1", restore: false },
+      rootDirectory: () => "/b",
+      projectQualifier: () => ({ projectId: "b" }),
+    })
+    Object.assign(connection, {
+      getPermissionDirectory: () => undefined,
+      getPermissionSession: () => undefined,
+      clearPermissionDirectory: () => {},
+      isPermissionResponseClaimed: () => false,
+      runPermissionResponse: (_id: string, _sid: string, run: () => Promise<unknown>) => run(),
+      getQuestionDirectory: () => undefined,
+      clearQuestionDirectory: () => {},
+    })
+    internal.currentSession = mkSession()
+    internal.gatherEditorContext = async () => ({})
+    provider.rememberSession("s1", "/a/tree")
+    provider.setDocumentViewerProvider({
+      openFromCommand: (input: { directory: string }) => requests.push({ action: "file", ...input }),
+    } as never)
+    provider.setDiffViewerProvider({
+      openFromCommand: (input: { directory: string }) => requests.push({ action: "diff", ...input }),
+    } as never)
+    const listener = Promise.withResolvers<(message: unknown) => Promise<void>>()
+    internal.setupWebviewMessageHandler({
+      onDidReceiveMessage: (callback: (message: unknown) => Promise<void>) => {
+        listener.resolve(callback)
+        return { dispose() {} }
+      },
+    })
+    const receive = await listener.promise
+    await receive({ type: "sendMessage", sessionID: "s1", text: "scoped", messageID: "m" })
+    await receive({ type: "abort", sessionID: "s1" })
+    await receive({ type: "renameSession", sessionID: "s1", title: "Scoped name" })
+    await receive({
+      type: "permissionResponse",
+      sessionID: "s1",
+      permissionId: "p",
+      response: "once",
+      approvedAlways: [],
+      deniedAlways: [],
+    })
+    await receive({ type: "questionReply", sessionID: "s1", requestID: "q", answers: [["Yes"]] })
+    await receive({ type: "openFile", sessionID: "s1", filePath: "README.md" })
+    const state = provider as unknown as { openChanges(id: string): Promise<void>; settingsDirectory(): string }
+    await state.openChanges("s1")
+    const page = await internal.getSessionRefreshContext(0).listSessionPage?.("/a/tree")
+    expect(client.prompted.at(0)?.directory).toBe("/a/tree")
+    expect(client.aborted.at(0)?.directory).toBe("/a/tree")
+    expect(requests.map((request) => [request.action, request.directory])).toEqual([
+      ["rename", "/a/tree"],
+      ["permission", "/a/tree"],
+      ["question", "/a/tree"],
+      ["file", "/a/tree"],
+      ["diff", "/a/tree"],
+      ["history", "/a/tree"],
+    ])
+    expect(state.settingsDirectory()).toBe("/a")
+    expect(page?.sessions.map((session) => session.id)).toEqual(["s1"])
+    provider.dispose()
+  })
+
+  it("blocks a blank tab with an unavailable saved binding instead of creating in the workspace", async () => {
+    const client = createClient()
+    const { provider, internal } = makeProvider(client, { nativeSessionTab: { restore: true, unavailable: true } })
+    await expect(internal.resolveSession(undefined, "draft")).rejects.toThrow("unavailable")
+    expect(client.created).toEqual([])
+    provider.dispose()
+  })
+
+  it("loads a restored trusted working directory without replacing it with metadata", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "native-context-"))
+    const client = createClient({ sessionData: mkSession() })
+    const messages = spyOn(client.session, "messages")
+    try {
+      const { provider, internal } = makeProvider(client, {
+        nativeSessionTab: { sessionID: "s1", restore: true, context: "trusted" },
+      })
+      provider.reserveSession("s1", dir)
+      const refresh = internal.getSessionRefreshContext(0)
+      refresh.sessionDirectories.set("s1", "/repo")
+      refresh.postMessage({ type: "sessionsLoaded", sessions: [] })
+      await provider.loadMessages("s1")
+      expect(provider.getSessionDirectories().get("s1")).toBe(dir)
+      expect(messages).toHaveBeenCalled()
+      expect(messages.mock.calls.every(([params]) => params.directory === dir)).toBe(true)
+      expect(provider.getSelectedSessionId()).toBe("s1")
+    } finally {
+      messages.mockRestore()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("a lost binding reports an error before loading instead of falling back to metadata", async () => {
+    const client = createClient({ sessionData: mkSession() })
+    const { provider, sent } = makeProvider(client, {
+      nativeSessionTab: { sessionID: "s1", restore: true, unavailable: true },
+    })
+    await provider.loadMessages("s1")
+    expect(client.calls).toEqual([])
+    expect(sent).toContainEqual(expect.objectContaining({ type: "error", sessionID: "s1" }))
+    expect(provider.getSelectedSessionId()).toBeUndefined()
+  })
+
+  it("a removed saved working directory reports an error without querying another directory", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "native-missing-"))
+    await rm(dir, { recursive: true, force: true })
+    const client = createClient({ sessionData: mkSession() })
+    const { provider, sent } = makeProvider(client, {
+      nativeSessionTab: { sessionID: "s1", restore: true, context: "trusted" },
+    })
+    provider.reserveSession("s1", dir)
+    await provider.loadMessages("s1")
+    expect(client.calls).toEqual([])
+    expect(sent).toContainEqual(expect.objectContaining({ type: "error", sessionID: "s1" }))
+    expect(provider.getSelectedSessionId()).toBeUndefined()
+  })
+
+  for (const mode of ["prepend", "reconcile"] as const) {
+    it(`retains selected ownership after a failed background ${mode} load and retry`, async () => {
+      const client = createClient({ sessionData: mkSession() })
+      const { provider, internal } = makeProvider(client, { nativeSessionTab: { sessionID: "s1", restore: false } })
+      await provider.loadMessages("s1")
+      const original = client.session.messages
+      client.session.messages = async () => {
+        throw new Error("offline")
+      }
+      await internal.handleLoadMessages("s1", { mode })
+      expect(provider.getSelectedSessionId()).toBe("s1")
+      client.session.messages = original
+      await internal.handleLoadMessages("s1", { mode })
+      expect(provider.getSelectedSessionId()).toBe("s1")
+    })
+  }
+
+  it("routes a typed separate-tab request without navigating or loading the source", async () => {
+    const ids: string[] = []
+    const client = createClient()
+    const { provider, internal } = makeProvider(client, {
+      openSessionInTab: async (id) => {
+        ids.push(id)
+      },
+    })
+    provider.reserveSession("source", "/repo")
+    const listener = Promise.withResolvers<(message: unknown) => Promise<void>>()
+    internal.setupWebviewMessageHandler({
+      onDidReceiveMessage: (callback: (message: unknown) => Promise<void>) => {
+        listener.resolve(callback)
+        return { dispose() {} }
+      },
+    })
+    const receive = await listener.promise
+    await receive({ type: "openSessionInTab", sessionID: "target", directory: "/untrusted" })
+    await receive({ type: "openSessionInTab", sessionID: 42 })
+    expect(ids).toEqual(["target"])
+    expect(provider.getSelectedSessionId()).toBe("source")
+    expect(client.calls).toEqual([])
+  })
+
+  it("reports an unavailable restore without loading another session and allows retry", async () => {
+    const data: { value: ReturnType<typeof mkSession> | null } = { value: null }
+    const client = createClient({ sessionGet: async () => ({ data: data.value }) })
+    const { provider, sent } = makeProvider(client, { nativeSessionTab: { sessionID: "s1", restore: true } })
+    await provider.loadMessages("s1")
+    expect(provider.getSelectedSessionId()).toBeUndefined()
+    expect(client.calls).toHaveLength(0)
+    expect(sent).toContainEqual(expect.objectContaining({ type: "error", sessionID: "s1" }))
+    data.value = mkSession()
+    await provider.loadMessages("s1")
+    expect(provider.getSelectedSessionId()).toBe("s1")
+    expect(sent).toContainEqual(expect.objectContaining({ type: "messagesLoaded", sessionID: "s1" }))
+  })
+
+  it("drops a restore response after a later in-place selection", async () => {
+    const pending = Promise.withResolvers<{ data: unknown }>()
+    const client = createClient({
+      sessionGet: async ({ sessionID }) =>
+        sessionID === "s1" ? pending.promise : { data: { ...mkSession(), id: sessionID } },
+    })
+    const { provider, sent } = makeProvider(client, { nativeSessionTab: { sessionID: "s1", restore: true } })
+    const first = provider.loadMessages("s1")
+    await provider.loadMessages("s2")
+    pending.resolve({ data: mkSession() })
+    await first
+    expect(provider.getSelectedSessionId()).toBe("s2")
+    expect(sent).not.toContainEqual(expect.objectContaining({ type: "messagesLoaded", sessionID: "s1" }))
+    expect(sent).not.toContainEqual(expect.objectContaining({ type: "error", sessionID: "s1" }))
+  })
+
+  it("closing during restore drops late messages without aborting or deleting the session", async () => {
+    const pending = Promise.withResolvers<{ data: unknown }>()
+    const client = createClient({ sessionGet: async () => pending.promise })
+    const { provider, sent } = makeProvider(client, { nativeSessionTab: { sessionID: "s1", restore: true } })
+    const load = provider.loadMessages("s1")
+    provider.dispose()
+    pending.resolve({ data: mkSession() })
+    await load
+    expect(client.aborted).toEqual([])
+    expect(client.deleted).toEqual([])
+    expect(client.stopped).toEqual([])
+    expect(sent).not.toContainEqual(expect.objectContaining({ type: "messagesLoaded" }))
+  })
+
+  it("keeps the trusted execution context supplied by the source surface", async () => {
+    const client = createClient({ sessionData: mkSession() })
+    const { provider } = makeProvider(client, { nativeSessionTab: { sessionID: "s1", restore: false } })
+    provider.reserveSession("s1", "/worktree")
+    await provider.loadMessages("s1")
+    expect(provider.getSessionDirectories().get("s1")).toBe("/worktree")
+  })
+})
 
 describe("KiloProvider.handleAbort", () => {
   it.each([undefined, "session", "tree"] as const)(

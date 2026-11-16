@@ -1,5 +1,5 @@
-import { createMemo, createSignal, type Accessor, type Setter } from "solid-js"
-import { createStore } from "solid-js/store"
+import { batch, createMemo, createSignal, type Accessor, type Setter } from "solid-js"
+import { createStore, reconcile } from "solid-js/store"
 import { isTerminalTabId } from "../../src/utils/terminal-tab-id"
 import { mergeTransientTabs } from "../tab-order"
 import { PENDING_PREFIX, REVIEW_TAB_ID } from "../tab-ids"
@@ -45,6 +45,16 @@ function field<T>(initial: T): [Accessor<T>, Setter<T>] {
   return [get, set]
 }
 
+function collection<T extends { id: string }>(): [Accessor<T[]>, Setter<T[]>] {
+  const [state, write] = createStore<{ rows: T[] }>({ rows: [] })
+  const set: Setter<T[]> = (value) => {
+    const next = typeof value === "function" ? value(state.rows) : value
+    write(reconcile({ rows: next }, { key: "id" }))
+    return next
+  }
+  return [() => state.rows, set]
+}
+
 /**
  * Per-project state that must never be shared with other projects: sidebar
  * inventory (worktrees, sessions, sections, orders), live data (stats, PR and
@@ -82,9 +92,9 @@ export function createProjectStore(id: string, opts: { tabs?: string[] } = {}) {
     set: (sel: string, tab: string) => setSessionMemory((prev) => (prev[sel] === tab ? prev : { ...prev, [sel]: tab })),
   }
 
-  const [worktrees, setWorktrees] = field<WorktreeState[]>([])
-  const [managedSessions, setManagedSessions] = field<ManagedSessionState[]>([])
-  const [sections, setSections] = field<SectionState[]>([])
+  const [worktrees, setWorktrees] = collection<WorktreeState>()
+  const [managedSessions, setManagedSessions] = collection<ManagedSessionState>()
+  const [sections, setSections] = collection<SectionState>()
   const [staleWorktreeIds, setStaleWorktreeIds] = field<Set<string>>(new Set())
   const [worktreeHealth, setWorktreeHealth] = field<Record<string, WorktreeHealthState>>({})
   const [orphanDirectories, setOrphanDirectories] = field<OrphanDirectory[]>([])
@@ -101,49 +111,58 @@ export function createProjectStore(id: string, opts: { tabs?: string[] } = {}) {
   const [busy, setBusy] = field<Map<string, WorktreeBusyState>>(new Map())
 
   /** Write a project state payload into this store (data fields only). */
-  const applyState = (state: AgentManagerStateMessage): void => {
-    setWorktrees(state.worktrees)
-    setManagedSessions(state.sessions)
-    setStaleWorktreeIds(new Set(state.staleWorktreeIds ?? []))
-    setWorktreeHealth(state.worktreeHealth ?? {})
-    setOrphanDirectories(state.orphanDirectories ?? [])
-    setSections(state.sections ?? [])
-    if (state.historyExpanded) setHistoryExpanded(state.historyExpanded)
-    if (state.historyInitialized !== undefined) setHistoryInitialized(state.historyInitialized)
-    history.prune(new Set(state.worktrees.map((wt) => wt.id)))
-    if (state.tabOrder) {
-      const incoming = state.tabOrder
-      setTabOrder((previous) => ({
-        ...previous,
-        ...Object.fromEntries(
-          Object.entries(incoming).map(([key, order]) => [
-            key,
-            mergeTransientTabs(
+  const applyState = (state: AgentManagerStateMessage): void =>
+    batch(() => {
+      setWorktrees(state.worktrees)
+      setManagedSessions(state.sessions)
+      setStaleWorktreeIds(new Set(state.staleWorktreeIds ?? []))
+      setWorktreeHealth(state.worktreeHealth ?? {})
+      setOrphanDirectories(state.orphanDirectories ?? [])
+      setSections(state.sections ?? [])
+      if (state.historyExpanded) setHistoryExpanded(state.historyExpanded)
+      if (state.historyInitialized !== undefined) setHistoryInitialized(state.historyInitialized)
+      history.prune(new Set(state.worktrees.map((wt) => wt.id)))
+      if (state.tabOrder) {
+        const incoming = state.tabOrder
+        setTabOrder((previous) => {
+          const next = { ...previous }
+          for (const [key, order] of Object.entries(incoming)) {
+            const merged = mergeTransientTabs(
               previous[key] ?? [],
               order,
               (id) => id === REVIEW_TAB_ID || isTerminalTabId(id) || id.startsWith(PENDING_PREFIX),
-            ),
-          ]),
-        ),
-      }))
-    }
-    if (state.pinnedTabs) setPinnedTabs(state.pinnedTabs)
-    if (state.worktreeOrder) setWorktreeOrder(state.worktreeOrder)
-    if ("defaultBaseBranch" in state) setDefaultBaseBranch(state.defaultBaseBranch || undefined)
-    setRunScriptConfigured(state.runScriptConfigured === true)
-    if (state.sessionsCollapsed !== undefined) setSessionsCollapsed(state.sessionsCollapsed)
-    if (state.runStatuses) {
-      const runs: Record<string, RunStatus> = {}
-      for (const item of state.runStatuses) runs[item.worktreeId] = item
-      setRunStatuses(runs)
-    }
-    // Reconcile busy flags with the worktree list (deleted worktrees drop out).
-    const ids = new Set(state.worktrees.map((wt) => wt.id))
-    setBusy((prev) => {
-      const next = new Map([...prev].filter(([key]) => ids.has(key)))
-      return next.size === prev.size ? prev : next
+            )
+            const current = previous[key]
+            next[key] =
+              current?.length === merged.length && merged.every((id, index) => current.at(index) === id)
+                ? current
+                : merged
+          }
+          return Object.keys(next).every((key) => next[key] === previous[key]) ? previous : next
+        })
+      }
+      if (state.pinnedTabs) setPinnedTabs(state.pinnedTabs)
+      if (state.worktreeOrder) {
+        const order = state.worktreeOrder
+        setWorktreeOrder((previous) =>
+          previous.length === order.length && order.every((id, index) => previous.at(index) === id) ? previous : order,
+        )
+      }
+      if ("defaultBaseBranch" in state) setDefaultBaseBranch(state.defaultBaseBranch || undefined)
+      setRunScriptConfigured(state.runScriptConfigured === true)
+      if (state.sessionsCollapsed !== undefined) setSessionsCollapsed(state.sessionsCollapsed)
+      if (state.runStatuses) {
+        const runs: Record<string, RunStatus> = {}
+        for (const item of state.runStatuses) runs[item.worktreeId] = item
+        setRunStatuses(runs)
+      }
+      // Reconcile busy flags with the worktree list (deleted worktrees drop out).
+      const ids = new Set(state.worktrees.map((wt) => wt.id))
+      setBusy((prev) => {
+        const next = new Map([...prev].filter(([key]) => ids.has(key)))
+        return next.size === prev.size ? prev : next
+      })
     })
-  }
 
   return {
     id,
@@ -155,6 +174,20 @@ export function createProjectStore(id: string, opts: { tabs?: string[] } = {}) {
     historyInitialized,
     setHistoryInitialized,
     applyState,
+    removeSession: (id: string) =>
+      batch(() => {
+        history.remove(id)
+        tabs.set((rows) => rows.filter((row) => row !== id))
+        setManagedSessions(managedSessions().filter((row) => row.id !== id))
+        setTabOrder((previous) =>
+          Object.fromEntries(Object.entries(previous).map(([key, rows]) => [key, rows.filter((row) => row !== id)])),
+        )
+        setPinnedTabs((previous) =>
+          Object.fromEntries(Object.entries(previous).map(([key, rows]) => [key, rows.filter((row) => row !== id)])),
+        )
+        setMemory((previous) => Object.fromEntries(Object.entries(previous).filter(([, value]) => value !== id)))
+        setSessionMemory((previous) => Object.fromEntries(Object.entries(previous).filter(([, value]) => value !== id)))
+      }),
     tabMemory,
     sessionRestore,
     worktrees,

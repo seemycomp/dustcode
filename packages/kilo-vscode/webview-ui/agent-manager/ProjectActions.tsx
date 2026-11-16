@@ -33,7 +33,12 @@ export const WorktreeCreate: Component<WorktreeCreateProps> = (props) => (
         disabled={!props.loaded}
       />
     </TooltipKeybind>
-    <DropdownMenu gutter={4} placement="bottom-end">
+    <DropdownMenu
+      gutter={4}
+      placement="bottom-end"
+      slide={document.body.dataset.agentManagerPresentation === "sidebar"}
+      fitViewport={document.body.dataset.agentManagerPresentation === "sidebar"}
+    >
       <DropdownMenu.Trigger
         as={IconButton}
         icon="chevron-down"

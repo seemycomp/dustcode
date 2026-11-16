@@ -38,6 +38,15 @@ import { closeTaskTarget, SurfaceFocus } from "./commands/close-task-target"
 import { registerToggleAutoApprove } from "./commands/toggle-auto-approve"
 import { registerHeapSnapshot } from "./commands/heap-snapshot"
 import { nativeRenameTarget } from "./commands/native-rename-target"
+import {
+  NativeSessionContexts,
+  bindNativeSessionScope,
+  nativeChatTarget,
+  nativeSessionScope,
+  openNativeSessionTab,
+} from "./kilo-provider/native-session-tabs"
+import type { NativeSessionScope } from "./kilo-provider/options"
+import { restoredNativeSession } from "./shared/native-session-state"
 import { RemoteStatusService } from "./services/RemoteStatusService"
 import { markWorkspace } from "./util/spotlight"
 import { createNotebookBridge } from "./services/notebook"
@@ -171,9 +180,11 @@ export async function activate(context: vscode.ExtensionContext) {
   // and Marketplace buttons (unlike the sidebar). Too many icons causes VS Code to
   // collapse them into a "..." overflow menu, hiding important buttons like Settings.
   const tabPanels = new Map<vscode.WebviewPanel, KiloProvider>()
+  const contexts = new NativeSessionContexts(context.workspaceState)
   const activeTabProvider = () => {
+    if (chat instanceof KiloProvider && [...tabPanels.values()].includes(chat)) return chat
     for (const [panel, p] of tabPanels) {
-      if (panel.active) return p
+      if (panel.active && panel.viewColumn === vscode.window.tabGroups.activeTabGroup.viewColumn) return p
     }
     return undefined
   }
@@ -205,6 +216,7 @@ export async function activate(context: vscode.ExtensionContext) {
       chat = provider
     },
     onHidden: () => focus.lost("sidebar"),
+    openSessionInTab: (id) => openSessionInTab(provider, id),
   })
   provider.setRemoteService(remoteService)
 
@@ -287,7 +299,8 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push({ dispose: () => browserTabProvider.dispose() })
 
   const openBrowserTab = () => {
-    const sessionId = activeTabProvider()?.getCurrentSessionId() ?? provider.getCurrentSessionId()
+    const target = chat instanceof KiloProvider ? chat : (activeTabProvider() ?? provider)
+    const sessionId = target.getSelectedSessionId()
     if (!sessionId) {
       void vscode.window.showWarningMessage("Start a session before opening the Integrated Browser.")
       return
@@ -310,15 +323,7 @@ export async function activate(context: vscode.ExtensionContext) {
   }
   provider.setReviewCommentsHandler(deliver)
 
-  // Register the webview view provider for the sidebar.
-  // retainContextWhenHidden keeps the webview alive when switching to other sidebar panels.
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(KiloProvider.viewType, provider, {
-      webviewOptions: { retainContextWhenHidden: true },
-    }),
-  )
-
-  // Create Agent Manager provider for editor panel
+  // One manager owns the Activity Bar view and its optional editor presentation.
   const reason = vscode.env.remoteName ? "Keep Awake is only available in a local VS Code window." : undefined
   const awake = new CaffeinationService(connectionService, createCaffeinationDriver({ reason }))
   caffeination = awake
@@ -379,6 +384,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const binary = process.platform === "win32" ? await git() : git
   const agentManagerHost = new VscodeHost(context.extensionUri, connectionService, context, remoteService, controls)
   const agentManagerProvider = new AgentManagerProvider(agentManagerHost, connectionService, binary, browserBroker)
+  context.subscriptions.push(agentManagerHost.registerSidebar(agentManagerProvider))
   agentManagerHost.setFocusListener({
     gained: () => {
       focus.gained("agentManager")
@@ -471,8 +477,8 @@ export async function activate(context: vscode.ExtensionContext) {
           panel.dispose()
           return Promise.resolve()
         }
-        const ctx = agentManagerHost.wrapExistingPanel(panel, {
-          onBeforeMessage: (msg) => agentManagerProvider.handleMessage(msg),
+        const ctx: import("./agent-manager/host").PanelContext = agentManagerHost.wrapExistingPanel(panel, {
+          onBeforeMessage: (msg) => agentManagerProvider.handleMessage(msg, ctx),
           worktreeDirectories: () => agentManagerProvider.getWorktreeDirectories(),
           workspaceRoot: () => agentManagerProvider.workspaceRoot(),
           projectId: () => agentManagerProvider.projectId(),
@@ -484,19 +490,33 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
   )
 
-  const attach = (panel: vscode.WebviewPanel) => {
+  const attach = (
+    panel: vscode.WebviewPanel,
+    initial: { sessionID?: string; restore: boolean; context?: string; unavailable?: boolean } = { restore: false },
+    directory?: string,
+    scope?: NativeSessionScope,
+  ) => {
     const tabProvider = new KiloProvider(context.extensionUri, connectionService, context, {
       tabTitle: panelTitleHandler(panel),
       topBarSurface: "tab",
+      nativeSessionTab: initial,
+      nativeSessionScope: scope,
+      rootDirectory: scope ? () => scope.directory : undefined,
+      routeService: scope?.routes,
+      projectQualifier: scope ? () => ({ projectId: scope.projectId }) : undefined,
+      nativeSessionContext: (id, dir) => contexts.save(id, dir, scope),
+      openSessionInTab: (id) => openSessionInTab(tabProvider, id),
       onFocused: () => {
         focus.gained("tab")
         chat = tabProvider
       },
       onHidden: () => {
+        if (chat !== tabProvider) return
         focus.lost("tab")
-        if (chat === tabProvider) chat = undefined
+        chat = undefined
       },
     })
+    if (scope) bindNativeSessionScope(tabProvider, scope)
     tabProvider.setRemoteService(remoteService)
     tabProvider.setAutoApproveController(autoApprove)
     tabProvider.setContinueInWorktreeHandler((sessionId, progress) =>
@@ -509,26 +529,156 @@ export async function activate(context: vscode.ExtensionContext) {
     tabProvider.setDiffVirtualProvider(diffVirtualProvider)
     tabProvider.setDiffViewerProvider(diffViewerProvider)
     tabProvider.setReviewCommentsHandler(deliver)
-    tabProvider.resolveWebviewPanel(panel)
+    if (initial.sessionID) tabProvider.reserveSession(initial.sessionID, directory)
+    try {
+      tabProvider.resolveWebviewPanel(panel)
+    } catch (err) {
+      tabProvider.dispose()
+      throw err
+    }
     tabPanels.set(panel, tabProvider)
     return tabProvider
+  }
+
+  agentManagerHost.setOpenDraftInTab((scope) => {
+    scope.validate()
+    openKiloInNewTab(context, tabPanels, (panel) =>
+      attach(panel, { restore: false, context: contexts.save("", scope.directory, scope) }, scope.directory, scope),
+    )
+  })
+
+  agentManagerHost.setOpenSessionInTab(async (session) => {
+    await openNativeSessionTab({
+      session,
+      panels: tabPanels,
+      focused: chat instanceof KiloProvider ? chat : undefined,
+      selected: (owner) => owner.getSelectedSessionId(),
+      directory: (owner, id) => owner.getSessionDirectories().get(id),
+      project: (owner) => nativeSessionScope(owner)?.projectId,
+      create: (target) =>
+        openKiloInNewTab(context, tabPanels, (panel) =>
+          attach(panel, { sessionID: target.id, restore: false }, target.directory, target.scope),
+        ),
+      load: async (owner, target, current) => {
+        await owner.waitForReady()
+        if (!current()) return
+        target.scope?.validate(target.id)
+        await owner.openSession(target.id, target.directory)
+      },
+    })
+  })
+
+  agentManagerHost.setNativeSessionAttachments((ref, directory) =>
+    [...tabPanels.values()].some((owner) => {
+      const scope = nativeSessionScope(owner)
+      return (
+        owner.getSelectedSessionId() === ref.sessionId &&
+        scope?.projectId === ref.projectId &&
+        sameDirectory(scope.directory, directory) &&
+        sameDirectory(owner.getSessionDirectories().get(ref.sessionId) ?? "", directory)
+      )
+    }),
+  )
+
+  agentManagerHost.setNativeSessionDeletion((ref) => {
+    for (const owner of tabPanels.values()) owner.notifySessionDeleted(ref)
+  })
+
+  async function openSessionInTab(source: KiloProvider, id: string): Promise<void> {
+    if (!id || id.startsWith("sidebar-pending:") || id.startsWith("cloud:")) return
+    const scope = nativeSessionScope(source)
+    if (scope) {
+      const target = await agentManagerHost.resolveNativeSession({
+        type: "agentManager.openSessionInTab",
+        projectId: scope.projectId,
+        sessionId: id,
+      })
+      await agentManagerHost.openSessionInTab(target)
+      return
+    }
+    const info = await source.getSessionInfo(id)
+    if (!info) {
+      void vscode.window.showErrorMessage("This conversation is unavailable. Choose another conversation or try again.")
+      return
+    }
+    const session = { id: info.id, directory: source.getSessionDirectories().get(id) ?? info.directory }
+    await openNativeSessionTab({
+      session,
+      panels: tabPanels,
+      focused: chat instanceof KiloProvider ? chat : undefined,
+      selected: (owner) => owner.getSelectedSessionId(),
+      directory: (owner, sid) => owner.getSessionDirectories().get(sid) ?? session.directory,
+      create: (target) =>
+        openKiloInNewTab(context, tabPanels, (panel) =>
+          attach(panel, { sessionID: target.id, restore: false }, target.directory),
+        ),
+      load: (owner, target) => owner.openSession(target.id, target.directory),
+    })
   }
 
   // Register serializer so "Open in Tab" restores when VS Code restarts
   context.subscriptions.push(
     vscode.window.registerWebviewPanelSerializer("dustcode.TabPanel", {
-      deserializeWebviewPanel(panel: vscode.WebviewPanel) {
-        const tabProvider = attach(panel)
+      async deserializeWebviewPanel(panel: vscode.WebviewPanel, state: unknown) {
+        const id = restoredNativeSession(state)
+        const saved = contexts.restore(state, id)
+        let disposed = false
+        let owner: KiloProvider | undefined
         panel.onDidDispose(
           () => {
+            disposed = true
             console.log("[Dustcode] Tab panel restored from restart disposed")
             tabPanels.delete(panel)
-            tabProvider.dispose()
+            owner?.dispose()
           },
           null,
           context.subscriptions,
         )
-        return Promise.resolve()
+        const resolved =
+          saved.scope && saved.directory
+            ? await (async () => {
+                const binding = { ...saved.scope!, directory: saved.directory! }
+                const scope = id
+                  ? (
+                      await agentManagerHost.resolveNativeSession({
+                        type: "agentManager.openSessionInTab",
+                        projectId: binding.projectId,
+                        sessionId: id,
+                      })
+                    ).scope
+                  : await agentManagerHost.resolveNativeScope(binding)
+                if (
+                  scope.worktreeId !== binding.worktreeId ||
+                  !sameDirectory(scope.root, binding.root) ||
+                  !sameDirectory(scope.directory, binding.directory)
+                )
+                  throw new Error("This conversation's saved placement is missing or changed.")
+                return { scope, unavailable: false, error: undefined }
+              })().catch((err: unknown) => ({
+                scope: undefined,
+                unavailable: true,
+                error: err instanceof Error ? err.message : "The saved conversation is unavailable.",
+              }))
+            : { scope: undefined, unavailable: saved.unavailable, error: undefined }
+        if (disposed) return
+        owner = attach(
+          panel,
+          { sessionID: id, restore: true, context: saved.context, unavailable: resolved.unavailable },
+          saved.directory,
+          resolved.scope,
+        )
+        if (resolved.unavailable) {
+          const provider = owner
+          void provider.waitForReady().then(() => {
+            if (!disposed)
+              provider.postMessage({
+                type: "error",
+                message:
+                  resolved.error ??
+                  "This conversation's saved context is unavailable. Reopen it from its original project.",
+              })
+          })
+        }
       },
     }),
   )
@@ -636,28 +786,43 @@ export async function activate(context: vscode.ExtensionContext) {
   const taskTarget = () =>
     closeTaskTarget<KiloProvider | AgentManagerProvider>({
       focused: focus.current(),
-      sidebar: provider,
+      sidebar: agentManagerProvider,
       tab: activeTabProvider(),
       agentManager: agentManagerProvider.isActive() ? agentManagerProvider : undefined,
     })
 
   // Sidebar menus use wrapper commands so this event measures real title button presses,
   // not programmatic opens, shortcuts, or editor title commands.
-  const track = (button: string, command: string) => {
+  const track = (button: string, command: string, source?: KiloProvider | AgentManagerProvider) => {
     TelemetryProxy.capture(TelemetryEventName.TITLE_BUTTON_CLICKED, {
       button,
       surface: "sidebar_title",
     })
-    void vscode.commands.executeCommand(command)
+    void vscode.commands.executeCommand(command, source)
+  }
+
+  const toolbar = (source: unknown, context?: TabContext) => {
+    const target = nativeChatTarget({
+      source,
+      provider: (value): value is KiloProvider => value instanceof KiloProvider,
+      resource: source instanceof vscode.Uri,
+      contextual: source instanceof vscode.Uri ? tabProviderFromContext(source, context) : undefined,
+      active: [...tabPanels].find(
+        ([panel]) => panel.active && panel.viewColumn === vscode.window.tabGroups.activeTabGroup.viewColumn,
+      )?.[1],
+      focused: chat instanceof KiloProvider ? chat : undefined,
+      fallback: provider,
+    })
+    return target === provider ? agentManagerProvider : target
   }
 
   // Register toolbar button command handlers
   context.subscriptions.push(
     vscode.commands.registerCommand("dustcode.sidebarTitle.plusButtonClicked", () => {
-      track("new_task", "dustcode.plusButtonClicked")
+      track("new_task", "dustcode.plusButtonClicked", agentManagerProvider)
     }),
     vscode.commands.registerCommand("dustcode.sidebarTitle.historyButtonClicked", () => {
-      track("history", "dustcode.historyButtonClicked")
+      track("history", "dustcode.historyButtonClicked", agentManagerProvider)
     }),
     vscode.commands.registerCommand("dustcode.sidebarTitle.agentManagerOpen", () => {
       track("agent_manager", "dustcode.agentManagerOpen")
@@ -671,10 +836,15 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("dustcode.sidebarTitle.settingsButtonClicked", () => {
       track("settings", "dustcode.settingsButtonClicked")
     }),
-    vscode.commands.registerCommand("dustcode.plusButtonClicked", () => {
-      const tab = activeTabProvider()
-      if (tab) tab.postMessage({ type: "action", action: "plusButtonClicked" })
-      else provider.postMessage({ type: "action", action: "plusButtonClicked" })
+    vscode.commands.registerCommand("dustcode.plusButtonClicked", (source: unknown, context?: TabContext) => {
+      if (source === agentManagerProvider || (!source && chat === agentManagerProvider)) {
+        return agentManagerProvider.postMessage(
+          { type: "action", action: "newTab" },
+          source === agentManagerProvider ? "sidebar" : undefined,
+        )
+      }
+      const target = toolbar(source, context)
+      target.postMessage({ type: "action", action: target === agentManagerProvider ? "newTab" : "plusButtonClicked" })
     }),
     vscode.commands.registerCommand("dustcode.closeTask", () => {
       taskTarget().postMessage({ type: "action", action: "closeTask" })
@@ -683,27 +853,35 @@ export async function activate(context: vscode.ExtensionContext) {
       taskTarget().postMessage({ type: "action", action: "closeAllTasks" })
     }),
     vscode.commands.registerCommand("dustcode.agentManagerOpen", () => {
-      agentManagerProvider.openPanel()
+      return agentManagerProvider.openPanel()
+    }),
+    vscode.commands.registerCommand("dustcode.agentManager.openInTab", () => {
+      agentManagerProvider.openInTab()
     }),
     vscode.commands.registerCommand("dustcode.marketplaceButtonClicked", (directory?: string | null) => {
       marketplacePanelProvider.openPanel(directory)
     }),
-    vscode.commands.registerCommand("dustcode.historyButtonClicked", () => {
-      const tab = activeTabProvider()
-      if (tab) tab.postMessage({ type: "action", action: "historyButtonClicked" })
-      else provider.postMessage({ type: "action", action: "historyButtonClicked" })
+    vscode.commands.registerCommand("dustcode.historyButtonClicked", (source: unknown, context?: TabContext) => {
+      if (source === agentManagerProvider || (!source && chat === agentManagerProvider)) {
+        return agentManagerProvider.postMessage(
+          { type: "navigate", view: "history" },
+          source === agentManagerProvider ? "sidebar" : undefined,
+        )
+      }
+      const target = toolbar(source, context)
+      target.postMessage(
+        target === agentManagerProvider
+          ? { type: "navigate", view: "history" }
+          : { type: "action", action: "historyButtonClicked" },
+      )
     }),
     vscode.commands.registerCommand("dustcode.cycleAgentMode", () => {
-      const tab = activeTabProvider()
-      if (tab) tab.postMessage({ type: "action", action: "cycleAgentMode" })
-      else provider.postMessage({ type: "action", action: "cycleAgentMode" })
-      agentManagerProvider.postMessage({ type: "action", action: "cycleAgentMode" })
+      const target = chat ?? activeTabProvider() ?? agentManagerProvider
+      target.postMessage({ type: "action", action: "cycleAgentMode" })
     }),
     vscode.commands.registerCommand("dustcode.cyclePreviousAgentMode", () => {
-      const tab = activeTabProvider()
-      if (tab) tab.postMessage({ type: "action", action: "cyclePreviousAgentMode" })
-      else provider.postMessage({ type: "action", action: "cyclePreviousAgentMode" })
-      agentManagerProvider.postMessage({ type: "action", action: "cyclePreviousAgentMode" })
+      const target = chat ?? activeTabProvider() ?? agentManagerProvider
+      target.postMessage({ type: "action", action: "cyclePreviousAgentMode" })
     }),
     vscode.commands.registerCommand("dustcode.profileButtonClicked", () => {
       settingsEditorProvider.openPanel("profile")
@@ -734,21 +912,25 @@ export async function activate(context: vscode.ExtensionContext) {
       settingsEditorProvider.openPanel("settings", "agentBehaviour", undefined, "mcpServers", focus)
     }),
     vscode.commands.registerCommand("dustcode.showMemory", async () => {
-      if (agentManagerProvider.isActive()) {
+      if (chat === agentManagerProvider || (!chat && !activeTabProvider())) {
+        if (chat !== agentManagerProvider) await agentManagerProvider.openPanel()
+        await agentManagerProvider.waitForReady()
         await agentManagerProvider.showMemory()
         return
       }
-      const target = activeTabProvider() ?? provider
+      const target = chat instanceof KiloProvider ? chat : (activeTabProvider() ?? provider)
       if (target === provider) await vscode.commands.executeCommand("dustcode.SidebarProvider.focus")
       await target.waitForReady()
       await target.showMemory()
     }),
     vscode.commands.registerCommand("dustcode.toggleMemory", async () => {
-      if (agentManagerProvider.isActive()) {
+      if (chat === agentManagerProvider || (!chat && !activeTabProvider())) {
+        if (chat !== agentManagerProvider) await agentManagerProvider.openPanel()
+        await agentManagerProvider.waitForReady()
         await agentManagerProvider.toggleMemory()
         return
       }
-      const target = activeTabProvider() ?? provider
+      const target = chat instanceof KiloProvider ? chat : (activeTabProvider() ?? provider)
       if (target === provider) await vscode.commands.executeCommand("dustcode.SidebarProvider.focus")
       await target.waitForReady()
       await target.toggleMemory()
@@ -767,19 +949,22 @@ export async function activate(context: vscode.ExtensionContext) {
         placeHolder: "e.g., find all .ts files modified in the last 24 hours",
       })
       if (!input) return
-      await vscode.commands.executeCommand("dustcode.SidebarProvider.focus")
-      await provider.waitForReady()
-      provider.postMessage({
-        type: "triggerTask",
-        text: `Generate a terminal command: ${input}`,
-        injectedTitle: "Generate terminal command",
-      })
+      await agentManagerProvider.openPanel()
+      if (!(await agentManagerProvider.waitForReady("sidebar"))) return
+      agentManagerProvider.postMessage(
+        {
+          type: "triggerTask",
+          text: `Generate a terminal command: ${input}`,
+          injectedTitle: "Generate terminal command",
+        },
+        "sidebar",
+      )
     }),
     vscode.commands.registerCommand("dustcode.toggleRemote", () => {
       remoteService.toggle().catch((err) => console.error("[Dustcode] toggleRemote command failed:", err))
     }),
     vscode.commands.registerCommand("dustcode.openInTab", () => {
-      return openKiloInNewTab(context, tabPanels, attach)
+      openKiloInNewTab(context, tabPanels, attach)
     }),
     vscode.commands.registerCommand("dustcode.openBrowser", () => {
       openBrowserTab()
@@ -928,8 +1113,12 @@ export async function activate(context: vscode.ExtensionContext) {
   )
 
   // Register code actions (editor context menus, terminal context menus, keyboard shortcuts)
-  registerCodeActions(context, provider, agentManagerProvider, activeTabProvider, () => chat)
-  registerTerminalActions(context, provider, agentManagerProvider)
+  const sidebar = () => ({
+    waitForReady: () => agentManagerProvider.waitForReady("sidebar"),
+    postMessage: (message: unknown) => agentManagerProvider.postMessage(message, "sidebar"),
+  })
+  registerCodeActions(context, sidebar, agentManagerProvider, activeTabProvider, () => chat)
+  registerTerminalActions(context, sidebar, agentManagerProvider)
 
   // Register CodeActionProvider (lightbulb quick fixes)
   context.subscriptions.push(
@@ -991,7 +1180,14 @@ function openKiloInNewTab(
 
   panel.iconPath = vscode.Uri.joinPath(context.extensionUri, "assets", "icons", "dustcode.png")
 
-  const tabProvider = attach(panel)
+  const tabProvider = (() => {
+    try {
+      return attach(panel)
+    } catch (err) {
+      panel.dispose()
+      throw err
+    }
+  })()
 
   panel.onDidDispose(
     () => {
@@ -1002,4 +1198,5 @@ function openKiloInNewTab(
     null,
     context.subscriptions,
   )
+  return { panel, owner: tabProvider }
 }

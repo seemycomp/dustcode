@@ -288,6 +288,7 @@ interface ScriptTerminalsMessage {
 
 interface ErrorOutMessage {
   type: "error"
+  requestId?: string
   message: string
   code?: string
   projectId?: string
@@ -296,6 +297,7 @@ interface ErrorOutMessage {
 
 interface SessionAddedMessage {
   type: "agentManager.sessionAdded"
+  requestId?: string
   projectId?: string
   sessionId: string
   worktreeId: string
@@ -557,6 +559,8 @@ interface RunStatusMessage extends RunStatus {
 
 /** All messages the Agent Manager extension sends to the webview. */
 export type AgentManagerOutMessage =
+  | import("../../webview-ui/src/types/messages/extension-messages").SessionDeletedMessage
+  | import("../../webview-ui/src/types/messages/agent-manager").AgentManagerDialogMessage
   | SessionTransferReply
   | HistoryMessage
   | HistoryOpenFailed
@@ -744,6 +748,7 @@ interface OpenLocallyIn {
 
 interface AddSessionToWorktreeIn {
   type: "agentManager.addSessionToWorktree"
+  requestId?: string
   projectId?: string
   worktreeId: string
   sessionId?: string
@@ -1341,6 +1346,10 @@ interface BrowserRequestIn {
 
 /** All messages the Agent Manager expects from the webview (onMessage input). */
 export type AgentManagerInMessage =
+  | import("../../webview-ui/src/types/messages/webview-messages").DeleteSessionRequest
+  | import("../../webview-ui/src/types/messages/agent-manager").AgentManagerDialogMessage
+  | import("../../webview-ui/src/types/messages/agent-manager").AgentManagerOpenSessionInTabRequest
+  | import("../../webview-ui/src/types/messages/agent-manager").AgentManagerOpenDraftInTabRequest
   | HistoryRequest
   | HistoryOpen
   | SetHistoryExpanded

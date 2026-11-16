@@ -1,18 +1,18 @@
 import * as vscode from "vscode"
-import type { KiloProvider } from "../../KiloProvider"
 import type { AgentManagerProvider } from "../../agent-manager/AgentManagerProvider"
 import { createPrompt } from "./support-prompt"
 import { getTerminalContents } from "../terminal/context"
+import { ready, type ChatTarget } from "./chat-target"
 
 export function registerTerminalActions(
   context: vscode.ExtensionContext,
-  provider: KiloProvider,
+  sidebar: () => ChatTarget,
   agentManager?: AgentManagerProvider,
 ): void {
-  const target = () => (agentManager?.isActive() ? agentManager : provider)
-  const reveal = async () => {
-    await vscode.commands.executeCommand("dustcode.SidebarProvider.focus")
-    await provider.waitForReady()
+  const target = async () => {
+    const fallback = sidebar()
+    const view = agentManager?.isActive() ? agentManager : fallback
+    return (await ready(view, view === fallback)) ? view : undefined
   }
 
   context.subscriptions.push(
@@ -29,10 +29,8 @@ export function registerTerminalActions(
         terminalContent: content,
         userInput: "",
       })
-      const view = target()
-      if (view === provider) {
-        await reveal()
-      }
+      const view = await target()
+      if (!view) return
       view.postMessage({ type: "appendChatBoxMessage", text: prompt })
       view.postMessage({ type: "action", action: "focusInput" })
     }),
@@ -50,10 +48,8 @@ export function registerTerminalActions(
         terminalContent: content,
         userInput: "",
       })
-      const view = target()
-      if (view === provider) {
-        await reveal()
-      }
+      const view = await target()
+      if (!view) return
       view.postMessage({ type: "triggerTask", text: prompt, injectedTitle: "Fix terminal command" })
     }),
 
@@ -70,10 +66,8 @@ export function registerTerminalActions(
         terminalContent: content,
         userInput: "",
       })
-      const view = target()
-      if (view === provider) {
-        await reveal()
-      }
+      const view = await target()
+      if (!view) return
       view.postMessage({ type: "triggerTask", text: prompt, injectedTitle: "Explain terminal command" })
     }),
   )

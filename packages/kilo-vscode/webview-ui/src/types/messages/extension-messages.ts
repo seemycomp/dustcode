@@ -95,8 +95,20 @@ import type { SessionBoardLoadedMessage } from "./board"
 // Messages FROM extension TO webview
 // ============================================
 
+export interface NativeSessionContextMessage {
+  type: "nativeSessionContext"
+  sessionID: string
+  context: string
+}
+
 export interface ReadyMessage {
   type: "ready"
+  nativeSessionTab?: {
+    sessionID?: string
+    restore: boolean
+    context?: string
+    scope?: { projectId: string; projectLabel: string; label: string }
+  }
   serverInfo?: ServerInfo
   extensionVersion?: string
   vscodeLanguage?: string
@@ -140,6 +152,7 @@ export interface ConnectionStateMessage {
 
 export interface ErrorMessage {
   type: "error"
+  requestId?: string
   message: string
   code?: string
   sessionID?: string
@@ -254,6 +267,8 @@ export interface SessionUpdatedMessage {
 export interface SessionDeletedMessage {
   type: "sessionDeleted"
   sessionID: string
+  projectId?: string
+  worktreeId?: string | null
 }
 
 export interface MessageRemovedMessage {
@@ -945,6 +960,7 @@ export interface AgentManagerWorktreeSetupMessage {
 // Agent Manager session added to an existing worktree (no setup overlay needed)
 export interface AgentManagerSessionAddedMessage {
   type: "agentManager.sessionAdded"
+  requestId?: string
   projectId?: string
   sessionId: string
   worktreeId: string
@@ -1804,6 +1820,7 @@ export interface AgentManagerBrowserDevtoolsMessage {
 }
 
 export type ExtensionMessage =
+  | import("./agent-manager").AgentManagerDialogMessage
   | import("../../../../src/shared/agent-history").HistoryMessage
   | import("../../../../src/shared/session-transfer").SessionTransferReply
   | import("../../../../src/shared/agent-history").HistoryOpenFailed
@@ -1852,6 +1869,7 @@ export type ExtensionMessage =
   | BrowserTabFrameMessage
   | BrowserTabCursorMessage
   | ReadyMessage
+  | NativeSessionContextMessage
   | WorkspaceScopeMessage
   | FontSizeChangedMessage
   | GitStatusMessage

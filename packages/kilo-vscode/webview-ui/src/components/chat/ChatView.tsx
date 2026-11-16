@@ -275,7 +275,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
             onCleanup(() => node.removeEventListener("click", openLink, true))
           }}
         >
-          <Show when={isSidebar() && !props.readonly && tabs && showTabStrip(tabs.ids())}>
+          <Show when={isSidebar() && !props.readonly && tabs && !tabs.native && showTabStrip(tabs.ids())}>
             <SessionTabStrip
               onMoveToWorktree={
                 props.continueInWorktree === true && server.gitInstalled()

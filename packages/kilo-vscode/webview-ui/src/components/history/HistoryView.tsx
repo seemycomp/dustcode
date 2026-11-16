@@ -167,6 +167,7 @@ const HistoryView: Component<HistoryViewProps> = (props) => {
         {tab() === "local" && (
           <SessionList
             onSelectSession={props.onSelectSession}
+            separateTabs={!!tabs}
             sessionIds={props.sessionIds}
             rowActions={props.rowActions}
           />

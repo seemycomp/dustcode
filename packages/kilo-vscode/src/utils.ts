@@ -65,6 +65,7 @@ export function buildWebviewHtml(
     /** Sidebar top bar visibility and telemetry surface for the shared webview bundle (App.tsx). Unused by the Agent Manager bundle. */
     topBar?: boolean
     topBarSurface?: string
+    nativeSessionTab?: { sessionID?: string; restore: boolean }
     agentManagerSettings?: boolean
     browserAutomation?: boolean
     introDismissed?: boolean
@@ -117,6 +118,7 @@ export function buildWebviewHtml(
 <body>
   <div id="root"></div>
   <script nonce="${nonce}">window.ICONS_BASE_URI = "${opts.iconsBaseUri}"; window.KILO_SHIKI_WORKER_URI = "${opts.workerUri}"; window.KILO_MARKDOWN_SHIKI_WORKER_URI = "${markdownWorkerUri}"; window.KILO_TOP_BAR = ${opts.topBar !== false}; window.KILO_TOP_BAR_SURFACE = "${opts.topBarSurface ?? "sidebar_title"}"; window.KILO_AGENT_MANAGER_SETTINGS = ${opts.agentManagerSettings === true}; window.KILO_BROWSER_AUTOMATION = ${opts.browserAutomation === true}; window.KILO_AGENT_MANAGER_INTRO_DISMISSED = ${opts.introDismissed === true}; window.KILO_SETTINGS = ${JSON.stringify(opts.settings ?? {}).replace(/</g, "\\u003c")};</script>
+  ${opts.nativeSessionTab ? `<script nonce="${nonce}">window.KILO_NATIVE_SESSION_TAB = ${JSON.stringify(opts.nativeSessionTab).replace(/</g, "\\u003c")};</script>` : ""}
   <script nonce="${nonce}"${opts.module ? ' type="module"' : ""} src="${opts.scriptUri}"></script>
 </body>
 </html>`

@@ -27,6 +27,10 @@ import type { AutoApproveController } from "../commands/toggle-auto-approve"
 import type { RemoteStatusService } from "../services/RemoteStatusService"
 import type { CaffeinationService } from "../services/caffeination"
 import { fetchSessionPage } from "../kilo-provider/session-page"
+import type { NativeSessionTarget } from "../kilo-provider/native-session-tabs"
+import type { AgentManagerOpenSessionInTabRequest } from "../../webview-ui/src/types/messages/agent-manager"
+import type { AgentManagerProvider } from "./AgentManagerProvider"
+import { PresentationLifetime } from "./presentation-lifetime"
 
 const INTRO_KEY = "kilo.agentManager.introDismissed"
 const PR_MERGE_METHODS_KEY = "agentManager.prMergeMethod"
@@ -35,12 +39,93 @@ export class VscodeHost implements Host {
   private diffVirtual: DiffVirtualProvider | undefined
   private autoApprove: AutoApproveController | undefined
   private focus: { gained: () => void; lost: () => void } | undefined
+  private focused: object | undefined
   /**
    * Shared project route registry for every Agent Manager panel opened by
    * this host. One service keeps raw session id ambiguity consistent across
    * panels, so two panels never disagree about whether an id is ambiguous.
    */
   private readonly routes = new ProjectRouteService()
+  private native: ((target: NativeSessionTarget) => Promise<void>) | undefined
+  private draft: ((scope: import("../kilo-provider/options").NativeSessionScope) => void) | undefined
+  private attached: ((ref: import("./project/route").SessionRef, directory: string) => boolean) | undefined
+  private deletion: ((ref: import("./project/route").SessionRef) => void) | undefined
+  private scope:
+    | ((
+        binding: import("./project/native").NativeScopeBinding,
+      ) => Promise<import("../kilo-provider/options").NativeSessionScope>)
+    | undefined
+
+  setNativeScopeResolver(resolve: NonNullable<VscodeHost["scope"]>): void {
+    this.scope = resolve
+  }
+
+  async resolveNativeScope(binding: import("./project/native").NativeScopeBinding) {
+    if (!this.scope) throw new Error("Native chat tabs are unavailable.")
+    return this.scope(binding)
+  }
+
+  setNativeSessionAttachments(attached: NonNullable<VscodeHost["attached"]>): void {
+    this.attached = attached
+  }
+
+  hasNativeSession(ref: import("./project/route").SessionRef, directory: string): boolean {
+    return this.attached?.(ref, directory) ?? false
+  }
+  setNativeSessionDeletion(deleted: NonNullable<VscodeHost["deletion"]>): void {
+    this.deletion = deleted
+  }
+
+  deleteNativeSession(ref: import("./project/route").SessionRef): void {
+    this.deletion?.(ref)
+  }
+  private resolver: ((request: AgentManagerOpenSessionInTabRequest) => Promise<NativeSessionTarget>) | undefined
+
+  setNativeSessionResolver(
+    resolve: (request: AgentManagerOpenSessionInTabRequest) => Promise<NativeSessionTarget>,
+  ): void {
+    this.resolver = resolve
+  }
+
+  async resolveNativeSession(request: AgentManagerOpenSessionInTabRequest): Promise<NativeSessionTarget> {
+    if (!this.resolver) throw new Error("Native chat tabs are unavailable.")
+    return this.resolver(request)
+  }
+
+  setOpenSessionInTab(open: (target: NativeSessionTarget) => Promise<void>): void {
+    this.native = open
+  }
+
+  async openSessionInTab(target: NativeSessionTarget): Promise<void> {
+    if (!this.native) throw new Error("Native chat tabs are unavailable.")
+    await this.native(target)
+  }
+
+  setOpenDraftInTab(open: NonNullable<VscodeHost["draft"]>): void {
+    this.draft = open
+  }
+
+  openDraftInTab(scope: import("../kilo-provider/options").NativeSessionScope): void {
+    if (!this.draft) throw new Error("Native chat tabs are unavailable.")
+    scope.validate()
+    this.draft(scope)
+  }
+
+  projectRoutes(): ProjectRouteService {
+    return this.routes
+  }
+
+  historySessions(): Pick<SessionProvider, "getSessionInfo" | "listSessionPage"> {
+    return {
+      getSessionInfo: async (sessionID, directory) => {
+        if (!directory) throw new Error("A project directory is required.")
+        const client = await this.connectionService.getClientAsync(directory)
+        return (await client.session.get({ sessionID, directory }, { throwOnError: true })).data
+      },
+      listSessionPage: async ({ directory, ...input }) =>
+        fetchSessionPage(await this.connectionService.getClientAsync(directory), { dir: directory, ...input }),
+    }
+  }
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -63,10 +148,34 @@ export class VscodeHost implements Host {
     this.focus = listener
   }
 
-  openPanel(opts: {
-    onBeforeMessage: (msg: Record<string, unknown>) => Promise<Record<string, unknown> | null>
-    worktreeDirectories?: () => string[]
-  }): PanelContext {
+  async showSidebar(preserveFocus?: boolean): Promise<void> {
+    await vscode.commands.executeCommand("dustcode.SidebarProvider.focus", { preserveFocus: preserveFocus ?? false })
+  }
+
+  registerSidebar(manager: AgentManagerProvider): vscode.Disposable {
+    return vscode.window.registerWebviewViewProvider(
+      "dustcode.SidebarProvider",
+      {
+        resolveWebviewView: (view) => {
+          const ctx: PanelContext = this.wrapSidebar(view, {
+            onBeforeMessage: (msg) => manager.handleMessage(msg, ctx),
+            worktreeDirectories: () => manager.getWorktreeDirectories(),
+            workspaceRoot: manager.workspaceRoot,
+            projectId: manager.projectId,
+            sessionProject: () => manager.sessionProject(),
+          })
+          manager.deserializePanel(ctx)
+        },
+      },
+      { webviewOptions: { retainContextWhenHidden: true } },
+    )
+  }
+
+  wrapSidebar(view: vscode.WebviewView, opts: Parameters<Host["openPanel"]>[0]): PanelContext {
+    return this.wirePanel({ view }, opts)
+  }
+
+  openPanel(opts: Parameters<Host["openPanel"]>[0]): PanelContext {
     const panel = vscode.window.createWebviewPanel(
       "dustcode.AgentManagerPanel",
       "Agent Manager",
@@ -78,7 +187,7 @@ export class VscodeHost implements Host {
         localResourceRoots: [this.extensionUri],
       },
     )
-    return this.wirePanel(panel, opts)
+    return this.wirePanel({ panel }, opts)
   }
 
   /** Wrap an existing vscode.WebviewPanel (e.g. deserialized on restart). */
@@ -92,11 +201,11 @@ export class VscodeHost implements Host {
       sessionProject?: () => string | undefined
     },
   ): PanelContext {
-    return this.wirePanel(panel, opts)
+    return this.wirePanel({ panel }, opts)
   }
 
   private wirePanel(
-    panel: vscode.WebviewPanel,
+    target: { panel: vscode.WebviewPanel } | { view: vscode.WebviewView },
     opts: {
       onBeforeMessage: (msg: Record<string, unknown>) => Promise<Record<string, unknown> | null>
       worktreeDirectories?: () => string[]
@@ -105,30 +214,42 @@ export class VscodeHost implements Host {
       sessionProject?: () => string | undefined
     },
   ): PanelContext {
-    panel.webview.options = {
+    const panel = "panel" in target ? target.panel : undefined
+    const view = "view" in target ? target.view : undefined
+    const surface = "panel" in target ? target.panel : target.view
+    const presentation = panel ? "editor" : "sidebar"
+    let focused = false
+    const activation = new Set<() => void>()
+    const active = () => panel?.active ?? (view?.visible === true && focused)
+    const visible = () => surface.visible
+    const changed = (cb: () => void) =>
+      "panel" in target ? target.panel.onDidChangeViewState(cb) : target.view.onDidChangeVisibility(cb)
+    const reveal = (preserve?: boolean) =>
+      panel ? panel.reveal(vscode.ViewColumn.One, preserve ?? false) : view?.show(preserve ?? false)
+    surface.webview.options = {
       enableScripts: true,
       enableForms: true,
       localResourceRoots: [this.extensionUri],
     }
 
-    panel.iconPath = vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "dustcode.png")
+    if (panel) panel.iconPath = vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "dustcode.png")
 
     const port = this.connectionService.getServerInfo()?.port
-    panel.webview.html = buildWebviewHtml(panel.webview, {
-      scriptUri: panel.webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "agent-manager.js")),
-      styleUri: panel.webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "agent-manager.css")),
-      iconsBaseUri: panel.webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "assets", "icons")),
-      workerUri: panel.webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "shiki-worker.js")),
+    surface.webview.html = buildWebviewHtml(surface.webview, {
+      scriptUri: surface.webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "agent-manager.js")),
+      styleUri: surface.webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "agent-manager.css")),
+      iconsBaseUri: surface.webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "assets", "icons")),
+      workerUri: surface.webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "shiki-worker.js")),
       title: "Agent Manager",
       port,
       browserAutomation: this.browserAutomation(),
       introDismissed: this.context.globalState.get<boolean>(INTRO_KEY) === true,
       frameSrc: ["localhost", "127.0.0.1"].map((host) => `http://${host}:*`).join(" "),
-    })
+    }).replace("<body", `<body data-agent-manager-presentation="${presentation}"`)
 
     const provider = new KiloProvider(this.extensionUri, this.connectionService, this.context, {
       tabTitle: (title) => {
-        panel.title = title
+        if (panel) panel.title = title
       },
       tabLabel: "Agent Manager",
       platform: PLATFORM,
@@ -143,7 +264,10 @@ export class VscodeHost implements Host {
         mainTerminal: "dustcode.agentManagerMainTerminalFocused",
         sideTerminal: "dustcode.agentManagerSideTerminalFocused",
       },
-      onFocused: () => this.focus?.gained(),
+      onFocused: () => {
+        this.focused = surface
+        this.focus?.gained()
+      },
       routeService: this.routes,
       projectQualifier: () => {
         const projectId = opts.projectId?.()
@@ -156,16 +280,17 @@ export class VscodeHost implements Host {
     provider.setRemoteService(this.remoteService)
     const snapshot = () => {
       if (this.caffeination) {
-        void panel.webview.postMessage({ type: "agentManager.caffeination", ...this.caffeination.getState() })
+        void surface.webview.postMessage({ type: "agentManager.caffeination", ...this.caffeination.getState() })
       }
     }
     const unsubscribe = this.caffeination?.onChange(snapshot)
-    panel.onDidDispose(() => {
-      unsubscribe?.()
-      this.focus?.lost()
-    })
-    provider.attachToWebview(panel.webview, {
+    provider.attachToWebview(surface.webview, {
       onBeforeMessage: async (msg) => {
+        if (msg.type === "webviewFocusChanged") {
+          focused = msg.focused === true
+          provider.setStreamVisibility(focused && visible())
+          for (const cb of activation) cb()
+        }
         if (msg.type === "agentManager.setCaffeination") {
           if (typeof msg.enabled === "boolean") await this.caffeination?.setEnabled(msg.enabled)
           return null
@@ -179,9 +304,20 @@ export class VscodeHost implements Host {
         return null
       },
     })
-    provider.setStreamVisibility(panel.active && panel.visible)
-    const streams = panel.onDidChangeViewState((event) =>
-      provider.setStreamVisibility(event.webviewPanel.active && event.webviewPanel.visible),
+    provider.setStreamVisibility(active() && visible())
+    const streams = changed(() => provider.setStreamVisibility(active() && visible()))
+    const lifetime = new PresentationLifetime(
+      (cb) => surface.onDidDispose(cb),
+      () => panel?.dispose(),
+      () => {
+        unsubscribe?.()
+        streams.dispose()
+        provider.dispose()
+        if (this.focused === surface) {
+          this.focused = undefined
+          this.focus?.lost()
+        }
+      },
     )
     if (this.autoApprove) provider.setAutoApproveController(this.autoApprove)
 
@@ -215,42 +351,43 @@ export class VscodeHost implements Host {
     }
 
     return {
+      presentation,
       get active() {
-        return panel.active
+        return active()
       },
       get visible() {
-        return panel.visible
+        return visible()
       },
       postMessage(msg) {
-        void panel.webview.postMessage(msg)
+        void surface.webview.postMessage(msg)
       },
       waitForReady() {
         return provider.waitForReady()
       },
       waitForActive() {
-        if (panel.active) return Promise.resolve()
-        return new Promise((resolve) => {
-          const sub = panel.onDidChangeViewState((e) => {
-            if (!e.webviewPanel.active) return
-            sub.dispose()
-            resolve()
-          })
+        return lifetime.when(active, (cb) => {
+          activation.add(cb)
+          const sub = changed(cb)
+          return {
+            dispose: () => {
+              activation.delete(cb)
+              sub.dispose()
+            },
+          }
         })
       },
       reveal(preserveFocus) {
-        panel.reveal(vscode.ViewColumn.One, preserveFocus ?? false)
+        reveal(preserveFocus)
       },
       sessions,
       onDidChangeVisibility(cb) {
-        return panel.onDidChangeViewState((e) => cb(e.webviewPanel.visible))
+        return changed(() => cb(visible()))
       },
       onDidDispose(cb) {
-        return panel.onDidDispose(cb)
+        return lifetime.onDidDispose(cb)
       },
       dispose() {
-        streams.dispose()
-        provider.dispose()
-        panel.dispose()
+        lifetime.dispose()
       },
     }
   }

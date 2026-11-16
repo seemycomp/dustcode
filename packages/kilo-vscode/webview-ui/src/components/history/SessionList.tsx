@@ -10,11 +10,13 @@ import { List } from "@kilocode/kilo-ui/list"
 import { ContextMenu } from "@kilocode/kilo-ui/context-menu"
 import { Dialog } from "@kilocode/kilo-ui/dialog"
 import { Button } from "@kilocode/kilo-ui/button"
-import { IconButton } from "@kilocode/kilo-ui/icon-button"
+import { Icon } from "@kilocode/kilo-ui/icon"
 import { useDialog } from "@kilocode/kilo-ui/context/dialog"
 import { useSession } from "../../context/session"
 import { useLanguage } from "../../context/language"
+import { useVSCode } from "../../context/vscode"
 import { formatRelativeDate } from "../../utils/date"
+import { isPendingTab } from "../../utils/local-tabs"
 import type { SessionInfo } from "../../types/messages"
 import { SessionRenameEditor } from "../shared/SessionRenameEditor"
 
@@ -38,14 +40,16 @@ function dateGroupKey(iso: string): (typeof DATE_GROUP_KEYS)[number] {
 
 interface SessionListProps {
   onSelectSession: (id: string) => void
+  separateTabs?: boolean
   sessionIds?: Accessor<ReadonlySet<string> | undefined>
-  /** Extra per-row actions rendered after rename/delete (e.g. Agent Manager menus). */
+  /** Extra context menu items (e.g. Agent Manager worktree/local actions). */
   rowActions?: (session: SessionInfo) => JSX.Element
 }
 
 const SessionList: Component<SessionListProps> = (props) => {
   const session = useSession()
   const language = useLanguage()
+  const vscode = useVSCode()
   const dialog = useDialog()
 
   const [renamingId, setRenamingId] = createSignal<string | null>(null)
@@ -87,10 +91,6 @@ const SessionList: Component<SessionListProps> = (props) => {
 
   function name(s: SessionInfo) {
     return s.title || language.t("session.untitled")
-  }
-
-  function label(action: string, s: SessionInfo) {
-    return `${action}: ${name(s)}`
   }
 
   function announce(s: SessionInfo | undefined) {
@@ -137,34 +137,11 @@ const SessionList: Component<SessionListProps> = (props) => {
   }
 
   function wrapItem(item: SessionInfo, node: JSX.Element): JSX.Element {
+    let row: HTMLDivElement | undefined
     return (
       <ContextMenu>
-        <ContextMenu.Trigger as="div" class="session-row">
-          <Show
-            when={renamingId() === item.id}
-            fallback={
-              <>
-                {node}
-                <IconButton
-                  data-slot="session-row-action"
-                  icon="edit"
-                  size="small"
-                  variant="ghost"
-                  aria-label={label(language.t("common.rename"), item)}
-                  onClick={() => startRename(item)}
-                />
-                <IconButton
-                  data-slot="session-row-action"
-                  icon="trash"
-                  size="small"
-                  variant="ghost"
-                  aria-label={label(language.t("session.delete.title"), item)}
-                  onClick={(event) => confirmDelete(item, event.currentTarget)}
-                />
-                <Show when={props.rowActions}>{props.rowActions?.(item)}</Show>
-              </>
-            }
-          >
+        <ContextMenu.Trigger ref={row} as="div" class="session-row">
+          <Show when={renamingId() === item.id} fallback={node}>
             <div data-slot="session-row-editor">
               <SessionRenameEditor title={item.title || ""} fill onSave={saveRename} onCancel={cancelRename} />
             </div>
@@ -181,13 +158,30 @@ const SessionList: Component<SessionListProps> = (props) => {
             }}
           >
             <ContextMenu.Item onSelect={() => setPendingRenameId(item.id)}>
+              <Icon name="edit" size="small" />
               <ContextMenu.ItemLabel>{language.t("common.rename")}</ContextMenu.ItemLabel>
             </ContextMenu.Item>
             <ContextMenu.Item onSelect={() => session.exportSessionTranscript(item.id)}>
+              <Icon name="download" size="small" />
               <ContextMenu.ItemLabel>{language.t("command.session.export")}</ContextMenu.ItemLabel>
             </ContextMenu.Item>
+            <Show when={props.separateTabs}>
+              <ContextMenu.Item
+                disabled={!item.id || isPendingTab(item.id) || item.id.startsWith("cloud:")}
+                onSelect={() => vscode.postMessage({ type: "openSessionInTab", sessionID: item.id })}
+              >
+                <Icon name="window-cursor" size="small" />
+                <ContextMenu.ItemLabel>{language.t("session.openInSeparateTab")}</ContextMenu.ItemLabel>
+              </ContextMenu.Item>
+            </Show>
+            {props.rowActions?.(item)}
             <ContextMenu.Separator />
-            <ContextMenu.Item onSelect={() => confirmDelete(item)}>
+            <ContextMenu.Item
+              onSelect={() =>
+                confirmDelete(item, row?.querySelector<HTMLElement>('[data-slot="list-item"]') ?? undefined)
+              }
+            >
+              <Icon name="trash" size="small" />
               <ContextMenu.ItemLabel>{language.t("common.delete")}</ContextMenu.ItemLabel>
             </ContextMenu.Item>
           </ContextMenu.Content>

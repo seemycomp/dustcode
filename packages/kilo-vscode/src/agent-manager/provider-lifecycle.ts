@@ -483,29 +483,46 @@ export async function promoteLifecycleSession(
   return null
 }
 
+export function rejectAddition(
+  host: Pick<LifecycleHost, "post">,
+  request: { projectId?: string; worktreeId: string; requestId?: string },
+  message: string,
+): null {
+  host.post({
+    type: "error",
+    projectId: request.projectId,
+    worktreeId: request.worktreeId,
+    ...(request.requestId ? { requestId: request.requestId } : {}),
+    message,
+  })
+  return null
+}
+
 /** Add a new or existing session to an existing worktree. */
 export async function addSessionToLifecycleWorktree(
   ctx: ProjectContext,
   host: LifecycleHost,
   worktreeId: string,
   sessionId?: string,
+  requestId?: string,
 ): Promise<null> {
+  const request = { projectId: ctx.id, worktreeId, ...(requestId ? { requestId } : {}) }
+  const fail = (message: string) => rejectAddition(host, request, message)
   let client: KiloClient
   try {
     client = host.client()
   } catch (err) {
     host.log("onAddSessionToWorktree: client not available:", err)
-    host.post({ type: "error", message: "Not connected to CLI backend" })
-    return null
+    return fail("Not connected to CLI backend")
   }
 
   const state = ctx.peekState()
-  if (!state) return null
+  if (!state) return fail("The project's state is unavailable.")
 
   const worktree = state.getWorktree(worktreeId)
   if (!worktree) {
     host.log(`Worktree ${worktreeId} not found`)
-    return null
+    return fail("The worktree is unavailable.")
   }
 
   if (sessionId) {
@@ -513,7 +530,7 @@ export async function addSessionToLifecycleWorktree(
     else state.addSession(sessionId, worktreeId)
     host.register(sessionId, worktree.path)
     host.push()
-    host.post({ type: "agentManager.sessionAdded", sessionId, worktreeId })
+    host.post({ type: "agentManager.sessionAdded", sessionId, ...request })
     host.capture("Agent Manager Session Started", {
       source: PLATFORM,
       sessionId,
@@ -534,7 +551,7 @@ export async function addSessionToLifecycleWorktree(
     session = data
   } catch (error) {
     const err = getErrorMessage(error)
-    host.post({ type: "error", message: `Failed to create session: ${err}` })
+    fail(`Failed to create session: ${err}`)
     host.capture("Agent Manager Session Error", {
       source: PLATFORM,
       error: err,
@@ -547,7 +564,7 @@ export async function addSessionToLifecycleWorktree(
   state.addSession(session.id, worktreeId)
   host.register(session.id, worktree.path)
   host.push()
-  host.post({ type: "agentManager.sessionAdded", sessionId: session.id, worktreeId })
+  host.post({ type: "agentManager.sessionAdded", sessionId: session.id, ...request })
   host.sessions.register(session)
 
   host.capture("Agent Manager Session Started", {

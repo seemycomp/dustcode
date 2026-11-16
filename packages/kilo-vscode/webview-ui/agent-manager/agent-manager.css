@@ -135,16 +135,9 @@ html[data-theme="kilo-vscode"]
   padding-block: 4px;
 }
 
-.am-history-tools > [data-component="input"],
-.am-history-caption {
+.am-history-tools > [data-component="input"] {
   flex: 1;
   min-width: 0;
-}
-
-.am-history-caption {
-  padding-inline-start: 6px;
-  font-size: var(--font-size-small);
-  color: var(--text-weak);
 }
 
 .am-history-tools [data-slot="input-wrapper"] {
@@ -230,15 +223,104 @@ html[data-theme="kilo-vscode"]
   color: var(--text-weak);
 }
 
-.am-history-note [data-component="spinner"] {
-  width: 12px;
-  height: 12px;
-  flex: none;
-}
-
 .am-history-error {
   flex-wrap: wrap;
-  color: var(--text-critical-base);
+  color: var(--vscode-editorWarning-foreground, var(--text-warning));
+  overflow-wrap: anywhere;
+}
+
+.am-worktree-status {
+  grid-column: 1 / -1;
+  min-height: calc(1.35em + 4px);
+  min-width: 0;
+  font-size: var(--kilo-font-size-11);
+}
+
+.am-worktree-status > .am-history-note {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 2px 0;
+  font-size: var(--kilo-font-size-11);
+  line-height: 1.35;
+}
+
+.am-worktree-meta {
+  display: flex;
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 1.35em;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--text-weak);
+  font-size: var(--kilo-font-size-11);
+  line-height: 1.35;
+}
+
+.am-worktree-name {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.am-worktree-meta > .am-worktree-name {
+  flex: 1;
+}
+
+.am-worktree-date {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  color: var(--text-weak);
+  font-size: var(--kilo-font-size-11);
+  line-height: 1.35;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.am-worktree-health-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.am-worktree-health {
+  grid-column: 1 / -1;
+  min-width: 0;
+  font-size: var(--kilo-font-size-11);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.am-worktree-health-label {
+  color: var(--vscode-editorWarning-foreground, var(--text-warning));
+}
+
+.am-worktree-health[data-health="unavailable"] .am-worktree-health-label,
+.am-worktree-health-note {
+  color: var(--text-weak);
+}
+
+.am-worktree-health-note {
+  display: block;
+}
+
+.am-worktree-health-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.am-worktree-health-actions [data-component="button"] {
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  text-align: start;
 }
 
 .am-history-more {
@@ -248,14 +330,14 @@ html[data-theme="kilo-vscode"]
 .am-local-item {
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 8px 6px;
   min-height: 40px;
   box-sizing: border-box;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  background: none;
+  background: color-mix(in srgb, var(--text-base) 4%, transparent);
   border: none;
   width: 100%;
   text-align: left;
@@ -363,20 +445,21 @@ html[data-theme="kilo-vscode"]
 }
 
 .am-local-text {
-  display: flex;
-  flex-direction: column;
   min-width: 0;
-  gap: 0;
   flex: 1;
 }
 
 .am-local-label {
+  grid-column: 1;
+  grid-row: 1;
   font-size: var(--font-size-base);
   font-weight: 500;
   line-height: 1.4;
 }
 
 .am-local-branch {
+  grid-column: 1;
+  grid-row: 2;
   font-size: var(--kilo-font-size-10);
   color: var(--text-weaker);
   line-height: 1.2;
@@ -838,6 +921,8 @@ body.am-project-dragging-active * {
 /* Stands in for .am-local-branch so the local row keeps its two-line height
    while a project's git state is still loading. */
 .am-local-branch-skeleton {
+  grid-column: 1;
+  grid-row: 2;
   width: 72px;
   max-width: 100%;
   height: 8px;
@@ -875,6 +960,7 @@ body.am-project-dragging-active * {
   cursor: pointer;
   font-size: var(--font-size-base);
   color: var(--text-base);
+  background: color-mix(in srgb, var(--text-base) 4%, transparent);
   min-width: 0;
   width: 100%;
   transition: background 200ms ease;
@@ -890,17 +976,20 @@ body.am-project-dragging-active * {
   height: 20px;
 }
 
-/* Right content column — flex-1 with two rows */
+/* Title/branch on the left, date/stats on the right, status across the bottom. */
 .am-wt-content {
   flex: 1;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(15px, auto);
+  gap: 2px 6px;
 }
 
 /* Row 1: label + stats/hover-actions */
 .am-wt-row1 {
+  grid-column: 1;
+  grid-row: 1;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -909,6 +998,8 @@ body.am-project-dragging-active * {
 
 /* Grid overlay cell: stats visible by default, hover actions stacked on top */
 .am-wt-actions-cell {
+  grid-column: 2;
+  grid-row: 2;
   position: relative;
   flex-shrink: 0;
   display: grid;
@@ -920,7 +1011,7 @@ body.am-project-dragging-active * {
   grid-row: 1;
 }
 
-/* Hover actions (shortcut badge + close button) — hidden by default, shown on hover */
+/* Hover actions (shortcut badge + pin) are hidden by default. */
 .am-wt-hover-actions {
   position: absolute;
   top: 0;
@@ -939,10 +1030,12 @@ body.am-project-dragging-active * {
   visibility: visible;
 }
 /* Stats fade out on hover (replaced by hover actions in same grid cell) */
-.am-worktree-item:hover .am-wt-actions-cell > .am-worktree-stats,
-.am-worktree-item:hover .am-wt-actions-cell > .am-worktree-stats-skeleton,
-.am-worktree-item:focus-within .am-wt-actions-cell > .am-worktree-stats,
-.am-worktree-item:focus-within .am-wt-actions-cell > .am-worktree-stats-skeleton {
+.am-worktree-item:is(:hover, :focus-within)
+  .am-wt-actions-cell:has(.am-shortcut-badge, .am-worktree-unpin)
+  > .am-worktree-stats,
+.am-worktree-item:is(:hover, :focus-within)
+  .am-wt-actions-cell:has(.am-shortcut-badge, .am-worktree-unpin)
+  > .am-worktree-stats-skeleton {
   opacity: 0;
   visibility: hidden;
 }
@@ -955,33 +1048,18 @@ body.am-project-dragging-active * {
   bottom: 0;
 }
 
-.am-worktree-item:hover .am-worktree-branch,
+.am-worktree-item:has(.am-shortcut-badge, .am-worktree-unpin):hover .am-worktree-branch,
 .am-show-shortcuts .am-worktree-item:has(.am-shortcut-badge) .am-worktree-branch {
   mask-image: linear-gradient(to right, black calc(100% - 48px), transparent 100%);
   -webkit-mask-image: linear-gradient(to right, black calc(100% - 48px), transparent 100%);
 }
 
-/* Row 2: always present for consistent height; PR badge right-aligned */
+/* Optional PR/run badges sit below the compact metadata. */
 .am-wt-row2 {
   display: flex;
   align-items: center;
   gap: 6px;
   min-height: 14px;
-}
-
-.am-worktree-subtitle {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--kilo-font-size-10);
-  color: var(--text-weaker);
-  line-height: 1.2;
-  min-width: 0;
-}
-
-.am-worktree-item-active .am-worktree-subtitle {
-  color: inherit;
 }
 
 .am-worktree-item:hover {
@@ -995,6 +1073,11 @@ body.am-project-dragging-active * {
 .am-worktree-item-active,
 .am-worktree-item-active:hover {
   background: var(--surface-interactive-base);
+  color: var(--text-on-interactive-base);
+}
+
+.am-worktree-item-active .am-worktree-meta,
+.am-worktree-item-active .am-worktree-date {
   color: var(--text-on-interactive-base);
 }
 
@@ -1054,12 +1137,11 @@ body.am-project-dragging-active * {
 
 /* Jump modifier held (⌘/Ctrl): reveal shortcut badges on every item, not just the
    hovered one. Scoped via :has so items without a badge (beyond ⌘9) keep their stats.
-   The close button stays hidden so holding the modifier never exposes the delete action. */
+   Pin controls stay hidden while holding the modifier. */
 .am-show-shortcuts .am-wt-hover-actions:has(.am-shortcut-badge) {
   opacity: 1;
   visibility: visible;
 }
-.am-show-shortcuts .am-wt-hover-actions .am-worktree-close,
 .am-show-shortcuts .am-wt-hover-actions .am-worktree-unpin {
   display: none;
 }
@@ -1071,10 +1153,6 @@ body.am-project-dragging-active * {
 
 .am-worktree-item:has(.am-worktree-rename-input) .am-wt-row2 {
   display: none;
-}
-
-.am-worktree-close {
-  flex-shrink: 0;
 }
 
 .am-worktree-item:has(.am-worktree-rename-input) .am-wt-hover-actions {
@@ -1212,7 +1290,7 @@ body.am-project-dragging-active * {
 }
 
 .am-worktree-pending-delete .am-worktree-branch,
-.am-worktree-pending-delete .am-worktree-subtitle {
+.am-worktree-pending-delete .am-worktree-meta {
   opacity: 0.5;
   transition: opacity 200ms ease;
 }
@@ -1499,11 +1577,6 @@ body.am-project-dragging-active * {
 .am-orphan-dialog-actions {
   display: flex;
   gap: 8px;
-}
-
-.am-worktree-spinner {
-  width: 16px;
-  height: 16px;
 }
 
 /* Per-worktree git stats (diff lines + commits missing from origin) */
@@ -1968,7 +2041,7 @@ body.am-project-dragging-active * {
   flex-shrink: 0;
 }
 
-.am-hover-card-row-value .am-color-swatch {
+.am-worktree-home .am-color-swatch {
   display: inline-block;
   margin-right: 6px;
   vertical-align: middle;
@@ -3635,7 +3708,7 @@ body.am-wt-dragging-active * {
 .am-nv-dialog {
   display: flex;
   flex-direction: column;
-  min-width: 460px;
+  min-width: 0;
   flex: 1;
   min-height: 0;
 }
@@ -3647,6 +3720,111 @@ body.am-wt-dragging-active * {
   max-height: 85vh;
   width: 640px;
   max-width: 92vw;
+}
+
+/* A sidebar popup must fit its iframe, including inline selector popovers. */
+@media (max-width: 560px) {
+  [data-component="dialog"]:has(.am-nv-header) [data-slot="dialog-content"] {
+    max-width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+
+  [data-component="dialog"]:has(.am-nv-header) [data-slot="dialog-header"] {
+    flex-wrap: wrap;
+    padding: 12px;
+    gap: 8px;
+  }
+
+  [data-component="dialog"]:has(.am-nv-header) [data-slot="dialog-title"] {
+    width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .am-nv-header {
+    flex-basis: 100%;
+  }
+
+  [data-component="dialog"] .am-nv-dialog-content {
+    min-width: 0;
+    padding-inline: 12px;
+  }
+
+  [data-component="dialog"] .am-nv-name-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .am-nv-name-input {
+    min-width: 0;
+  }
+
+  [data-component="dialog"] .am-nv-origin {
+    flex-wrap: wrap;
+  }
+
+  .am-nv-origin > [data-slot="popover-trigger"]:has(.am-nv-origin-segment) {
+    flex: 1 1 100%;
+  }
+
+  [data-component="dialog"] .am-nv-origin-divider {
+    display: none;
+  }
+
+  .am-nv-origin-segment {
+    max-width: 100%;
+  }
+
+  [data-component="dialog"] .am-nv-origin-dropdown[data-component="popover-content"],
+  [data-component="dialog"] .am-nv-origin-projects[data-component="popover-content"],
+  [data-component="dialog"]:has(.am-nv-header) [data-component="popover-content"] {
+    min-width: 0;
+    max-width: calc(100vw - 32px);
+  }
+
+  .am-nv-dialog .prompt-input-hint {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .am-nv-dialog .prompt-input-hint-selectors {
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  [data-component="dialog"] .am-nv-dialog-footer {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  [data-component="dialog"] .am-nv-dialog-footer .am-nv-submit {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .am-nv-version-bar,
+  .am-nv-pills {
+    flex-wrap: wrap;
+  }
+
+  [data-component="dialog"] .am-nv-dialog-footer .am-nv-compare-section {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  [data-component="dialog"] .am-nv-dialog-footer .am-nv-compare-section > [data-slot="popover-trigger"] {
+    flex: auto;
+    max-width: none;
+  }
+
+  [data-component="dialog"]:has(.am-nv-header) .am-import-tab {
+    min-width: 0;
+    padding: 12px;
+  }
+
+  [data-component="dialog"]:has(.am-nv-header) .am-pr-row {
+    flex-wrap: wrap;
+  }
 }
 
 /* Scrollable form content area — keeps submit button always visible */
@@ -4336,148 +4514,6 @@ body.am-wt-dragging-active * {
   white-space: nowrap;
 }
 
-/* HoverCard popover for worktree items */
-
-.am-worktree-hover-card[data-expanded] {
-  animation: none;
-}
-
-.am-worktree-hover-card[data-closed] {
-  animation: none;
-}
-
-.am-hover-card {
-  padding: 10px 12px;
-  min-width: 160px;
-  max-width: 240px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  overflow: hidden;
-}
-
-.am-hover-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.am-hover-card-label {
-  font-size: var(--kilo-font-size-11);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-weaker);
-  line-height: 1.4;
-}
-
-.am-hover-card-branch {
-  font-size: var(--kilo-font-size-13);
-  font-weight: 600;
-  color: var(--text-strong);
-  line-height: 1.4;
-  word-break: break-all;
-}
-
-.am-hover-card-meta {
-  font-size: var(--kilo-font-size-12);
-  color: var(--text-weaker);
-  line-height: 1.4;
-}
-
-.am-hover-card-keybind {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: 3px;
-  background: var(--surface-inset-base);
-  border: 1px solid var(--border-weak-base);
-  font-family: var(--font-family-sans);
-  font-size: var(--kilo-font-size-11);
-  font-weight: 500;
-  line-height: 1;
-  color: var(--text-weak);
-  white-space: nowrap;
-}
-
-.am-hover-card-divider {
-  height: 1px;
-  background: var(--border-weak-base);
-  margin: 6px 0;
-}
-
-.am-hover-card-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.am-hover-card-row-label {
-  font-size: var(--kilo-font-size-12);
-  color: var(--text-weaker);
-}
-
-.am-hover-card-row-value {
-  font-size: var(--kilo-font-size-12);
-  font-weight: 500;
-  color: var(--text-base);
-}
-
-.am-hover-card-diff-stats {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-mono, monospace);
-  font-variant-numeric: tabular-nums;
-}
-
-.am-hover-card-row-stale {
-  align-items: center;
-}
-
-.am-hover-card-stale-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-warning, #f59e0b);
-  font-weight: 600;
-}
-
-.am-hover-card-stale-pill[data-health="unavailable"] {
-  color: var(--text-weak);
-}
-
-.am-hover-card-note {
-  margin-top: 4px;
-  font-size: var(--kilo-font-size-12);
-  line-height: 1.35;
-  color: var(--text-weak);
-  text-align: left;
-}
-
-.am-hover-card-actions {
-  margin-top: 8px;
-  display: flex;
-  justify-content: flex-start;
-}
-
-.am-hover-card-hint {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-weaker);
-  font-size: var(--kilo-font-size-11);
-}
-
-.am-hover-card-hint [data-component="icon"] {
-  opacity: 0.8;
-}
-
 /* Keyboard shortcuts dialog */
 
 .am-shortcuts {
@@ -4533,6 +4569,45 @@ body.am-wt-dragging-active * {
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+}
+
+body[data-agent-manager-presentation="sidebar"] [data-component="dialog"]:has(.am-shortcuts) {
+  [data-slot="dialog-content"] {
+    max-height: calc(100dvh - 16px);
+  }
+
+  [data-slot="dialog-header"] {
+    gap: 8px;
+    padding: 12px;
+  }
+
+  [data-slot="dialog-title"] {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .am-shortcuts {
+    min-height: 0;
+    padding-inline: 12px;
+  }
+
+  .am-shortcuts-row {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    padding: 8px;
+  }
+
+  .am-shortcuts-label {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .am-shortcuts-keys {
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
 }
 
 .am-kbd {
@@ -5908,11 +5983,6 @@ body.vscode-high-contrast-light {
     border-color: var(--vscode-contrastBorder, var(--border-weak-base));
   }
 
-  /* Hover card keybind */
-  .am-hover-card-keybind {
-    border-color: var(--vscode-contrastBorder, var(--border-weak-base));
-  }
-
   /* File tree items */
   .am-file-tree-dir,
   .am-file-tree-file {
@@ -6462,4 +6532,102 @@ body.vscode-high-contrast-light {
 
 .am-terminal-host [class~="xterm-viewport"] {
   background: transparent !important;
+}
+/* The Activity Bar presentation is a navigator, not a scaled editor workspace. */
+.am-layout[data-presentation="sidebar"] {
+  flex-direction: column;
+  min-width: 0;
+}
+
+.am-presentation-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.am-presentation-toolbar > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.am-layout[data-presentation="sidebar"] > .am-sidebar {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  max-width: none;
+  border-right: 0;
+}
+
+.am-layout[data-presentation="sidebar"] > .am-sidebar > [data-component="resize-handle"],
+.am-layout[data-presentation="sidebar"][data-detail="false"] > .am-detail,
+.am-layout[data-presentation="sidebar"][data-detail="true"] > .am-sidebar {
+  display: none;
+}
+
+.am-layout[data-presentation="sidebar"] > .am-detail {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+
+.am-layout[data-presentation="sidebar"] .am-detail-split {
+  flex-direction: column;
+}
+
+.am-layout[data-presentation="sidebar"] .am-diff-resize {
+  width: 100% !important;
+  max-width: 100%;
+  flex: 1;
+}
+
+/* Portals still share the sidebar viewport. Constrain their contents before collision placement. */
+body[data-agent-manager-presentation="sidebar"]
+  :is(
+    [data-component="tooltip"],
+    [data-component="hover-card-content"],
+    [data-component="dropdown-menu-content"],
+    [data-component="dropdown-menu-sub-content"],
+    [data-component="context-menu-content"],
+    [data-component="context-menu-sub-content"],
+    [data-component="popover-content"]
+  ) {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+body[data-agent-manager-presentation="sidebar"] [data-component="hover-card-content"] {
+  max-height: min(calc(100vh - 16px), var(--kb-popper-content-available-height, 100vh));
+}
+
+body[data-agent-manager-presentation="sidebar"]
+  :is([data-component="context-menu-content"], [data-component="context-menu-sub-content"]):not(.am-session-menu) {
+  max-width: min(calc(100vw - 16px), var(--kb-popper-content-available-width, 100vw));
+}
+
+body[data-agent-manager-presentation="sidebar"] .am-session-menu {
+  min-width: min(210px, calc(100vw - 16px));
+}
+
+body[data-agent-manager-presentation="sidebar"]
+  :is([data-slot="tooltip-keybind"], [data-slot="dropdown-menu-item-label"], [data-slot="context-menu-item-label"]) {
+  min-width: 0;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+body[data-agent-manager-presentation="sidebar"] .am-session-menu [data-slot="context-menu-item-label"] {
+  overflow-wrap: normal;
+  white-space: nowrap;
 }

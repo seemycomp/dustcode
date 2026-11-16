@@ -21,7 +21,13 @@ export const ProjectsFooter: Component<ProjectsFooterProps> = (props) => {
       <Button variant="ghost" size="small" icon="plus" class="am-project-create" onClick={props.onCreate}>
         <span class="am-project-label">{props.t("agentManager.project.new")}</span>
       </Button>
-      <DropdownMenu gutter={4} placement="top-start" getAnchorRect={() => footer?.getBoundingClientRect()}>
+      <DropdownMenu
+        gutter={4}
+        placement="top-start"
+        slide={document.body.dataset.agentManagerPresentation === "sidebar"}
+        fitViewport={document.body.dataset.agentManagerPresentation === "sidebar"}
+        getAnchorRect={() => footer?.getBoundingClientRect()}
+      >
         <DropdownMenu.Trigger as={Button} variant="ghost" size="small" icon="folder-add-left" class="am-project-add">
           <span class="am-project-label">{props.t("agentManager.project.add")}</span>
         </DropdownMenu.Trigger>

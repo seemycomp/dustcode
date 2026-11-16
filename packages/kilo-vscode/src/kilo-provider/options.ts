@@ -3,6 +3,21 @@ import type { SettingsHandler } from "../agent-manager/project/settings"
 
 export type AgentManagerSettingsHandler = SettingsHandler
 
+/** Host-issued authority. A native provider must retain it even after New Task clears its session. */
+export type NativeSessionScope = Readonly<{
+  projectId: string
+  root: string
+  directory: string
+  worktreeId: string | null
+  projectLabel: string
+  label: string
+  generation: number
+  routes: ProjectRouteService
+  ready?: () => Promise<void>
+  validate: (id?: string) => void
+  register: (id: string) => void
+}>
+
 export type KiloProviderOptions = {
   /** Context key updated from focus events reported by this provider's webview. */
   focusContext?: string
@@ -60,6 +75,11 @@ export type KiloProviderOptions = {
   hideTopBar?: boolean
   /** Reports "Open in Tab" as the top bar's telemetry surface instead of the sidebar default. */
   topBarSurface?: "tab"
+  /** Per-panel initialization; restored tabs let LocalTabs initiate the single restore request. */
+  nativeSessionTab?: { sessionID?: string; restore: boolean; context?: string; unavailable?: boolean }
+  nativeSessionContext?: (sessionID: string, directory: string) => string
+  nativeSessionScope?: NativeSessionScope
+  openSessionInTab?: (sessionID: string) => Promise<void>
   /** Project-aware settings used by the standalone Agent Manager settings tab. */
   agentManagerSettings?: AgentManagerSettingsHandler
   /** Dedicated Settings entry and its current route, including webview reloads. */

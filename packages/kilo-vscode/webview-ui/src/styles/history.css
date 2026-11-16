@@ -55,34 +55,6 @@ body.vscode-light
   padding: 2px 8px;
 }
 
-body.vscode-light
-  .session-list
-  .session-row:has([data-slot="list-item"][data-active="true"])
-  [data-slot="session-row-action"]
-  [data-slot="icon-svg"],
-body.vscode-light
-  .session-list
-  .session-row:has([data-slot="list-item"][data-selected="true"])
-  [data-slot="session-row-action"]
-  [data-slot="icon-svg"] {
-  color: var(--text-on-interactive-base, white);
-}
-
-.session-list [data-slot="session-row-action"] {
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-  margin-left: 4px;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.session-list .session-row:hover [data-slot="session-row-action"],
-.session-list .session-row:focus-within [data-slot="session-row-action"],
-.session-list .session-row:has([data-slot="list-item"][data-active="true"]) [data-slot="session-row-action"] {
-  opacity: 1;
-}
-
 .session-list-menu {
   min-width: 180px;
   border: 1px solid color-mix(in oklch, var(--border-base) 50%, transparent);

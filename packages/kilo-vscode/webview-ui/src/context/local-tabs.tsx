@@ -4,7 +4,6 @@ import {
   createMemo,
   createSignal,
   onCleanup,
-  onMount,
   type Accessor,
   type ParentComponent,
   useContext,
@@ -35,14 +34,20 @@ import {
 } from "../utils/draft-store"
 import { applyPinnedTabs, reorderPinnedTabs, togglePinnedTab } from "../utils/tab-order"
 import { closableRight, closeToRight, sessionCloseDeps } from "../utils/session-close"
+import { restoredNativeSession } from "../../../src/shared/native-session-state"
+import type { ReadyMessage, ExtensionMessage } from "../types/messages/extension-messages"
+import { agentProject, isStaleAgentSession } from "./session-project"
 
 interface LocalTabsState extends Record<string, unknown> {
   sidebarSessionTabIDs?: string[]
   sidebarActiveSessionTabID?: string
   sidebarPinnedSessionTabIDs?: string[]
+  nativeSessionContexts?: Record<string, string>
+  nativeSessionContext?: string
 }
 
 interface LocalTabsValue {
+  native: boolean
   ids: Accessor<string[]>
   display: Accessor<string[]>
   active: Accessor<string | undefined>
@@ -62,6 +67,7 @@ interface LocalTabsValue {
   reorder: (from: string, to: string) => boolean
   move: (id: string, offset: -1 | 1) => number | undefined
   persist: () => void
+  scope: Accessor<NonNullable<ReadyMessage["nativeSessionTab"]>["scope"]>
 }
 
 const LocalTabsContext = createContext<LocalTabsValue>()
@@ -73,8 +79,41 @@ export const LocalTabsProvider: ParentComponent = (props) => {
   const server = useServer()
   const session = useSession()
   const saved = vscode.getState<LocalTabsState>()
+  const host = window as Window & {
+    KILO_TOP_BAR_SURFACE?: string
+    KILO_NATIVE_SESSION_TAB?: ReadyMessage["nativeSessionTab"]
+  }
+  const native = host.KILO_TOP_BAR_SURFACE === "tab_title"
+  const [scope, setScope] = createSignal(native ? host.KILO_NATIVE_SESSION_TAB?.scope : undefined)
+  const [project, setProject] = createSignal<string>()
+  const stale = (message: ExtensionMessage) => isStaleAgentSession(message, scope()?.projectId ?? project())
+  onCleanup(
+    vscode.onMessage((message) => {
+      const owner = agentProject(message)
+      if (owner) setProject(owner)
+    }),
+  )
+  const [binding, setBinding] = createSignal(scope() ? host.KILO_NATIVE_SESSION_TAB?.context : undefined)
+  const [contexts, setContexts] = createSignal<Record<string, string>>({ ...saved?.nativeSessionContexts })
+  const remember = (id?: string, context?: string) => {
+    if (scope() && context) setBinding(context)
+    if (!id || !context) return
+    setContexts((prev) => ({ ...prev, [id]: context }))
+  }
+  remember(host.KILO_NATIVE_SESSION_TAB?.sessionID, host.KILO_NATIVE_SESSION_TAB?.context)
+  const [initial, setInitial] = createSignal<{ sessionID?: string; restore: boolean }>()
   const pending = () => `${PENDING_TAB_PREFIX}${crypto.randomUUID()}`
-  const init = restoreTabs(saved?.sidebarSessionTabIDs, saved?.sidebarActiveSessionTabID, pending)
+  const selected = native
+    ? host.KILO_NATIVE_SESSION_TAB
+      ? host.KILO_NATIVE_SESSION_TAB.sessionID
+      : restoredNativeSession(saved)
+    : saved?.sidebarActiveSessionTabID
+  const list = Array.isArray(saved?.sidebarSessionTabIDs)
+    ? saved.sidebarSessionTabIDs.filter((id) => typeof id === "string")
+    : undefined
+  const init = native
+    ? restoreTabs(selected ? [selected] : [], selected, pending)
+    : restoreTabs(list, selected, pending)
   const [ids, setIds] = createSignal(init.ids)
   onCleanup(session.trackScopes(ids))
   onCleanup(session.keepSessions(ids))
@@ -98,7 +137,9 @@ export const LocalTabsProvider: ParentComponent = (props) => {
     if (isPendingTab(id)) return
     setPinned((prev) => togglePinnedTab(prev, id))
   }
+  let navigated = false
   const focus = (id: string | undefined, options: { scrollToBottom?: boolean } = {}) => {
+    navigated = true
     setCloud(undefined)
     if (!id || isPendingTab(id)) {
       session.clearCurrentSession()
@@ -201,9 +242,10 @@ export const LocalTabsProvider: ParentComponent = (props) => {
 
   let restored = false
   createEffect(() => {
-    if (restored || !server.isConnected()) return
+    if (restored || !server.isConnected() || (native && !initial())) return
     restored = true
     if (real().length > 0) session.loadSessions()
+    if (native && (!initial()?.restore || navigated)) return
     const id = active()
     if (id && !isPendingTab(id)) session.selectSession(id)
   })
@@ -218,16 +260,21 @@ export const LocalTabsProvider: ParentComponent = (props) => {
     vscode.setState({
       ...prev,
       sidebarSessionTabIDs: tabs,
-      sidebarActiveSessionTabID: selected,
+      sidebarActiveSessionTabID: selected ?? (native ? "" : undefined),
       sidebarPinnedSessionTabIDs: pins,
+      ...(native ? { nativeSessionContexts: contexts() } : {}),
+      ...(native && scope() ? { nativeSessionContext: binding() } : {}),
     })
   }
   createEffect(() => {
     real()
     active()
     pinned()
+    contexts()
+    binding()
     clearTimeout(timer)
-    timer = setTimeout(persist, 300)
+    if (native) persist()
+    else timer = setTimeout(persist, 300)
   })
   onCleanup(() => clearTimeout(timer))
 
@@ -235,52 +282,72 @@ export const LocalTabsProvider: ParentComponent = (props) => {
     vscode.postMessage({ type: "sidebar.openSessions", sessionIDs: real() })
   })
 
-  onMount(() => {
-    const cleanup = vscode.onMessage((message) => {
-      if (message.type === "openCloudSession") {
-        setCloud(message.sessionId)
-        return
+  onCleanup(
+    vscode.onMessage((message) => {
+      if (message.type === "ready" && native && message.nativeSessionTab) {
+        const target = message.nativeSessionTab
+        setScope(target.scope)
+        remember(target.sessionID, target.context)
+        if (!navigated && target.sessionID) apply(restoreTabs([target.sessionID], target.sessionID, pending))
+        setInitial(target)
       }
-      if (message.type === "sessionCreated") {
-        if (message.draftID && promotePendingDraftDiscard(message.draftID, message.session.id)) return
-        const next = tabsForCreatedSession(current(), message.session.id, message.draftID, message.activate)
-        if (!next) return
-        fresh.add(message.session.id)
-        apply(next)
-        focus(next.active)
-        return
-      }
-      if (message.type === "cloudSessionImported") {
-        const activate = cloud() === message.cloudSessionId
-        fresh.add(message.session.id)
-        apply(activate ? openSessionTab(current(), message.session.id) : addSessionTab(current(), message.session.id))
-        if (activate) setCloud(undefined)
-        return
-      }
-      if (message.type === "sessionsLoaded") {
-        const before = active()
-        const listed = message.sessions.map((item) => item.id)
-        for (const id of listed) fresh.delete(id)
-        const next = tabsForLoadedSessions(current(), message, fresh, pending)
-        if (!next) return
-        apply(next)
-        if (before !== next.active) focus(next.active)
-        return
-      }
-      if (message.type === "sessionDeleted") {
-        fresh.delete(message.sessionID)
-        const before = active()
-        const next = closeTab(current(), message.sessionID, pending)
-        apply(next)
-        if (before !== next.active) focus(next.active)
-      }
-    })
-    onCleanup(cleanup)
+    }),
+  )
+
+  onCleanup(
+    vscode.onMessage((message) => {
+      if (message.type !== "nativeSessionContext" || !native) return
+      remember(message.sessionID, message.context)
+    }),
+  )
+
+  const cleanup = vscode.onMessage((message) => {
+    if (message.type === "openCloudSession") {
+      setCloud(message.sessionId)
+      return
+    }
+    if (message.type === "sessionCreated") {
+      if (message.draftID && promotePendingDraftDiscard(message.draftID, message.session.id)) return
+      const next = tabsForCreatedSession(current(), message.session.id, message.draftID, message.activate)
+      if (!next) return
+      fresh.add(message.session.id)
+      apply(next)
+      focus(next.active)
+      return
+    }
+    if (message.type === "cloudSessionImported") {
+      const activate = cloud() === message.cloudSessionId
+      fresh.add(message.session.id)
+      apply(activate ? openSessionTab(current(), message.session.id) : addSessionTab(current(), message.session.id))
+      if (activate) setCloud(undefined)
+      return
+    }
+    if (message.type === "sessionsLoaded") {
+      const before = active()
+      const listed = message.sessions.map((item) => item.id)
+      for (const id of listed) fresh.delete(id)
+      const next = tabsForLoadedSessions(current(), message, fresh, pending, native ? active() : undefined)
+      if (!next) return
+      apply(next)
+      if (before !== next.active) focus(next.active)
+      return
+    }
+    if (message.type === "sessionDeleted") {
+      if (stale(message)) return
+      fresh.delete(message.sessionID)
+      const before = active()
+      const next =
+        native && before === message.sessionID ? closeAllTabs(pending) : closeTab(current(), message.sessionID, pending)
+      apply(next)
+      if (before !== next.active) focus(next.active)
+    }
   })
+  onCleanup(cleanup)
 
   return (
     <LocalTabsContext.Provider
       value={{
+        native,
         ids,
         display,
         active,
@@ -300,6 +367,7 @@ export const LocalTabsProvider: ParentComponent = (props) => {
         reorder,
         move,
         persist,
+        scope,
       }}
     >
       {props.children}

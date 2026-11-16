@@ -158,7 +158,7 @@ export const SessionProvider: ParentComponent = (props) => {
   const [sessionsProject, setSessionsProject] = createSignal<string | undefined>()
 
   const trackAgentProject = (message: ExtensionMessage): boolean => {
-    if (message.type !== "agentManager.projects" && message.type !== "agentManager.selectionActivated") return false
+    if (!agentProject(message) && message.type !== "agentManager.projects") return false
     setAgentProjectId(agentProject(message))
     return true
   }

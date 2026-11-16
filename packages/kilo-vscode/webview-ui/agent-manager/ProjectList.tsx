@@ -29,6 +29,8 @@ import { createWorktreeDelete, type WorktreeDelete } from "./worktree-delete"
 import type { ModeRouter } from "./mode-router"
 import { CaffeinationButton } from "./CaffeinationButton"
 import type { HistoryMenuActions } from "./HistorySessionMenu"
+import { routeDialog } from "./dialog-routing"
+import { OrphanDialog } from "./orphans/OrphanDialog"
 
 const place = (state: AgentManagerStateMessage, session: ProjectSessionInfo, local: string) => {
   const wt = state.worktrees.find((item) => item.id === session.worktreeId)
@@ -52,7 +54,7 @@ interface Props {
   currentSessionID?: () => string | undefined
   mode: ModeRouter
   defaultBase?: (projectId: string) => string | undefined
-  onCreate?: (projectId: string) => void
+  onCreate?: (projectId: string, count?: number) => void
   onSelect?: (target: AgentManagerSidebarTarget, restore?: boolean) => void
   onOpenComments?: (projectId: string, worktreeId: string) => void
   onOpenPR?: (projectId: string, worktreeId: string) => void
@@ -82,6 +84,7 @@ export const ProjectList: Component<Props> = (props) => {
   const [clock, setClock] = createSignal(Date.now())
   const interval = setInterval(() => setClock(Date.now()), 60_000)
   const [acknowledged, acknowledge] = createSignal<AgentManagerSidebarTarget>()
+  const [orphan, setOrphan] = createSignal<string>()
   let initialized = false
   const store = (id: string) => {
     if (!props.projects.some((project) => project.id === id)) return
@@ -104,8 +107,17 @@ export const ProjectList: Component<Props> = (props) => {
     for (const value of stores.values()) value.history.revalidate()
   }
   const unsubscribe = vscode.onMessage((message) => {
+    if (message.type === "agentManager.openDialog") {
+      if (message.dialog === "project") newProject()
+      if (message.dialog === "clone") cloneProject()
+      if (message.dialog === "orphans" && message.projectId) setOrphan(message.projectId)
+    }
     if (message.type === "agentManager.history" || message.type === "agentManager.historyOpenFailed")
       store(message.projectId)?.history.receive(message)
+    if (message.type === "sessionDeleted") {
+      if (message.projectId) store(message.projectId)?.removeSession(message.sessionID)
+      else for (const value of stores.values()) value.removeSession(message.sessionID)
+    }
     if (message.type === "agentManager.selectionActivated") acknowledge(message.target)
     if (
       (message.type === "connectionState" && message.state === "connected") ||
@@ -236,6 +248,7 @@ export const ProjectList: Component<Props> = (props) => {
     return items
   })
   const current = createMemo(() => {
+    if (document.body.dataset.agentManagerPresentation === "sidebar") return
     const projectId = props.selectedProject
     if (!projectId) return
     const worktree = search().find(
@@ -262,6 +275,7 @@ export const ProjectList: Component<Props> = (props) => {
     return select({ projectId: item.projectId, kind: "session", sessionId: item.sessionId })
   }
   const newWorktree = (projectId: string) => {
+    if (routeDialog(vscode.postMessage, { type: "agentManager.openDialog", dialog: "worktree", projectId })) return
     dialog.show(() => (
       <NewWorktreeDialog
         projectId={projectId}
@@ -275,14 +289,38 @@ export const ProjectList: Component<Props> = (props) => {
     ))
   }
   const newProject = () => {
+    if (routeDialog(vscode.postMessage, { type: "agentManager.openDialog", dialog: "project" })) return
     dialog.show(() => <NewProjectDialog onClose={() => dialog.close()} />)
   }
   const cloneProject = () => {
+    if (routeDialog(vscode.postMessage, { type: "agentManager.openDialog", dialog: "clone" })) return
     dialog.show(() => (
       <CloneProjectDialog roots={props.projects.map((project) => project.root)} onClose={() => dialog.close()} />
     ))
   }
+  const orphans = (projectId: string) => {
+    if (routeDialog(vscode.postMessage, { type: "agentManager.openDialog", dialog: "orphans", projectId })) return
+    const value = store(projectId)
+    if (!value) return
+    dialog.show(() => (
+      <OrphanDialog
+        orphans={value.orphanDirectories()}
+        onReveal={(path) => vscode.postMessage({ type: "agentManager.revealPath", projectId, path })}
+        onDelete={(paths) => {
+          vscode.postMessage({ type: "agentManager.cleanOrphanDirectories", projectId, paths })
+          dialog.close()
+        }}
+        onClose={() => dialog.close()}
+      />
+    ))
+  }
   const [pendingSection, setPendingSection] = createSignal<{ project: string; ids: Set<string> }>()
+  createEffect(() => {
+    const id = orphan()
+    if (!id || !props.states[id] || !store(id)) return
+    setOrphan(undefined)
+    orphans(id)
+  })
   const [renamingSection, setRenamingSection] = createSignal<string>()
   createEffect(() => {
     const previous = pendingSection()
@@ -353,7 +391,10 @@ export const ProjectList: Component<Props> = (props) => {
       onRemove={(projectId) => vscode.postMessage({ type: "agentManager.removeProject", projectId })}
       onHistory={props.onHistory}
       onNew={newWorktree}
-      onCreate={(projectId) => vscode.postMessage({ type: "agentManager.createWorktree", projectId })}
+      onCreate={(projectId) => {
+        props.onCreate?.(projectId)
+        vscode.postMessage({ type: "agentManager.createWorktree", projectId })
+      }}
       onSection={(projectId) => newSection(projectId)}
       onSettings={(projectId) => vscode.postMessage({ type: "openSettingsPanel", tab: "agentManager", projectId })}
       bindings={props.bindings}
@@ -393,6 +434,7 @@ export const ProjectList: Component<Props> = (props) => {
           onSelectWorktree={(projectId, worktreeId) => select({ projectId, kind: "worktree", worktreeId })}
           onOpenComments={props.onOpenComments}
           onOpenPR={props.onOpenPR}
+          onOrphans={() => orphans(project.id)}
           onCreateSection={(worktreeIds) => newSection(project.id, worktreeIds)}
           renamingSection={renamingSection}
           onRenameEnd={() => setRenamingSection(undefined)}

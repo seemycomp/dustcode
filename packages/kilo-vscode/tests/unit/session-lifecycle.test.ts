@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { handleSessionLifecycle } from "../../src/agent-manager/session-lifecycle"
+import { handleSessionLifecycle, sessionProject } from "../../src/agent-manager/session-lifecycle"
 import { ProjectContexts } from "../../src/agent-manager/project/contexts"
 import { ProjectRegistry } from "../../src/agent-manager/project/registry"
 import { WorktreeStateManager } from "../../src/agent-manager/WorktreeStateManager"
@@ -110,5 +110,41 @@ describe("session lifecycle merge integration", () => {
     handleSessionLifecycle({ type: "session.created", properties: { info } }, deps)
     expect(deps.removed.has(info.id)).toBe(false)
     expect(sessions).toHaveLength(1)
+  })
+
+  test("qualifies a directory-bearing deletion when two projects share a session id", () => {
+    const removed: string[] = []
+    const make = (id: string, root: string) => ({
+      id,
+      root,
+      lifecycle: "ready",
+      hasLiveSession: (sessionID: string) => sessionID === "same",
+      peekState: () => ({
+        getWorktrees: () => [],
+        forgetSession: (sessionID: string) => removed.push(`${id}:${sessionID}`),
+      }),
+      sessions: () => [],
+      removeLiveSession: (sessionID: string) => removed.push(`${id}:live:${sessionID}`),
+    })
+    const a = make("a", "/a")
+    const b = make("b", "/b")
+    const contexts = {
+      values: () => [a, b].values(),
+      byDirectory: (directory: string) => (directory === "/b" ? b : undefined),
+    } as unknown as ProjectContexts
+    expect(sessionProject("same", "/b", contexts)).toBe("b")
+    expect(sessionProject("same", undefined, contexts)).toBeUndefined()
+    handleSessionLifecycle(
+      { type: "session.deleted", properties: { sessionID: "same" } },
+      { contexts, busy: new Set(), removed: new Set(), post: () => {} },
+      "/unknown",
+    )
+    expect(removed).toEqual([])
+    handleSessionLifecycle(
+      { type: "session.deleted", properties: { sessionID: "same" } },
+      { contexts, busy: new Set(), removed: new Set(), post: () => {} },
+      "/b",
+    )
+    expect(removed).toEqual(["b:same", "b:live:same"])
   })
 })

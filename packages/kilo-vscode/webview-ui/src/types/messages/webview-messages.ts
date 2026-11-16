@@ -136,6 +136,11 @@ export interface LoadMessagesRequest {
   limit?: number
 }
 
+export interface OpenSessionInTabRequest {
+  type: "openSessionInTab"
+  sessionID: string
+}
+
 export interface LoadSessionsRequest {
   type: "loadSessions"
   more?: boolean
@@ -474,6 +479,8 @@ export interface SuggestionDismissRequest {
 export interface DeleteSessionRequest {
   type: "deleteSession"
   sessionID: string
+  projectId?: string
+  worktreeId?: string | null
 }
 
 export interface RenameSessionRequest {
@@ -797,6 +804,7 @@ export interface OpenSessionLocallyRequest {
 // Add a new session to an existing worktree
 export interface AddSessionToWorktreeRequest {
   type: "agentManager.addSessionToWorktree"
+  requestId?: string
   projectId?: string
   worktreeId: string
   sessionId?: string
@@ -1767,6 +1775,7 @@ export interface DismissAgentMigrationBannerMessage {
 }
 
 export type WebviewMessage =
+  | import("./agent-manager").AgentManagerDialogMessage
   | import("../../../../src/shared/agent-history").HistoryRequest
   | import("../../../../src/shared/agent-history").HistoryOpen
   | import("../../../../src/shared/agent-history").SetHistoryExpanded
@@ -1791,6 +1800,8 @@ export type WebviewMessage =
     }
   | { type: "diffViewer.addFileToChat"; file: string }
   | import("./agent-manager").BaseUpdateRequest
+  | import("./agent-manager").AgentManagerOpenSessionInTabRequest
+  | import("./agent-manager").AgentManagerOpenDraftInTabRequest
   | PRMergeRequest
   | { type: "sessionActivity"; state: Activity }
   | { type: "acknowledgeSession"; sessionID: string; eventID: string }
@@ -1816,6 +1827,7 @@ export type WebviewMessage =
   | CreateSessionRequest
   | ClearSessionRequest
   | LoadMessagesRequest
+  | OpenSessionInTabRequest
   | LoadSessionsRequest
   | RequestSessionModelUsageMessage
   | RequestCloudSessionsMessage

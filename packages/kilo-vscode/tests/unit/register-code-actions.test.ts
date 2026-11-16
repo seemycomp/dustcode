@@ -23,7 +23,7 @@ const original = {
   diagnostics: api.languages.getDiagnostics,
 }
 
-function setup(active = false, agentReady = true, last?: "sidebar" | "agent" | "tab") {
+function setup(active = false, agentReady = true, last?: "sidebar" | "agent" | "tab", native = false) {
   const commands = new Map<string, Command>()
   const executed: unknown[][] = []
   const events: string[] = []
@@ -88,8 +88,12 @@ function setup(active = false, agentReady = true, last?: "sidebar" | "agent" | "
   }
 
   const views = { sidebar: provider, agent, tab }
-  registerCodeActions(context, provider as never, agent as never, undefined, () =>
-    focused.current ? (views[focused.current] as never) : undefined,
+  registerCodeActions(
+    context,
+    () => provider,
+    agent as never,
+    () => (native ? (tab as never) : undefined),
+    () => (focused.current ? (views[focused.current] as never) : undefined),
   )
 
   return { commands, events, executed, posts, waits, recipients, focused }
@@ -116,6 +120,53 @@ function expectContextPost(post: unknown) {
 }
 
 describe("registerCodeActions", () => {
+  it("keeps focused native input/search routing while Explain still explicitly targets the sidebar", async () => {
+    const state = setup(false, true, "tab", true)
+    await state.commands.get("dustcode.focusChatInput")?.()
+    await state.commands.get("dustcode.toggleChatSearch")?.()
+    await state.commands.get("dustcode.explainCode")?.()
+    expect(state.recipients).toEqual(["tab", "tab", "sidebar"])
+    expect(state.waits).toEqual(["tab", "tab", "provider"])
+    expect(state.executed).toEqual([["dustcode.SidebarProvider.focus"]])
+  })
+  it("resolves the live sidebar lazily without awaiting an unattached legacy provider", async () => {
+    const state = setup()
+    const legacy = Promise.withResolvers<void>()
+    const waits: string[] = []
+    const posts: unknown[] = []
+    let destination = {
+      waitForReady: () => {
+        waits.push("legacy")
+        return legacy.promise
+      },
+      postMessage: (_msg: unknown) => {
+        throw new Error("legacy provider must not receive actions")
+      },
+    }
+    const context = { subscriptions: [] } as unknown as vscode.ExtensionContext
+    registerCodeActions(context, (() => destination) as never)
+    destination = {
+      waitForReady: async () => {
+        waits.push("manager")
+      },
+      postMessage: (msg) => {
+        posts.push(msg)
+      },
+    }
+    for (const command of [
+      "explainCode",
+      "fixCode",
+      "improveCode",
+      "addToContext",
+      "focusChatInput",
+      "toggleChatSearch",
+    ]) {
+      await state.commands.get(`dustcode.${command}`)?.()
+    }
+    expect(waits).toEqual(Array(6).fill("manager"))
+    expect(posts).toHaveLength(6)
+    expect(state.executed).toEqual(Array(6).fill(["dustcode.SidebarProvider.focus"]))
+  })
   it("keeps targeting Agent Manager after the code editor takes focus", async () => {
     const state = setup(false, true, "agent")
 

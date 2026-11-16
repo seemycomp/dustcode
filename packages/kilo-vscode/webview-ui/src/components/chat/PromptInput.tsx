@@ -4,6 +4,7 @@
  */
 
 import {
+  batch,
   createSignal,
   createEffect,
   createMemo,
@@ -452,7 +453,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       draft: !!text(),
       busy: isBusy(),
       selection: shortcuts().selection,
-      tabs: showTabStrip(tabs?.display() ?? []),
+      tabs: !tabs?.native && showTabStrip(tabs?.display() ?? []),
       manager: props.manager?.(),
     })
   }
@@ -825,10 +826,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const scroll = textareaRef?.scrollTop ?? 0
     // Capture paste backing before tabs.add() switches the draft and clears it.
     const pastes = paste.pastes().map((item) => item.text)
-    const id = tabs?.add()
-    if (!id) session.clearCurrentSession()
-    const key = id ? scopeDraftKey(boxKey(), pendingDraftKey(id) ?? "new") : draftKey()
-    saveDraft(key, draft, comments, imgs, scroll, browser, undefined, pastes)
+    // Restore the new scope only after its carried draft has been stored.
+    batch(() => {
+      const id = tabs?.add()
+      if (!id) session.clearCurrentSession()
+      const key = id ? scopeDraftKey(boxKey(), pendingDraftKey(id) ?? "new") : draftKey()
+      saveDraft(key, draft, comments, imgs, scroll, browser, undefined, pastes)
+    })
   }
   window.addEventListener("newTaskRequest", onNewTaskRequest)
   onCleanup(() => window.removeEventListener("newTaskRequest", onNewTaskRequest))

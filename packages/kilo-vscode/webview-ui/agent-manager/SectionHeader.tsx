@@ -73,7 +73,10 @@ const SectionHeader: Component<Props> = (props) => {
       class={`am-section-group ${droppable.isActiveDroppable ? "am-section-group-drop" : ""}`}
       style={{ "--section-color": border() }}
     >
-      <ContextMenu>
+      <ContextMenu
+        slide={document.body.dataset.agentManagerPresentation === "sidebar"}
+        fitViewport={document.body.dataset.agentManagerPresentation === "sidebar"}
+      >
         <ContextMenu.Trigger as="div" style={{ display: "contents" }}>
           <SidebarSectionHeader
             class="am-section-group-header"

@@ -21,6 +21,7 @@ import { ChatTextAreaAutocomplete } from "./services/autocomplete/chat-autocompl
 import { notebookUri } from "./services/autocomplete/continuedev/core/autocomplete/notebook"
 import { buildWebviewHtml, getWebviewFontSize, isCursorHost } from "./utils"
 import { saveImage } from "./kilo-provider/save-image"
+import { nativeContextAvailable } from "./kilo-provider/native-session-tabs"
 import { handleEditorAction } from "./kilo-provider/editor-actions"
 import { isNotFoundError } from "./kilo-provider/handlers/not-found"
 import { exportTranscript } from "./kilo-provider/export-transcript"
@@ -434,6 +435,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private currentSession: Session | null = null
   /** Remembers the last selected session so /new can stay in the same worktree after clearSession. */
   private contextSessionID: string | undefined
+  private navigation = 0
+  private disposed = false
+  private unavailable: string | undefined
   private connectionState: "connecting" | "connected" | "disconnected" | "error" = "connecting"
   private connectionGeneration = 0
   private loginAttempt = 0
@@ -653,6 +657,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         this.postMessage({ type: "action", action: "restoreInput" })
       },
     })
+    this.updateTitle()
   }
 
   setRemoteService(service: RemoteStatusService): void {
@@ -677,7 +682,15 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   private updateTitle(): void {
     if (!this.opts.tabTitle) return
-    const title = nativeTitle(this.currentSession, this.activity, this.opts.tabLabel)
+    const context = (() => {
+      if (this.opts.tabLabel != null || this.opts.hideTopBar) return
+      if (this.opts.nativeSessionTab?.unavailable) return "Unavailable"
+      const scope = this.opts.nativeSessionScope
+      if (scope) return `${scope.projectLabel} / ${scope.label}`
+      const directory = this.getContextDirectory()
+      return path.basename(directory) || directory
+    })()
+    const title = nativeTitle(this.currentSession, this.activity, this.opts.tabLabel, context)
     if (this.caption === title) return
     this.caption = title
     this.opts.tabTitle(title)
@@ -711,6 +724,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private sendWorkspaceScope(): void {
+    this.updateTitle()
     const folders = vscode.workspace.workspaceFolders
     const first = folders?.at(0)
     // Explicit project hosts (including Agent Manager) do not use the sidebar fallback.
@@ -792,10 +806,44 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    */
   private get client(): KiloClient | null {
     try {
+      this.validateScope()
       return this.connectionService.getClient()
-    } catch {
+    } catch (error) {
+      if (this.opts.nativeSessionScope) this.postMessage({ type: "error", message: getErrorMessage(error) })
       return null
     }
+  }
+
+  private nativeTab() {
+    const scope = this.opts.nativeSessionScope
+    return (
+      this.opts.nativeSessionTab && {
+        ...this.opts.nativeSessionTab,
+        sessionID: this.contextSessionID,
+        ...(scope && { scope: { projectId: scope.projectId, projectLabel: scope.projectLabel, label: scope.label } }),
+      }
+    )
+  }
+
+  private validateScope(id?: string): void {
+    if (this.opts.nativeSessionTab?.unavailable)
+      throw new Error("This conversation's saved working directory is unavailable. Reopen it from Agent Manager.")
+    const scope = this.opts.nativeSessionScope
+    if (!scope) return
+    if (id && this.syncedChildSessions.has(id)) {
+      scope.validate()
+      if (sameDirectory(this.sessionDirectories.get(id) ?? "", scope.directory)) return
+      throw new Error("This child conversation is outside this tab's working directory.")
+    }
+    scope.validate(id)
+    if (
+      id &&
+      !sameDirectory(
+        scope.routes.trySessionDirectoryFor({ projectId: scope.projectId, sessionId: id }) ?? "",
+        scope.directory,
+      )
+    )
+      throw new Error("This conversation's placement is missing or changed.")
   }
 
   private postConnectionState(error = this.connectionService.getConnectionError()): void {
@@ -809,6 +857,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private openMarketplacePanel(directory: unknown): void {
+    if (this.opts.nativeSessionScope) directory = this.opts.nativeSessionScope.root
     if (typeof directory === "string" && directory) {
       vscode.commands.executeCommand("dustcode.marketplaceButtonClicked", directory)
       return
@@ -898,6 +947,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         extensionVersion: this.extensionVersion,
         vscodeLanguage: vscode.env.language,
         languageOverride: langConfig.get<string>("language"),
+        nativeSessionTab: this.nativeTab(),
         workspaceDirectory: this.getProjectDirectory(this.currentSession?.id),
       })
     }
@@ -1001,10 +1051,11 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   public registerSession(
     session: Session,
     activate = false,
-    project = this.opts.projectQualifier?.()?.projectId,
+    project = this.opts.nativeSessionScope?.projectId ?? this.opts.projectQualifier?.()?.projectId,
   ): void {
+    this.opts.nativeSessionScope?.register(session.id)
     this.removedSessionIds.delete(session.id)
-    if (project === this.opts.projectQualifier?.()?.projectId) {
+    if (project === (this.opts.nativeSessionScope?.projectId ?? this.opts.projectQualifier?.()?.projectId)) {
       this.stopCurrentSessionProcesses(session.id)
       this.setCurrentSession(session)
       this.contextSessionID = session.id
@@ -1035,9 +1086,15 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * When set, all operations for this session use this directory instead of the workspace root.
    */
   public setSessionDirectory(sessionId: string, directory: string): void {
+    if (this.opts.nativeSessionScope) {
+      this.validateScope(sessionId)
+      if (!sameDirectory(directory, this.opts.nativeSessionScope.directory))
+        throw new Error("This native tab's working directory cannot be changed.")
+    }
     const current = this.sessionDirectories.get(sessionId) ?? this.getRootDirectory()
     this.aborts.preserve(sessionId, this.sessionStatusMap.get(sessionId), current)
     this.sessionDirectories.set(sessionId, directory)
+    if (sessionId === this.currentSession?.id || sessionId === this.contextSessionID) this.updateTitle()
     if (this.connectionState === "connected" && current !== directory && this.currentSession?.id === sessionId)
       void this.fetchAndSendSandboxStatus(sessionId)
   }
@@ -1047,6 +1104,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.aborts.preserve(sessionId, this.sessionStatusMap.get(sessionId), current)
     this.sessionDirectories.delete(sessionId)
     this.owners.delete(sessionId)
+    if (sessionId === this.currentSession?.id || sessionId === this.contextSessionID) this.updateTitle()
     if (this.connectionState === "connected" && this.currentSession?.id === sessionId)
       void this.fetchAndSendSandboxStatus(sessionId)
   }
@@ -1054,6 +1112,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   /** Exposes the session→directory map so callers outside the webview can resolve worktree paths. */
   public getSessionDirectories(): ReadonlyMap<string, string> {
     return this.sessionDirectories
+  }
+
+  public getNativeSessionScope() {
+    return this.opts.nativeSessionScope
   }
 
   /** Register a project root with the shared Agent Manager route service. */
@@ -1095,6 +1157,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   public async getSessionInfo(sessionId: string, directory?: string): Promise<Session | undefined> {
+    this.validateScope(sessionId)
     if (this.connectionState !== "connected") await this.initializeConnection()
     const client = this.client
     if (!client) return
@@ -1105,7 +1168,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     // session. Require an exact route (qualified or unambiguous) instead.
     const routed = this.routeSessionDirectory(sessionId)
     if (directory === undefined && routed === null) return undefined
-    const dir = directory ?? routed ?? this.getWorkspaceDirectory(sessionId)
+    const dir = this.opts.nativeSessionScope?.directory ?? directory ?? routed ?? this.getWorkspaceDirectory(sessionId)
     return retry(() => client.session.get({ sessionID: sessionId, directory: dir }, { throwOnError: true }))
       .then((result) => result.data)
       .catch((error: unknown) => {
@@ -1121,8 +1184,27 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     return this.currentSession?.id ?? undefined
   }
 
+  public getSelectedSessionId(): string | undefined {
+    if (this.disposed || this.unavailable === this.contextSessionID) return undefined
+    return this.contextSessionID
+  }
+
+  public reserveSession(sessionID: string, directory?: string): void {
+    if (this.disposed) return
+    this.navigation++
+    this.loadMessagesAbort?.abort()
+    this.unavailable = undefined
+    if (this.currentSession?.id !== sessionID) this.setCurrentSession(null)
+    this.contextSessionID = sessionID
+    this.rememberSession(sessionID, directory)
+    this.updateTitle()
+  }
+
   public async renameCurrentSession(): Promise<void> {
-    const session = this.currentSession
+    const id = this.contextSessionID ?? this.currentSession?.id
+    this.validateScope(id)
+    const session =
+      id === this.currentSession?.id ? this.currentSession : id ? await this.getSessionInfo(id) : undefined
     if (!session || !this.client) return
     const title = await vscode.window.showInputBox({
       title: vscode.l10n.t("Rename session"),
@@ -1232,12 +1314,15 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   public rememberSession(sessionID: string, directory?: string): void {
-    if (directory) this.sessionDirectories.set(sessionID, directory)
+    if (directory) this.trackDirectory(sessionID, directory)
   }
 
   public async openSession(sessionID: string, directory?: string): Promise<void> {
-    this.rememberSession(sessionID, directory)
+    if (this.disposed) return
+    this.reserveSession(sessionID, directory)
+    const navigation = this.navigation
     await this.waitForReady()
+    if (this.disposed || this.navigation !== navigation || this.contextSessionID !== sessionID) return
     this.postMessage({ type: "openSession", sessionID })
   }
 
@@ -1308,6 +1393,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.telemetryStateDisposable?.dispose()
     this.telemetryStateDisposable = watchTelemetryState((msg) => this.postMessage(msg))
     this.webviewMessageDisposable = webview.onDidReceiveMessage(async (message) => {
+      if (!this.accepts(message)) return
       if (this.acknowledge(message)) return
       const intercepted = await interceptMessage(message, {
         workspaceDir: (sid) => this.getWorkspaceDirectory(sid ?? this.currentSession?.id),
@@ -1340,6 +1426,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           post: (msg) => this.postMessage(msg),
           browserSettings: () => this.sendBrowserSettings(),
           exportTranscript: (sessionID) => this.handleExportSessionTranscript(sessionID),
+          openSessionInTab: this.opts.openSessionInTab,
           resume: (sessionID, messageID, requestID) => this.handleResumeSession(sessionID, messageID, requestID),
           copy: (text) => vscode.env.clipboard.writeText(text),
           openSessions: (ids) => this.trackOpenSessions(ids),
@@ -1425,21 +1512,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           await this.handleResubmitMessage(message as ResubmitMessageRequest)
           break
         case "sendCommand": {
-          const msg = message as typeof message & ContextMessage
-          await this.handleSendCommand(
-            message.command,
-            message.arguments,
-            typeof message.messageID === "string" ? message.messageID : undefined,
-            message.sessionID,
-            typeof message.draftID === "string" ? message.draftID : undefined,
-            message.providerID,
-            message.modelID,
-            message.agent,
-            message.variant,
-            parseMessageFiles(message.files),
-            typeof message.agentManagerContext === "string" ? message.agentManagerContext : undefined,
-            typeof msg.contextDirectory === "string" ? msg.contextDirectory : undefined,
-          )
+          await this.sendWebviewCommand(message)
           break
         }
         case "abort":
@@ -1472,6 +1545,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           await this.handleCreateSession()
           break
         case "clearSession":
+          this.navigation++
+          this.unavailable = undefined
           this.loadMessagesAbort?.abort()
           this.stopCurrentSessionProcesses()
           this.contextSessionID = undefined
@@ -1514,7 +1589,11 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           }
           break
         case "openSettingsPanel":
-          vscode.commands.executeCommand("dustcode.settingsButtonClicked", message.tab, message.projectId)
+          vscode.commands.executeCommand(
+            "dustcode.settingsButtonClicked",
+            message.tab,
+            this.opts.nativeSessionScope?.projectId ?? message.projectId,
+          )
           break
         case "openVSCodeSettings":
           vscode.commands.executeCommand("workbench.action.openSettings", message.query)
@@ -1659,6 +1738,14 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           )
           break
         case "openSettingsTab":
+          if (this.opts.nativeSessionScope) {
+            await vscode.commands.executeCommand(
+              "dustcode.settingsButtonClicked",
+              message.tab,
+              this.opts.nativeSessionScope.projectId,
+            )
+            break
+          }
           if (message.tab === "indexing") {
             await vscode.commands.executeCommand("dustcode.openIndexingSettings")
           } else if (message.tab === "agentBehaviour" && message.subtab === "mcpServers") {
@@ -1827,6 +1914,76 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     })
     this.webviewMessageDisposable = watchFontSizeConfig((msg) => this.postMessage(msg), this.webviewMessageDisposable)
     this.webviewMessageDisposable = watchWorkStyleConfig((msg) => this.postMessage(msg), this.webviewMessageDisposable)
+  }
+
+  private accepts(message: Record<string, unknown>): boolean {
+    try {
+      this.validateNativeMessage(message)
+      return true
+    } catch (error) {
+      if (["sendMessage", "sendCommand"].includes(String(message.type))) {
+        this.postMessage({
+          type: "sendMessageFailed",
+          error: getErrorMessage(error),
+          text:
+            typeof message.text === "string"
+              ? message.text
+              : `/${String(message.command ?? "")} ${String(message.arguments ?? "")}`.trim(),
+          sessionID: typeof message.sessionID === "string" ? message.sessionID : undefined,
+          draftID: typeof message.draftID === "string" ? message.draftID : undefined,
+          messageID: typeof message.messageID === "string" ? message.messageID : undefined,
+        })
+        return false
+      }
+      this.postMessage({
+        type: "error",
+        message: getErrorMessage(error),
+        sessionID: typeof message.sessionID === "string" ? message.sessionID : undefined,
+      })
+      return false
+    }
+  }
+
+  private validateNativeMessage(message: Record<string, unknown>): void {
+    const id =
+      message.type === "syncSession" || message.type === "openSubAgentViewer"
+        ? message.parentSessionID
+        : (message.sessionID ?? message.sessionId)
+    if (message.type !== "webviewReady") this.validateScope(typeof id === "string" ? id : undefined)
+    const scope = this.opts.nativeSessionScope
+    if (!scope) return
+    if (typeof message.projectId === "string" && message.projectId !== scope.projectId)
+      throw new Error("This action belongs to a different project.")
+    const permission =
+      message.type === "permissionResponse" && typeof message.permissionId === "string"
+        ? this.connectionService.getPermissionDirectory(message.permissionId)
+        : undefined
+    const question =
+      ["questionReply", "questionReject"].includes(String(message.type)) && typeof message.requestID === "string"
+        ? this.connectionService.getQuestionDirectory(message.requestID)
+        : undefined
+    const directory = permission ?? question
+    if (directory && !sameDirectory(directory, scope.directory))
+      throw new Error("This request belongs to a different working directory.")
+  }
+
+  private async sendWebviewCommand(
+    message: import("../webview-ui/src/types/messages").SendCommandRequest & ContextMessage,
+  ): Promise<void> {
+    await this.handleSendCommand(
+      message.command,
+      message.arguments,
+      typeof message.messageID === "string" ? message.messageID : undefined,
+      message.sessionID,
+      typeof message.draftID === "string" ? message.draftID : undefined,
+      message.providerID,
+      message.modelID,
+      message.agent,
+      message.variant,
+      parseMessageFiles(message.files),
+      typeof message.agentManagerContext === "string" ? message.agentManagerContext : undefined,
+      typeof message.contextDirectory === "string" ? message.contextDirectory : undefined,
+    )
   }
 
   private async sendWebviewMessage(message: SendWebviewMessage): Promise<void> {
@@ -2011,14 +2168,15 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     file?: string,
   ): Promise<void> {
     const id = sessionId ?? this.currentSession?.id
+    this.validateScope(id)
     const dir = this.routeSessionDirectory(id)
     if (dir === null) return
     const directory =
       comment || (id && !turnId)
         ? (dir ?? this.getWorkspaceDirectory(id))
         : id
-          ? this.sessionGitDirectories.get(id)
-          : undefined
+          ? (this.sessionGitDirectories.get(id) ?? this.opts.nativeSessionScope?.directory)
+          : this.opts.nativeSessionScope?.directory
     const args = {
       sessionId: id,
       turnId,
@@ -2173,10 +2331,13 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.unsubscribeDirectoryProvider?.()
 
     try {
+      if (this.opts.nativeSessionScope?.ready) await this.opts.nativeSessionScope.ready()
+      if (this.disposed) return
       const workspaceDir = this.settingsDirectory()
 
       // Connect the shared service (no-op if already connected)
       await this.connectionService.connect(workspaceDir)
+      if (this.disposed) return
       this.flushPendingKiloModel()
 
       // Subscribe to SSE events for this webview (filtered by tracked sessions)
@@ -2325,6 +2486,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           extensionVersion: this.extensionVersion,
           vscodeLanguage: vscode.env.language,
           languageOverride: langConfig.get<string>("language"),
+          nativeSessionTab: this.nativeTab(),
           fontSize: getWebviewFontSize(),
           workspaceDirectory: this.getProjectDirectory(this.currentSession?.id),
         })
@@ -2383,23 +2545,35 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private async handleCreateSession(): Promise<void> {
-    if (!this.client) {
-      this.postMessage({
-        type: "error",
-        message: "Not connected to CLI backend",
-      })
-      return
-    }
-
+    this.navigation++
+    this.loadMessagesAbort?.abort()
     try {
+      if (this.opts.nativeSessionScope?.ready) await this.opts.nativeSessionScope.ready()
+      if (this.disposed) return
+      if (!this.client) {
+        this.postMessage({ type: "error", message: "Not connected to CLI backend" })
+        return
+      }
+      this.validateScope()
       const workspaceDir = this.getContextDirectory()
-      const project = this.opts.projectQualifier?.()?.projectId
-      const metadata = await sandboxSessionMetadata(this.connectionService.sandboxPreference, this.client, workspaceDir)
-      const { data: session } = await this.client.session.create(
+      const project = this.opts.nativeSessionScope?.projectId ?? this.opts.projectQualifier?.()?.projectId
+      const client = this.client
+      const metadata = await sandboxSessionMetadata(this.connectionService.sandboxPreference, client, workspaceDir)
+      const { data: session } = await client.session.create(
         { directory: workspaceDir, platform: this.opts.platform, metadata },
         { throwOnError: true },
       )
-      if (project === this.opts.projectQualifier?.()?.projectId) {
+      if (this.disposed) {
+        await client.session.delete({ sessionID: session.id, directory: workspaceDir }, { throwOnError: true })
+        return
+      }
+      try {
+        this.opts.nativeSessionScope?.register(session.id)
+      } catch (err) {
+        await client.session.delete({ sessionID: session.id, directory: workspaceDir }, { throwOnError: true })
+        throw err
+      }
+      if (project === (this.opts.nativeSessionScope?.projectId ?? this.opts.projectQualifier?.()?.projectId)) {
         this.stopCurrentSessionProcesses(session.id)
         this.setCurrentSession(session)
         this.contextSessionID = session.id
@@ -2510,12 +2684,22 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       preserveStream?: boolean
     } = {},
   ): Promise<void> {
+    if (this.disposed) return
+    try {
+      this.validateScope(sessionID)
+    } catch (error) {
+      this.postMessage({ type: "error", message: getErrorMessage(error), sessionID })
+      return
+    }
     const mode = options.mode ?? "replace"
     if (mode === "replace" || mode === "focus") {
       this.trackedSessionIds.add(sessionID)
       if (options.focus !== false) {
+        this.navigation++
+        this.unavailable = undefined
         this.loadMessagesAbort?.abort()
         this.stopCurrentSessionProcesses(sessionID)
+        if (this.currentSession?.id !== sessionID) this.setCurrentSession(null)
         this.focusSession(sessionID)
         this.contextSessionID = sessionID
       }
@@ -2524,7 +2708,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.postMessage({ type: "error", message: "Not connected to CLI backend", sessionID })
       return
     }
-    const dir = this.getWorkspaceDirectory(sessionID)
+    let dir = this.getWorkspaceDirectory(sessionID)
     if (mode === "focus") {
       this.refreshSessionDetails(sessionID, dir)
       // Reconcile tail so SSE drops self-heal. Throttled to skip rapid tab-switching bursts.
@@ -2538,9 +2722,25 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.loadMessagesAbort = abort
     }
     const revision = this.revisions.get(sessionID)
-    const details = abort ? this.refreshSessionDetails(sessionID, dir, abort.signal) : undefined
     const since = mode === "reconcile" ? Date.now() : undefined
     try {
+      if (this.opts.nativeSessionTab && abort) {
+        if (!(await nativeContextAvailable(this.opts.nativeSessionTab, sessionID, dir))) {
+          throw new Error(
+            "This conversation's saved working directory is unavailable. Reopen it from its original workspace or start a new task.",
+          )
+        }
+        const session = await this.getSessionInfo(sessionID)
+        if (abort.signal.aborted || this.disposed || this.contextSessionID !== sessionID) return
+        if (!session)
+          throw new Error(
+            "This conversation is unavailable. Choose another conversation from History or start a new task.",
+          )
+        dir = this.opts.nativeSessionScope?.directory ?? this.sessionDirectories.get(sessionID) ?? session.directory
+        this.rememberSession(sessionID, dir)
+        this.setCurrentSession(session)
+      }
+      const details = abort ? this.refreshSessionDetails(sessionID, dir, abort.signal) : undefined
       const page = await fetchMessagePage(this.client, {
         sessionID,
         workspaceDir: dir,
@@ -2593,6 +2793,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.recoverPendingPrompts()
     } catch (error) {
       if (abort?.signal.aborted) return
+      if (this.opts.nativeSessionTab && abort && this.contextSessionID === sessionID) this.unavailable = sessionID
       console.error("[Dustcode] KiloProvider: Failed to load messages:", error)
       this.postMessage({ type: "error", message: getErrorMessage(error) || "Failed to load messages", sessionID })
     }
@@ -2614,7 +2815,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     // Manager worktrees fall back to workspace root and fail to find the
     // pending permission request.
     if (!this.sessionDirectories.has(sessionID) && parentSessionID) {
-      const dir = this.sessionDirectories.get(parentSessionID)
+      const dir = this.opts.nativeSessionScope
+        ? this.getWorkspaceDirectory(parentSessionID)
+        : this.sessionDirectories.get(parentSessionID)
       if (dir) {
         this.sessionDirectories.set(sessionID, dir)
       }
@@ -2692,7 +2895,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    */
   private getSessionRefreshContext(revision: number): SessionRefreshContext {
     const client = this.client
-    const project = this.opts.projectQualifier?.()
+    const scope = this.opts.nativeSessionScope
+    const project = scope ? { projectId: scope.projectId } : this.opts.projectQualifier?.()
+    const directories = this.opts.nativeSessionTab ? new Map(this.sessionDirectories) : this.sessionDirectories
     return {
       pendingSessionRefresh: this.pendingSessionRefresh,
       connectionState: this.connectionState,
@@ -2700,14 +2905,31 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         ? (dir: string) =>
             client.session.list({ directory: dir, roots: true }, { throwOnError: true }).then(({ data }) => data)
         : null,
-      listSessionPage: client ? (dir: string, cursor?: number) => fetchSessionPage(client, { dir, cursor }) : null,
+      listSessionPage: client
+        ? async (dir: string, cursor?: number) => {
+            this.validateScope()
+            const page = await fetchSessionPage(client, { dir, cursor })
+            if (!scope) return page
+            return {
+              ...page,
+              sessions: page.sessions.filter((session) => this.routeSessionDirectory(session.id) === scope.directory),
+            }
+          }
+        : null,
       page: this.sessionPages,
-      sessionDirectories: this.sessionDirectories,
-      worktreeDirectories: this.opts.worktreeDirectories,
+      sessionDirectories: directories,
+      worktreeDirectories: scope ? undefined : this.opts.worktreeDirectories,
       workspaceDirectory: this.getWorkspaceDirectory(),
       isCurrent: () => revision === this.sessionRefreshRevision,
-      postMessage: (msg: unknown) =>
-        this.postMessage(project && typeof msg === "object" && msg !== null ? { ...msg, ...project } : msg),
+      postMessage: (msg: unknown) => {
+        if (this.opts.nativeSessionTab) {
+          for (const [id, dir] of directories) {
+            if (!this.sessionDirectories.has(id) && (!scope || this.routeSessionDirectory(id) === scope.directory))
+              this.sessionDirectories.set(id, scope?.directory ?? dir)
+          }
+        }
+        this.postMessage(project && typeof msg === "object" && msg !== null ? { ...msg, ...project } : msg)
+      },
     }
   }
 
@@ -2823,6 +3045,13 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * see the deleted id via this.currentSession and the next send would target
    * a session the backend has already deleted.
    */
+  public notifySessionDeleted(ref: SessionRef): void {
+    if (this.opts.nativeSessionScope?.projectId !== ref.projectId) return
+    if (this.contextSessionID !== ref.sessionId && !this.trackedSessionIds.has(ref.sessionId)) return
+    this.pruneDeletedSession(ref.sessionId)
+    this.postMessage({ type: "sessionDeleted", projectId: ref.projectId, sessionID: ref.sessionId })
+  }
+
   private pruneDeletedSession(sessionID: string): void {
     this.removedSessionIds.add(sessionID)
     this.trackedSessionIds.delete(sessionID)
@@ -2853,8 +3082,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     }
     this.connectionService.clearPermissionSession(sessionID)
     this.connectionService.pruneSession(sessionID)
+    if (this.contextSessionID === sessionID) this.contextSessionID = undefined
     if (this.currentSession?.id === sessionID) {
-      this.contextSessionID = undefined
       this.setCurrentSession(null)
     }
     if (this.streams.focused === sessionID) this.focusSession(undefined)
@@ -3933,6 +4162,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private async fetchAndSendSandboxDefault(directory = this.getContextDirectory(), requestID?: string): Promise<void> {
+    if (this.opts.nativeSessionScope) directory = this.opts.nativeSessionScope.directory
     const revision = ++this.sandboxRevision
     const generation = this.connectionGeneration
     const client = this.client
@@ -3974,6 +4204,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     requestID: string,
     directory = this.getContextDirectory(),
   ): Promise<void> {
+    if (this.opts.nativeSessionScope) directory = this.opts.nativeSessionScope.directory
     const client = this.client
     const sandbox = sandboxClient(client)
     if (!client || !sandbox || this.connectionState !== "connected") {
@@ -4355,8 +4586,11 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     })
   }
   private async resolveSession(sessionID?: string, draftID?: string, context?: string, contextDirectory?: string) {
+    if (this.opts.nativeSessionScope?.ready) await this.opts.nativeSessionScope.ready()
+    if (this.disposed) return undefined
+    this.validateScope(sessionID)
     if (!this.client) return undefined
-    const project = this.opts.projectQualifier?.()?.projectId
+    const project = this.opts.nativeSessionScope?.projectId ?? this.opts.projectQualifier?.()?.projectId
 
     // Agent Manager: consult the shared route service for an exact directory
     // before the legacy sessionDirectories/workspace-root resolution. When a
@@ -4375,6 +4609,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     }
 
     const dir =
+      this.opts.nativeSessionScope?.directory ??
       routedDir ??
       resolveNewSessionDirectory({
         sessionID,
@@ -4404,16 +4639,23 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (pending) return pending
       if (draftID) this.creatingDrafts.add(draftID)
       const creation = (async () => {
-        const metadata = await sandboxSessionMetadata(this.connectionService.sandboxPreference, this.client!, dir)
-        const { data: session } = await this.client!.session.create(
+        const client = this.client!
+        const metadata = await sandboxSessionMetadata(this.connectionService.sandboxPreference, client, dir)
+        const { data: session } = await client.session.create(
           { directory: dir, platform: this.opts.platform, metadata },
           { throwOnError: true },
         )
-        if (draftID && this.closedDrafts.delete(draftID)) {
-          await this.client!.session.delete({ sessionID: session.id, directory: dir }, { throwOnError: true })
+        if (this.disposed || (draftID && this.closedDrafts.delete(draftID))) {
+          await client.session.delete({ sessionID: session.id, directory: dir }, { throwOnError: true })
           return undefined
         }
-        if (project === this.opts.projectQualifier?.()?.projectId) {
+        try {
+          this.opts.nativeSessionScope?.register(session.id)
+        } catch (err) {
+          await client.session.delete({ sessionID: session.id, directory: dir }, { throwOnError: true })
+          throw err
+        }
+        if (project === (this.opts.nativeSessionScope?.projectId ?? this.opts.projectQualifier?.()?.projectId)) {
           this.stopCurrentSessionProcesses(session.id)
           this.setCurrentSession(session)
           this.contextSessionID = session.id
@@ -4542,6 +4784,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private async sendIndexingSettings(projectId?: string) {
+    if (this.opts.nativeSessionScope) projectId = this.opts.nativeSessionScope.projectId
     if (!this.extensionContext) {
       this.postMessage(buildIndexingSettingsMessage())
       return undefined
@@ -4561,6 +4804,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private async setIndexingConsent(projectId: string, enabled: boolean): Promise<void> {
+    if (this.opts.nativeSessionScope && projectId !== this.opts.nativeSessionScope.projectId)
+      throw new Error("Indexing settings belong to a different project.")
     if (!this.extensionContext) return
     const store = indexingConsentStore(this.extensionContext)
     const projects = await store.list(this.getRootDirectory(), registeredProjects(this.extensionContext))
@@ -4632,6 +4877,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private settingsDirectory(): string {
+    if (this.opts.nativeSessionScope) return this.opts.nativeSessionScope.root
     return this.projectDirectory ?? this.getRootDirectory()
   }
 
@@ -5216,7 +5462,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       currentSessionId: this.currentSession?.id,
       trackedSessionIds: this.trackedSessionIds,
       sessionDirectories: this.sessionDirectories,
-      extraDirectories: this.opts.worktreeDirectories,
+      extraDirectories: this.opts.nativeSessionScope ? undefined : this.opts.worktreeDirectories,
       postMessage: (msg) => this.postMessage(msg),
       getWorkspaceDirectory: (sid) => this.getWorkspaceDirectory(sid),
       recordPermissionDirectory: (id, dir, sid) => this.connectionService.recordPermissionDirectory(id, dir, sid),
@@ -5237,7 +5483,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       currentSessionId: this.currentSession?.id,
       trackedSessionIds: this.trackedSessionIds,
       sessionDirectories: this.sessionDirectories,
-      extraDirectories: this.opts.worktreeDirectories,
+      extraDirectories: this.opts.nativeSessionScope ? undefined : this.opts.worktreeDirectories,
       postMessage: (msg: unknown) => this.postMessage(msg),
       getWorkspaceDirectory: (sid?: string) => this.getWorkspaceDirectory(sid),
       recordQuestionDirectory: (id: string, dir: string) => this.connectionService.recordQuestionDirectory(id, dir),
@@ -5900,7 +6146,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   /** Wait until the webview has sent "webviewReady". Resolves immediately when already ready. */
   public waitForReady(): Promise<void> {
-    if (this.isWebviewReady && this.webview) return Promise.resolve()
+    if (this.disposed || (this.isWebviewReady && this.webview)) return Promise.resolve()
     const deferred = Promise.withResolvers<void>()
     this.readyResolvers.push(deferred.resolve)
     return deferred.promise
@@ -5944,12 +6190,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   public async showMemory(sessionID?: string): Promise<void> {
-    await this.memory.show(sessionID ?? this.currentSession?.id)
+    await this.memory.show(sessionID ?? this.contextSessionID ?? this.currentSession?.id)
   }
 
   public async toggleMemory(sessionID?: string): Promise<void> {
     try {
-      const operation = await this.memory.toggle(sessionID ?? this.currentSession?.id)
+      const operation = await this.memory.toggle(sessionID ?? this.contextSessionID ?? this.currentSession?.id)
       if (operation) {
         void vscode.window.showInformationMessage(`Project memory ${operation === "enable" ? "enabled" : "disabled"}.`)
       }
@@ -6025,6 +6271,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * session's own directory is one of them.
    */
   private getWorkspaceRoots(): SearchRoot[] {
+    if (this.opts.nativeSessionScope)
+      return [{ path: this.opts.nativeSessionScope.directory, name: this.opts.nativeSessionScope.label }]
     return (vscode.workspace.workspaceFolders ?? []).map((folder) => ({
       path: folder.uri.fsPath,
       name: folder.name,
@@ -6136,6 +6384,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   private getWorkspaceDirectory(sessionId?: string): string {
     const routed = this.routeSessionDirectory(sessionId ?? undefined)
+    if (this.opts.nativeSessionScope) {
+      if (routed === null) throw new Error("This conversation's placement is missing or changed.")
+      return routed ?? this.opts.nativeSessionScope.directory
+    }
     // Ambiguous ids degrade to the legacy resolution instead of throwing: this
     // runs eagerly per webview message, where a throw would drop the message.
     if (routed === null)
@@ -6149,6 +6401,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private getSessionDirectory(sessionId: string, session?: Session): string {
+    if (this.opts.nativeSessionScope) return this.getWorkspaceDirectory(sessionId)
     const routed = this.routeSessionDirectory(sessionId)
     if (routed === null)
       console.warn(
@@ -6171,6 +6424,18 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * wrong project.
    */
   private routeSessionDirectory(sessionId: string | undefined): string | null | undefined {
+    const scope = this.opts.nativeSessionScope
+    if (scope) {
+      if (!sessionId) return undefined
+      const dir = scope.routes.trySessionDirectoryFor({ projectId: scope.projectId, sessionId })
+      if (dir && sameDirectory(dir, scope.directory)) return scope.directory
+      if (
+        this.syncedChildSessions.has(sessionId) &&
+        sameDirectory(this.sessionDirectories.get(sessionId) ?? "", scope.directory)
+      )
+        return scope.directory
+      return null
+    }
     const routes = this.opts.routeService
     if (!routes || !sessionId) return undefined
     const exact = routes.trySessionDirectory(sessionId)
@@ -6188,6 +6453,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private isCurrentProjectDirectory(directory: string): boolean {
+    if (this.opts.nativeSessionScope) return sameDirectory(this.opts.nativeSessionScope.directory, directory)
     if (!this.opts.projectQualifier?.()) return true
     const dirs = [this.getRootDirectory(), ...(this.opts.worktreeDirectories?.() ?? [])]
     return dirs.some((dir) => sameDirectory(dir, directory))
@@ -6214,6 +6480,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private isCurrentProjectSession(sessionID: string): boolean {
+    if (this.opts.nativeSessionScope) return this.routeSessionDirectory(sessionID) !== null
     if (!this.opts.projectQualifier || !this.opts.routeService) return true
     if (this.isSessionRouteAmbiguous(sessionID)) return false
     const directory = this.opts.routeService.trySessionDirectory(sessionID)
@@ -6275,9 +6542,11 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private isCurrentProjectGitDirectory(directory: string, sessionID?: string): boolean {
-    const roots = this.opts.projectQualifier?.()
-      ? [this.getRootDirectory(), ...(this.opts.worktreeDirectories?.() ?? [])]
-      : [this.getWorkspaceDirectory(sessionID)]
+    const roots = this.opts.nativeSessionScope
+      ? [this.opts.nativeSessionScope.directory]
+      : this.opts.projectQualifier?.()
+        ? [this.getRootDirectory(), ...(this.opts.worktreeDirectories?.() ?? [])]
+        : [this.getWorkspaceDirectory(sessionID)]
     return roots.some((root) => {
       const rel = path.relative(canonicalizePath(root), canonicalizePath(directory))
       return rel === "" || (!path.isAbsolute(rel) && rel !== ".." && !rel.startsWith(`..${path.sep}`))
@@ -6327,6 +6596,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private getContextDirectory(): string {
+    if (this.opts.nativeSessionScope) return this.opts.nativeSessionScope.directory
     return resolveContextDirectory({
       currentSessionID: this.currentSession?.id,
       contextSessionID: this.contextSessionID,
@@ -6336,6 +6606,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private getRootDirectory(): string {
+    if (this.opts.nativeSessionScope) return this.opts.nativeSessionScope.root
     const override = this.opts.rootDirectory?.()
     if (override) return override
     const workspaceFolders = vscode.workspace.workspaceFolders
@@ -6346,10 +6617,16 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private trackDirectory(sessionId: string, dir: string) {
+    if (this.opts.nativeSessionScope) dir = this.opts.nativeSessionScope.directory
     // Agent Manager Local sessions must retain their explicit project root.
     // Removing same-root entries would silently retarget them after switching
     // the panel's active project.
     this.sessionDirectories.set(sessionId, dir)
+    if (sessionId === this.currentSession?.id || sessionId === this.contextSessionID) this.updateTitle()
+    if (this.contextSessionID !== sessionId || !this.opts.nativeSessionTab || !this.opts.nativeSessionContext) return
+    const context = this.opts.nativeSessionContext(sessionId, dir)
+    this.opts.nativeSessionTab.context = context
+    if (this.isWebviewReady) this.postMessage({ type: "nativeSessionContext", sessionID: sessionId, context })
   }
 
   private noteFollowup(answers: string[][], sessionID?: string) {
@@ -6388,6 +6665,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private getProjectDirectory(sessionId?: string): string | undefined {
+    if (this.opts.nativeSessionScope) return this.opts.nativeSessionScope.root
     return resolveProjectDirectory(this.projectDirectory, () => this.getWorkspaceDirectory(sessionId))
   }
 
@@ -6414,6 +6692,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       // VS Code's native toolbar (restored in package.json) works everywhere.
       topBar: this.opts.hideTopBar !== true && isCursorHost(),
       topBarSurface: this.opts.topBarSurface === "tab" ? "tab_title" : "sidebar_title",
+      nativeSessionTab: this.nativeTab(),
       agentManagerSettings: this.opts.agentManagerSettings !== undefined,
       settings: this.opts.settingsPanel?.(),
       module: this.opts.settingsPanel !== undefined,
@@ -6470,6 +6749,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * Does NOT kill the server — that's the connection service's job.
    */
   dispose(): void {
+    this.disposed = true
+    this.navigation++
+    this.loadMessagesAbort?.abort()
     this.opts.onHidden?.()
     if (this.opts.focusContext) {
       void vscode.commands.executeCommand("setContext", this.opts.focusContext, false)

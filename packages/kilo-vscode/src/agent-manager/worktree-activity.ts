@@ -42,7 +42,7 @@ type FactoryOptions = {
   paths: () => string[]
   post: (active: string[]) => void
   status: (event: unknown) => void
-  lifecycle: (event: unknown) => void
+  lifecycle: (event: unknown, directory?: string) => void
   log: (err: unknown) => void
 }
 
@@ -385,7 +385,7 @@ export function createWorktreeActivity(opts: FactoryOptions) {
       type === "session.deleted" ||
       type === "session.error"
     )
-      opts.lifecycle(event)
+      opts.lifecycle(event, directory)
   })
   const sync = (force = false) => {
     if (force) activity.replay()

@@ -95,12 +95,38 @@ describe("Agent Manager safe history selection", () => {
     await f.open()
     expect(f.state.getSessions().map((session) => session.id)).toEqual(["original"])
     expect(f.state.getSession("original")?.worktreeId).toBe(f.wt.id)
-    expect(f.events).toEqual([`route:${f.wt.path}`, "state", "projects", "selected"])
+    expect(f.events).toEqual([`route:${f.wt.path}`, "state", "selected"])
     expect(f.state.getActiveTarget()).toEqual({ projectId: f.ctx.id, kind: "session", sessionId: "original" })
     expect(f.records.get("original")?.directory).toBe(f.wt.path)
     expect(f.posts.some((message) => message.type === "agentManager.projectSessions")).toBe(true)
+    f.events.length = 0
+    f.posts.length = 0
     await f.open({ requestId: "again" })
     expect(f.state.getSessions()).toHaveLength(1)
+    expect(f.events).toEqual([`route:${f.wt.path}`, "selected"])
+    expect(f.posts).toEqual([])
+    expect(f.state.getActiveTarget()).toEqual({ projectId: f.ctx.id, kind: "session", sessionId: "original" })
+    f.history.dispose()
+  })
+
+  it("refreshes changed history session metadata without republishing unchanged managed state", async () => {
+    const f = setup()
+    await f.open()
+    f.events.length = 0
+    f.posts.length = 0
+    f.records.set(f.info.id, { ...f.info, title: "Renamed conversation", time: { created: 1, updated: 200 } })
+
+    await f.open({ requestId: "renamed" })
+
+    expect(f.events).toEqual([`route:${f.wt.path}`, "selected"])
+    expect(f.posts).toHaveLength(1)
+    expect(f.posts.at(0)).toMatchObject({
+      type: "agentManager.projectSessions",
+      projectId: f.ctx.id,
+      sessions: [{ id: f.info.id, title: "Renamed conversation", updatedAt: new Date(200).toISOString() }],
+    })
+    expect(f.ctx.sessions().at(0)?.title).toBe("Renamed conversation")
+    expect(f.state.getSession(f.info.id)?.worktreeId).toBe(f.wt.id)
     f.history.dispose()
   })
 
@@ -197,7 +223,7 @@ describe("Agent Manager safe history selection", () => {
     await opening
     expect(f.state.getSessions()).toEqual([])
     expect(f.state.getActiveTarget()).toEqual({ projectId: f.ctx.id, kind: "local" })
-    expect(f.events).toEqual(["projects", "selected"])
+    expect(f.events).toEqual(["selected"])
     history.dispose()
   })
 
@@ -232,6 +258,8 @@ describe("Agent Manager safe history selection", () => {
     expect(f.contexts.active()?.id).toBe(f.ctx.id)
     expect(state.getActiveTarget()).toEqual({ projectId: other.id, kind: "local" })
     expect(f.state.getSession("original")?.worktreeId).toBe(f.wt.id)
+    expect(f.events).toEqual([`route:${f.wt.path}`, "state", "activate", "projects", "selected"])
+    expect(f.state.getActiveTarget()).toEqual({ projectId: f.ctx.id, kind: "session", sessionId: "original" })
     expect(f.events.indexOf("state")).toBeLessThan(f.events.indexOf("selected"))
     f.history.dispose()
   })

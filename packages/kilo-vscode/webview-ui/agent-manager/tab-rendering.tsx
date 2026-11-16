@@ -89,6 +89,7 @@ export interface TabRenderDeps {
   reviewMiddleClick: (e: MouseEvent) => void
   selectReviewTab: () => void
   selectSessionTab: (id: string, pending: boolean) => void
+  activateSessionTab?: (id: string, pending: boolean) => void
   sessionMiddleClick: (id: string, e: MouseEvent) => void
   sessionClose: (id: string) => void
   sessionFork?: (id: string) => void
@@ -210,7 +211,7 @@ function renderSessionTab(s: SessionInfo, deps: TabRenderDeps): JSX.Element {
       closeKeybind={deps.kb().closeTab ?? ""}
       onSelect={() => {
         deps.deactivateTerminal()
-        deps.selectSessionTab(s.id, pending)
+        ;(deps.activateSessionTab ?? deps.selectSessionTab)(s.id, pending)
       }}
       onMiddleClick={(e: MouseEvent) => deps.sessionMiddleClick(s.id, e)}
       onClose={() => deps.sessionClose(s.id)}

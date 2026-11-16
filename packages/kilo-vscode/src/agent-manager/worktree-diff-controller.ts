@@ -46,6 +46,7 @@ export interface WorktreeDiffControllerContext {
   post: (msg: AgentManagerOutMessage) => void
   log: (...args: unknown[]) => void
   projectId?: () => string | undefined
+  background?: (task: () => void) => void
 }
 
 export class WorktreeDiffController {
@@ -131,6 +132,7 @@ export class WorktreeDiffController {
           revision,
         }),
       },
+      this.ctx.background,
     )
     this.controller.setContext({ workspaceRoot: this.ctx.getRoot() })
   }

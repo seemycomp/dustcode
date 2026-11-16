@@ -448,7 +448,7 @@ const AppContent: Component = () => {
     KILO_TOP_BAR_SURFACE?: string
     KILO_AGENT_MANAGER_SETTINGS?: boolean
   }
-  const showTopBar = host.KILO_TOP_BAR !== false
+  const showTopBar = host.KILO_TOP_BAR !== false && !tabs?.native
   const topBarSurface = host.KILO_TOP_BAR_SURFACE ?? "sidebar_title"
 
   return (

@@ -180,6 +180,38 @@
    Transcript Search
    ============================================ */
 
+[data-component="task-header-actions"] {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  padding: 2px 8px;
+}
+
+[data-component="task-header-scope"] {
+  display: flex;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  gap: 2px 8px;
+  min-width: 0;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-weak-base);
+  font-size: var(--kilo-font-size-12);
+}
+
+[data-component="task-header-scope"] > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+[data-slot="scope-project"] {
+  color: var(--text-base);
+  font-weight: 600;
+}
+
+[data-slot="scope-placement"] {
+  color: var(--vscode-descriptionForeground);
+}
+
 [data-component="task-header-search"] {
   padding: 6px 8px;
   border-bottom: 1px solid var(--border-weak-base);

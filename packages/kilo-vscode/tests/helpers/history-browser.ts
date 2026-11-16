@@ -2,12 +2,13 @@ import path from "node:path"
 import { build } from "esbuild"
 import { solidPlugin } from "esbuild-plugin-solid"
 
-let assets: { script: Uint8Array; css: Uint8Array } | undefined
+const cache = new Map<string, { script: Uint8Array; css: Uint8Array }>()
 
-export async function historyBrowser() {
+export async function historyBrowser(fixture = "worktree-history") {
+  let assets = cache.get(fixture)
   if (!assets) {
     const bundle = await build({
-      entryPoints: [path.join(import.meta.dir, "../fixtures/worktree-history.tsx")],
+      entryPoints: [path.join(import.meta.dir, `../fixtures/${fixture}.tsx`)],
       bundle: true,
       conditions: ["browser"],
       platform: "browser",
@@ -43,6 +44,7 @@ export async function historyBrowser() {
       script: bundle.outputFiles.find((file) => file.path.endsWith(".js"))!.contents,
       css: bundle.outputFiles.find((file) => file.path.endsWith(".css"))!.contents,
     }
+    cache.set(fixture, assets)
   }
   const { script, css } = assets
   return Bun.serve({

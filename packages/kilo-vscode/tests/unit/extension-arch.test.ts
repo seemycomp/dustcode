@@ -111,6 +111,18 @@ describe("Extension — package.json command sync", () => {
     expect(extension).not.toContain("ensureCommandsSkipShell")
   })
 
+  it("waits for the sidebar and cancels on disposal before delivering a generated terminal task", () => {
+    const source = fs.readFileSync(EXTENSION_FILE, "utf-8")
+    const command = sliceBlock(
+      source,
+      source.indexOf('vscode.commands.registerCommand("dustcode.generateTerminalCommand"'),
+    )
+    const guard = 'if (!(await agentManagerProvider.waitForReady("sidebar"))) return'
+    expect(command).toContain(guard)
+    expect(command.indexOf(guard)).toBeLessThan(command.indexOf("agentManagerProvider.postMessage("))
+    expect(command).toMatch(/type: "triggerTask",[\s\S]*"sidebar",\s*\)/)
+  })
+
   it("previews only fork marketplace installation destinations", () => {
     const modal = fs.readFileSync(path.join(ROOT, "webview-ui/src/components/marketplace/InstallModal.tsx"), "utf-8")
     expect(modal).toContain('".dustcode" : "~/.local/share/dustcode/config"')
@@ -300,7 +312,7 @@ describe("Extension — KiloProvider handler wiring", () => {
   it("shared tab setup wires services and handlers before resolveWebviewPanel", () => {
     const start = ext.indexOf("const attach =")
     expect(start, "shared tab setup must exist").toBeGreaterThan(-1)
-    const body = sliceBlock(ext, start)
+    const body = sliceBlock(ext, ext.indexOf(") => {", start))
     const resolve = body.indexOf("resolveWebviewPanel")
     expect(resolve, "resolveWebviewPanel must be called").toBeGreaterThan(-1)
     for (const name of [
@@ -317,6 +329,9 @@ describe("Extension — KiloProvider handler wiring", () => {
       expect(handler, `${name} must be wired before resolving the panel`).toBeLessThan(resolve)
     }
     expect(body).toContain("tabPanels.set(panel, tabProvider)")
+    const reservation = body.indexOf("reserveSession")
+    expect(reservation, "reserveSession must exist").toBeGreaterThan(-1)
+    expect(reservation).toBeLessThan(resolve)
     expect(body).toContain("return tabProvider")
   })
 
@@ -326,10 +341,23 @@ describe("Extension — KiloProvider handler wiring", () => {
       const start = ext.indexOf(name)
       expect(start, `${name} must exist`).toBeGreaterThan(-1)
       const body = sliceBlock(ext, start)
-      expect(body).toContain("const tabProvider = attach(panel)")
       expect(body).toContain("panel.onDidDispose(")
       expect(body).toContain("tabPanels.delete(panel)")
-      expect(body).toContain("tabProvider.dispose()")
+      if (name === "function openKiloInNewTab") {
+        expect(body).toMatch(/const tabProvider = attach\(\s*panel/)
+        expect(body).toContain("tabProvider.dispose()")
+        continue
+      }
+      const dispose = body.indexOf("panel.onDidDispose(")
+      const resolve = body.indexOf("await agentManagerHost.resolveNativeSession(")
+      const cancelled = body.indexOf("if (disposed) return")
+      const attach = body.indexOf("owner = attach(")
+      expect(resolve).toBeGreaterThan(dispose)
+      expect(cancelled).toBeGreaterThan(resolve)
+      expect(attach).toBeGreaterThan(cancelled)
+      expect(body).toContain("disposed = true")
+      expect(body).toContain("owner?.dispose()")
+      expect(body).toContain("resolved.scope")
     }
   })
 })

@@ -228,11 +228,6 @@
   color: var(--icon-success-base);
 }
 
-.session-tab-bar .am-worktree-spinner {
-  width: 16px;
-  height: 16px;
-}
-
 .session-tab-bar .am-tab-label {
   flex: 1;
   min-width: 0;
@@ -361,11 +356,21 @@
   }
 }
 
-/* Explains the Shift+click gesture on the Pin/Unpin tab menu item. */
-.session-tab-menu-hint {
-  margin-left: auto;
-  padding-left: 16px;
-  color: var(--text-weak);
-  font-size: var(--kilo-font-size-10);
+/* Keep labels readable even when a portal is constrained to a narrow sidebar. */
+[data-component].session-tab-menu {
+  width: max-content;
+  min-width: min(210px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
+}
+
+.session-tab-menu [data-slot="context-menu-item-label"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
   white-space: nowrap;
+}
+
+.session-tab-menu > [data-component="tooltip-trigger"] {
+  display: block;
 }

@@ -125,6 +125,12 @@
         "icon": "$(organization)"
       },
       {
+        "command": "dustcode.agentManager.openInTab",
+        "title": "Open Agent Manager in Editor Tab",
+        "category": "Dustcode",
+        "icon": "$(open-preview)"
+      },
+      {
         "command": "dustcode.marketplaceButtonClicked",
         "title": "Marketplace",
         "category": "Dustcode",
@@ -534,21 +540,6 @@
         }
       ],
       "view/title": [
-        {
-          "command": "dustcode.sidebarTitle.plusButtonClicked",
-          "group": "navigation@0",
-          "when": "view == dustcode.SidebarProvider && !dustcode.isCursor"
-        },
-        {
-          "command": "dustcode.sidebarTitle.historyButtonClicked",
-          "group": "navigation@1",
-          "when": "view == dustcode.SidebarProvider && !dustcode.isCursor"
-        },
-        {
-          "command": "dustcode.sidebarTitle.agentManagerOpen",
-          "group": "navigation@2",
-          "when": "view == dustcode.SidebarProvider && !dustcode.isCursor"
-        },
         {
           "command": "dustcode.sidebarTitle.marketplaceButtonClicked",
           "group": "navigation@3",

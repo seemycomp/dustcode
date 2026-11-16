@@ -12,6 +12,7 @@ import { ProjectRegistry } from "./registry"
 import type { ProjectContext, ProjectInitResult } from "./context"
 import { ProjectContexts, type ProjectSnapshot } from "./contexts"
 import type { ProjectMessageDeps } from "./messages"
+import { adoptHistory } from "./messages"
 import { createSettingsHandler, type SettingsHandler } from "./settings"
 import { poolHome } from "../pool/home"
 import { AgentHistory } from "../history"
@@ -22,6 +23,7 @@ import type { ScriptTerminalManager } from "../ScriptTerminalManager"
 import type { RunTask } from "../SetupScriptRunner"
 import type { TerminalDestination } from "../terminal-destination"
 import type { KiloClient } from "@kilocode/sdk/v2/client"
+import { resolveNativeDraft, resolveNativeSession, restoreNativeScope } from "./native"
 
 export interface ProjectWiring {
   registry: ProjectRegistry
@@ -90,7 +92,20 @@ export function createProjectWiring(opts: {
     },
   })
   const messages: ProjectMessageDeps = {
-    history: new AgentHistory({ contexts, ready: opts.ready, sessions: () => opts.sessions?.(), post: opts.post }),
+    deletion: opts.connection?.getClientAsync
+      ? {
+          client: (directory) => opts.connection!.getClientAsync!(directory),
+          confirm: (message, action) => opts.host.confirm(message, action),
+          sessions: () => opts.sessions?.(),
+          deleted: (ref) => opts.host.deleteNativeSession?.(ref),
+        }
+      : undefined,
+    history: new AgentHistory({
+      contexts,
+      ready: opts.ready,
+      sessions: () => opts.host.historySessions?.() ?? opts.sessions?.(),
+      post: opts.post,
+    }),
     registry,
     contexts,
     pickFolder: (input) => opts.host.pickFolder(input),
@@ -108,6 +123,36 @@ export function createProjectWiring(opts: {
     error: (message) => opts.host.showError(message),
     openSettings: (tab, projectId) => opts.host.openSettings(tab, projectId),
     log: opts.log,
+  }
+  opts.host.setNativeSessionResolver?.(async (request) => {
+    const routes = opts.host.projectRoutes?.()
+    if (!routes || !messages.history) throw new Error("Native chat tabs are unavailable.")
+    return resolveNativeSession(request, { contexts, ready: opts.ready, history: messages.history, routes })
+  })
+  opts.host.setNativeScopeResolver?.(async (binding) => {
+    const routes = opts.host.projectRoutes?.()
+    if (!routes) throw new Error("Native chat tabs are unavailable.")
+    return restoreNativeScope(binding, { contexts, ready: opts.ready, routes })
+  })
+  messages.draft = async (request) => {
+    const routes = opts.host.projectRoutes?.()
+    if (!routes || !opts.host.openDraftInTab) throw new Error("Native chat tabs are unavailable.")
+    const scope = resolveNativeDraft(request, { contexts, ready: opts.ready, routes })
+    opts.host.openDraftInTab(scope)
+  }
+  messages.native = async (request, current) => {
+    const routes = opts.host.projectRoutes?.()
+    if (!routes || !messages.history || !opts.host.openSessionInTab)
+      throw new Error("Native chat tabs are unavailable.")
+    const target = await resolveNativeSession(request, {
+      contexts,
+      ready: opts.ready,
+      history: messages.history,
+      routes,
+    })
+    if (!current()) return
+    if (request.requestId && request.worktreeId !== undefined) adoptHistory(target, request.worktreeId, messages)
+    await opts.host.openSessionInTab(Object.freeze({ ...target, current }))
   }
   if (opts.setup && opts.destination && opts.closeBrowser && opts.connection?.getClientAsync)
     messages.transfer = {

@@ -1,8 +1,8 @@
 /** @jsxImportSource solid-js */
 
 import type { Component } from "solid-js"
-import { IconButton } from "@kilocode/kilo-ui/icon-button"
-import { Tooltip } from "@kilocode/kilo-ui/tooltip"
+import { ContextMenu } from "@kilocode/kilo-ui/context-menu"
+import { Icon } from "@kilocode/kilo-ui/icon"
 import type { LanguageContextValue } from "../src/context/language"
 
 interface Props {
@@ -13,28 +13,16 @@ interface Props {
   onLocal: () => void
 }
 
-/** Direct hover actions for sessions in the Agent Manager history view. */
+/** Items for the existing context menu in the Agent Manager history view. */
 export const SessionRowActions: Component<Props> = (props) => (
   <>
-    <Tooltip value={props.t("agentManager.session.openInWorktree")} placement="right">
-      <IconButton
-        icon="branch"
-        size="small"
-        variant="ghost"
-        aria-label={props.t("agentManager.session.openInWorktree")}
-        data-slot="session-row-action"
-        onClick={props.onWorktree}
-      />
-    </Tooltip>
-    <Tooltip value={props.t("agentManager.session.openLocally")} placement="right">
-      <IconButton
-        icon="local"
-        size="small"
-        variant="ghost"
-        aria-label={props.t("agentManager.session.openLocally")}
-        data-slot="session-row-action"
-        onClick={props.onLocal}
-      />
-    </Tooltip>
+    <ContextMenu.Item onSelect={props.onWorktree}>
+      <Icon name="branch" size="small" />
+      <ContextMenu.ItemLabel>{props.t("agentManager.session.openInWorktree")}</ContextMenu.ItemLabel>
+    </ContextMenu.Item>
+    <ContextMenu.Item onSelect={props.onLocal}>
+      <Icon name="local" size="small" />
+      <ContextMenu.ItemLabel>{props.t("agentManager.session.openLocally")}</ContextMenu.ItemLabel>
+    </ContextMenu.Item>
   </>
 )

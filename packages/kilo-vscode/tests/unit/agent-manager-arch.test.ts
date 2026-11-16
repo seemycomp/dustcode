@@ -360,17 +360,17 @@ describe("Agent Manager Provider Messages", () => {
   }
 
   /**
-   * Regression: onAddSessionToWorktree must NOT send agentManager.worktreeSetup
+   * Regression: adding a session must NOT send agentManager.worktreeSetup
    * because that triggers a full-screen overlay with a spinner. Adding a session
    * to an existing worktree should use agentManager.sessionAdded instead.
    */
-  it("onAddSessionToWorktree should not send worktreeSetup messages", () => {
-    const body = getMethodBody("onAddSessionToWorktree")
+  it("adding a session should not send worktreeSetup messages", () => {
+    const body = getMethodBody("onWorktreeMessage")
     expect(body).not.toContain("agentManager.worktreeSetup")
   })
 
-  it("onAddSessionToWorktree should send sessionAdded message", () => {
-    const body = getMethodBody("onAddSessionToWorktree")
+  it("adding a session should send sessionAdded message", () => {
+    const body = getMethodBody("onWorktreeMessage")
     expect(body).toContain("agentManager.sessionAdded")
   })
 
@@ -475,14 +475,22 @@ describe("Agent Manager Provider Messages", () => {
     expect(text).toContain("if (created.draftID && closedDrafts.delete(created.draftID)) return")
   })
 
-  it("stops open sessions and clears remote registrations when the panel closes", () => {
+  it("delegates manager-only cancellation and clears remote registrations when the last presentation closes", () => {
+    const project = new Project({ compilerOptions: { allowJs: true } })
+    const source = project.addSourceFileAtPath(PROVIDER_FILE)
+    const closing = source
+      .getClassOrThrow("AgentManagerProvider")
+      .getPropertyOrThrow("presentations")
+      .getInitializerOrThrow()
+      .getText()
+    expect(getMethodBody("attachPresentation")).toContain("this.presentations.add(ctx,")
+    expect(closing).toContain("new ManagerPresentations(")
+    const sidebar = closing.indexOf('if (ctx.presentation === "sidebar") return')
+    const abort = closing.indexOf("abort(ctx.sessions")
+    expect(sidebar).toBeGreaterThanOrEqual(0)
+    expect(abort).toBeGreaterThan(sidebar)
+    expect(closing).toContain("this.contexts.values(), this.panelSessions, this.activeSessionId, this.host")
     const body = getMethodBody("attachPanel")
-    const abort = body.indexOf("ctx.sessions.abortSessions(ids)")
-    const dispose = body.indexOf("ctx.sessions.dispose()")
-    expect(abort).toBeGreaterThanOrEqual(0)
-    expect(dispose).toBeGreaterThan(abort)
-    expect(body).toContain("const ids = [...this.panelSessions]")
-    expect(body).toContain("if (this.activeSessionId) ids.push(this.activeSessionId)")
     // Presence must be cleared via visiblePresence.clear() — a direct
     // registerVisible("agent-manager", []) would leave a stale displayed id
     // that re-registers on the next flush after the panel reopens.

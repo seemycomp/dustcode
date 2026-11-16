@@ -7,12 +7,11 @@ import {
   createUniqueId,
   onCleanup,
   untrack,
-  type ParentProps,
+  type JSX,
 } from "solid-js"
 import { Virtualizer, type VirtualizerHandle } from "virtua/solid"
 import { Button } from "@kilocode/kilo-ui/button"
 import { IconButton } from "@kilocode/kilo-ui/icon-button"
-import { Spinner } from "@kilocode/kilo-ui/spinner"
 import { TextField } from "@kilocode/kilo-ui/text-field"
 import { useVSCode } from "../src/context/vscode"
 import { useLanguage } from "../src/context/language"
@@ -22,24 +21,25 @@ import type { ProjectStore } from "./project/store"
 import { HistorySessionMenu, type HistoryMenuActions } from "./HistorySessionMenu"
 import { label, type Activity } from "../src/utils/session-activity"
 import { ActivityIcon } from "../src/components/shared/ActivityIcon"
+import { createNativeChat } from "./native-chat"
 
 const HEIGHT = 28
 
 /** The header's selection/drag activator is a sibling of every history control. */
-export function WorktreeHistory(
-  props: ParentProps<{
-    store: ProjectStore
-    worktreeId: string | null
-    label: string
-    clock: () => number
-    active: (id: string) => boolean
-    disabled?: boolean
-    git?: boolean
-    activity?: (id: string) => Activity
-    actions?: HistoryMenuActions
-  }>,
-) {
+export function WorktreeHistory(props: {
+  children: (status: () => JSX.Element) => JSX.Element
+  store: ProjectStore
+  worktreeId: string | null
+  label: string
+  clock: () => number
+  active: (id: string) => boolean
+  disabled?: boolean
+  git?: boolean
+  activity?: (id: string) => Activity
+  actions?: HistoryMenuActions
+}) {
   const vscode = useVSCode()
+  const native = createNativeChat(vscode.postMessage)
   const { t, locale } = useLanguage()
   const id = createUniqueId()
   const history = props.store.history.context(props.worktreeId)
@@ -51,8 +51,6 @@ export function WorktreeHistory(
   const [scroller, setScroller] = createSignal<HTMLDivElement>()
   const [target, setTarget] = createSignal<string>()
   let virtual: VirtualizerHandle | undefined
-  let input: HTMLInputElement | undefined
-  let search: HTMLButtonElement | undefined
   const toggle = (value: boolean) => {
     props.store.setHistoryExpanded((prev) => ({ ...prev, [props.worktreeId ?? "local"]: value }))
     props.store.setHistoryInitialized(true)
@@ -109,6 +107,30 @@ export function WorktreeHistory(
     onCleanup(() => cancelAnimationFrame(restore))
   })
   const more = () => history.request({ more: true })
+  const message = createMemo(() => {
+    if (page().data.loading)
+      return {
+        text: t(page().paging ? "agentManager.history.loadingMore" : "agentManager.history.loading"),
+        error: false,
+      }
+    if (history.failure()) return { text: history.failure(), error: true }
+    if (page().data.error)
+      return { text: t(page().paging ? "agentManager.history.nextFailed" : "agentManager.history.failed"), error: true }
+  })
+  const status = () => (
+    <Show when={message()}>
+      {(value) => (
+        <span
+          class="am-history-note"
+          classList={{ "am-history-error": value().error }}
+          role={value().error ? "alert" : "status"}
+          title={value().error ? history.failure() || page().data.error : undefined}
+        >
+          {value().text}
+        </span>
+      )}
+    </Show>
+  )
   const row = (item: HistoryRow) => (
     <HistorySessionMenu
       store={props.store}
@@ -119,6 +141,7 @@ export function WorktreeHistory(
       activity={props.activity?.(item.id)}
       actions={props.actions}
       onOpen={() => history.open(item.id)}
+      onInspect={() => history.open(item.id, false)}
     >
       <Button
         ref={(el: HTMLButtonElement) =>
@@ -181,7 +204,7 @@ export function WorktreeHistory(
           aria-controls={id}
           onClick={() => toggle(!expanded())}
         />
-        <div class="am-history-card">{props.children}</div>
+        <div class="am-history-card">{props.children(status)}</div>
       </div>
       <Show when={expanded() || page().data.loaded}>
         <section
@@ -192,40 +215,18 @@ export function WorktreeHistory(
           aria-label={t("agentManager.history.label", { context: props.label })}
         >
           <div class="am-history-tools">
-            <Show
-              when={history.searching()}
-              fallback={<span class="am-history-caption">{t("agentManager.history.title")}</span>}
-            >
-              <TextField
-                ref={(el: HTMLInputElement) => {
-                  input = el
-                  queueMicrotask(() => el.focus())
-                }}
-                class="am-history-input"
-                label={t("agentManager.history.search", { context: props.label })}
-                hideLabel
-                placeholder={t("agentManager.history.placeholder")}
-                value={history.text()}
-                onChange={history.input}
-                onKeyDown={(event: KeyboardEvent) => {
-                  if (event.key !== "Escape") return
-                  event.preventDefault()
-                  event.stopPropagation()
-                  history.clear()
-                  search?.focus()
-                }}
-              />
-            </Show>
-            <IconButton
-              ref={search}
-              icon="magnifying-glass"
-              size="small"
-              variant="ghost"
-              aria-label={t("agentManager.history.search", { context: props.label })}
-              aria-expanded={history.searching()}
-              onClick={() => {
-                history.search(true)
-                input?.focus()
+            <TextField
+              class="am-history-input"
+              label={t("agentManager.history.search", { context: props.label })}
+              hideLabel
+              placeholder={t("agentManager.history.placeholder")}
+              value={history.text()}
+              onChange={history.input}
+              onKeyDown={(event: KeyboardEvent) => {
+                if (event.key !== "Escape") return
+                event.preventDefault()
+                event.stopPropagation()
+                history.clear()
               }}
             />
             <IconButton
@@ -234,6 +235,18 @@ export function WorktreeHistory(
               variant="ghost"
               aria-label={t("agentManager.history.refresh", { context: props.label })}
               onClick={() => history.request({ refresh: true })}
+            />
+            <IconButton
+              icon="plus"
+              size="small"
+              variant="ghost"
+              title={t("agentManager.session.newSession")}
+              aria-label={t("agentManager.session.newSession")}
+              disabled={props.disabled}
+              onClick={() => {
+                if (props.disabled) return
+                native.draft(props.store.id, props.worktreeId)
+              }}
             />
           </div>
           <div
@@ -277,34 +290,10 @@ export function WorktreeHistory(
               </p>
             </Show>
           </div>
-          <Show when={page().data.loading}>
-            <div class="am-history-note" role="status">
-              <Spinner />
-              {t(rows().length ? "agentManager.history.loadingMore" : "agentManager.history.loading")}
-            </div>
-          </Show>
-          <Show when={page().data.error}>
-            <div class="am-history-note am-history-error" role="alert">
-              <span title={page().data.error}>
-                {t(rows().length ? "agentManager.history.nextFailed" : "agentManager.history.failed")}
-              </span>
-              <Button size="small" variant="ghost" onClick={history.retry}>
-                {t("agentManager.history.retry")}
-              </Button>
-            </div>
-          </Show>
           <Show when={page().data.more && !page().data.loading && !page().data.error}>
             <Button class="am-history-more" size="small" variant="ghost" onClick={more}>
               {t("agentManager.history.more")}
             </Button>
-          </Show>
-          <Show when={history.failure()}>
-            <div class="am-history-note am-history-error" role="alert">
-              <span>{history.failure()}</span>
-              <Button size="small" variant="ghost" onClick={history.reopen}>
-                {t("agentManager.history.retry")}
-              </Button>
-            </div>
           </Show>
         </section>
       </Show>

@@ -110,6 +110,7 @@ describe("activateSelection — cross-project selection", () => {
 
     expect(contexts.active()?.id).toBe(extra)
     expect(calls.activate).toEqual([extra])
+    expect(calls.push).toBe(1)
     expect(calls.ready).toEqual([extra])
     expect(calls.selected).toEqual([extra])
     expect(calls.error).toEqual([])
@@ -211,41 +212,51 @@ describe("activateSelection — cross-project selection", () => {
     expect(initField).toBeUndefined()
   })
 
-  it("does not reset project services when selecting within the active project", async () => {
-    const { contexts, deps, calls, extra } = setup()
-    const ctx = contexts.expand(extra)!
-    ctx.stateManager()
-    await ctx.ensureReady(async () => ({ ok: true, refsFixed: 0 }))
-    contexts.activate(extra)
+  it.each([{ kind: "local" }, { kind: "worktree", worktreeId: "wt1" }, { kind: "session", sessionId: "sess1" }])(
+    "persists and acknowledges same-project $kind selection without a catalog push",
+    async (target) => {
+      const { contexts, deps, calls, extra } = setup()
+      const ctx = contexts.expand(extra)!
+      ctx.stateManager()
+      await ctx.ensureReady(async () => ({ ok: true, refsFixed: 0 }))
+      contexts.activate(extra)
 
-    await handleProjectMessage(activateMsg(extra, { kind: "worktree", worktreeId: "wt1" }), deps)
+      await handleProjectMessage(activateMsg(extra, target), deps)
 
-    expect(contexts.active()?.id).toBe(extra)
-    expect(calls.activate).toEqual([])
-    expect(calls.selected).toEqual(["worktree"])
-    expect(calls.error).toEqual([])
-  })
+      expect(contexts.active()?.id).toBe(extra)
+      expect(calls.activate).toEqual([])
+      expect(calls.push).toBe(0)
+      expect(calls.selected).toEqual([target.kind === "local" ? extra : target.kind])
+      expect(ctx.peekState()?.getActiveTarget()).toEqual({ projectId: extra, ...target })
+      expect(calls.error).toEqual([])
+    },
+  )
 
-  it("pushes moved-session state before acknowledging local activation", async () => {
-    const { contexts, deps, calls, extra } = setup()
-    const ctx = contexts.expand(extra)!
-    ctx.stateManager()
-    await ctx.ensureReady(async () => ({ ok: true, refsFixed: 0 }))
-    contexts.activate(extra)
+  it.each([true, false])(
+    "pushes moved-session state before acknowledging local activation (same project=%s)",
+    async (same) => {
+      const { contexts, deps, calls, extra } = setup()
+      const ctx = contexts.expand(extra)!
+      ctx.stateManager()
+      await ctx.ensureReady(async () => ({ ok: true, refsFixed: 0 }))
+      if (same) contexts.activate(extra)
 
-    const order: string[] = []
-    deps.push = () => order.push("projects")
-    deps.pushState = () => order.push("state")
-    deps.selected = () => order.push("selected")
+      const order: string[] = []
+      deps.push = () => order.push("projects")
+      deps.pushState = () => order.push("state")
+      deps.selected = () => order.push("selected")
 
-    await handleProjectMessage(
-      { type: "agentManager.openSessionLocally", projectId: extra, sessionId: "sess1" } as never,
-      deps,
-    )
+      await handleProjectMessage(
+        { type: "agentManager.openSessionLocally", projectId: extra, sessionId: "sess1" } as never,
+        deps,
+      )
 
-    expect(order).toEqual(["state", "projects", "projects", "selected"])
-    expect(calls.error).toEqual([])
-  })
+      expect(order).toEqual(same ? ["state", "selected"] : ["state", "projects", "selected"])
+      expect(calls.activate).toEqual(same ? [] : [extra])
+      expect(ctx.peekState()?.getActiveTarget()).toEqual({ projectId: extra, kind: "session", sessionId: "sess1" })
+      expect(calls.error).toEqual([])
+    },
+  )
 
   it("restores the persisted target when the selection asks for it", async () => {
     const persisted = { current: undefined as unknown }

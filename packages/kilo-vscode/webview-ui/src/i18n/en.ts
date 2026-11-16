@@ -605,6 +605,7 @@ export const dict = {
   "session.history.sources": "History source",
   "session.search.placeholder": "Search sessions...",
   "session.empty": "No sessions yet. Click + to start a new conversation.",
+  "session.openInSeparateTab": "Open in Separate Tab",
   "session.tabs.switcher.open": "Show open tabs",
   "session.tabs.switcher.search": "Search open tabs...",
   "session.tabs.switcher.current": "Current",

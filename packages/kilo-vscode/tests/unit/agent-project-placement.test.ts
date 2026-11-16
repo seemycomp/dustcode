@@ -8,7 +8,11 @@ import { ProjectContext } from "../../src/agent-manager/project/context"
 import { collectProjectSessions } from "../../src/agent-manager/project/init"
 import { resolvePlacement } from "../../src/agent-manager/project/placement"
 import { handleSessionLifecycle } from "../../src/agent-manager/session-lifecycle"
-import type { ProjectContexts } from "../../src/agent-manager/project/contexts"
+import { ProjectContexts } from "../../src/agent-manager/project/contexts"
+import { AgentHistory } from "../../src/agent-manager/history"
+import { ProjectRouteService } from "../../src/agent-manager/project/route"
+import { resolveNativeSession } from "../../src/agent-manager/project/native"
+import { adoptHistory, type ProjectMessageDeps } from "../../src/agent-manager/project/messages"
 
 describe("authoritative project placement", () => {
   let root: string
@@ -35,6 +39,141 @@ describe("authoritative project placement", () => {
     version: "1",
     title: id,
     time: { created: 1, updated: 2 },
+  })
+
+  function native(metadata = async (id: string, dir: string) => session(id, dir)) {
+    const contexts = new ProjectContexts({
+      workspaceRoot: () => path.join(root, "active"),
+      registry: {
+        list: () => [{ id: "inactive", root, label: "Inactive", expanded: true }],
+        get: (id) => (id === "inactive" ? { id, root, label: "Inactive", expanded: true } : undefined),
+      },
+      deps: { log: () => {}, state: () => state },
+    })
+    const active = contexts.active()
+    const inactive = contexts.resolve("inactive")!
+    inactive.stateManager()
+    const calls: unknown[] = []
+    const ready = async (ctx: ProjectContext, opts?: { warm?: boolean }) => {
+      calls.push([ctx.id, opts])
+      return ctx.ensureReady(async () => ({ ok: true, refsFixed: 0 }))
+    }
+    const history = new AgentHistory({
+      contexts,
+      ready,
+      sessions: () => ({
+        getSessionInfo: (id, dir) => metadata(id, dir!),
+      }),
+      post: () => {},
+    })
+    const routes = new ProjectRouteService()
+    return { contexts, active, inactive, calls, history, routes, ready }
+  }
+
+  test("native open resolves inactive project placement without warming or selecting it", async () => {
+    const wt = state.addWorktree({ branch: "feature", path: path.join(root, "worktree"), parentBranch: "main" })
+    fs.mkdirSync(wt.path)
+    state.addSession("promoted", wt.id)
+    const deps = native(async (id) => session(id, root))
+    const target = await resolveNativeSession(
+      {
+        type: "agentManager.openSessionInTab",
+        projectId: "inactive",
+        sessionId: "promoted",
+        directory: root,
+      } as Parameters<typeof resolveNativeSession>[0],
+      deps,
+    )
+    expect(target.directory).toBe(wt.path)
+    expect(target.scope.root).toBe(root)
+    expect(target.scope.worktreeId).toBe(wt.id)
+    expect(deps.contexts.active()).toBe(deps.active)
+    expect(deps.calls).toEqual([
+      ["inactive", { warm: false }],
+      ["inactive", { warm: false }],
+    ])
+    expect(deps.routes.trySessionDirectoryFor({ projectId: "inactive", sessionId: "promoted" })).toBe(wt.path)
+    expect(Object.isFrozen(target.scope)).toBe(true)
+    deps.contexts.activate("inactive")
+    target.scope.validate("promoted")
+    target.scope.register("new")
+    expect(state.sessionPlacement("new")).toBe(wt.id)
+    state.moveSession("promoted", null)
+    expect(() => target.scope.validate("promoted")).toThrow("placement")
+    deps.history.dispose()
+  })
+
+  test("native local opens retain explicit Local despite worktree backend metadata", async () => {
+    const wt = state.addWorktree({ branch: "feature", path: path.join(root, "worktree"), parentBranch: "main" })
+    state.addSession("local", null)
+    const deps = native(async (id) => session(id, wt.path))
+    const target = await resolveNativeSession(
+      { type: "agentManager.openSessionInTab", projectId: "inactive", sessionId: "local" },
+      deps,
+    )
+    expect(target.directory).toBe(root)
+    expect(target.scope.worktreeId).toBeNull()
+    deps.history.dispose()
+  })
+
+  test("native opens fail on unknown placement, conflicting history context and stale generation", async () => {
+    const deps = native()
+    const request = { type: "agentManager.openSessionInTab" as const, projectId: "inactive", sessionId: "unknown" }
+    await expect(resolveNativeSession(request, deps)).rejects.toThrow("trusted project placement")
+    state.addSession("local", null)
+    await expect(resolveNativeSession({ ...request, sessionId: "local", worktreeId: "wrong" }, deps)).rejects.toThrow(
+      "placement changed",
+    )
+    const pending = Promise.withResolvers<Session>()
+    const entered = Promise.withResolvers<void>()
+    const stale = native(() => {
+      entered.resolve()
+      return pending.promise
+    })
+    const opening = resolveNativeSession({ ...request, sessionId: "local" }, stale)
+    await entered.promise
+    stale.inactive.suspend()
+    pending.resolve(session("local", root))
+    await expect(opening).rejects.toThrow("project changed")
+    expect(stale.routes.trySessionDirectoryFor({ projectId: "inactive", sessionId: "local" })).toBeUndefined()
+    deps.history.dispose()
+    stale.history.dispose()
+  })
+
+  test("native history opens use history validation and retain retry after metadata failure", async () => {
+    let available = false
+    const deps = native(async (id) => {
+      if (!available) throw new Error("metadata unavailable")
+      return session(id, root)
+    })
+    const request = {
+      type: "agentManager.openSessionInTab" as const,
+      projectId: "inactive",
+      sessionId: "history",
+      worktreeId: null,
+      requestId: "history-request",
+    }
+    await expect(resolveNativeSession(request, deps)).rejects.toThrow("metadata unavailable")
+    expect(state.sessionPlacement("history")).toBeUndefined()
+    available = true
+    const target = await resolveNativeSession(request, deps)
+    expect(target.directory).toBe(root)
+    expect(state.sessionPlacement("history")).toBeNull()
+    expect(state.getSessions()).toEqual([])
+    const posts: string[] = []
+    const selected: unknown[] = []
+    adoptHistory(target, null, {
+      contexts: deps.contexts,
+      activate: () => {},
+      push: () => {},
+      post: (message: { type: string }) => posts.push(message.type),
+      selected: (target: unknown) => selected.push(target),
+    } as unknown as ProjectMessageDeps)
+    expect(state.getSession("history")?.worktreeId).toBeNull()
+    expect(posts).toEqual(["agentManager.projectSessions"])
+    expect(selected).toEqual([{ projectId: "inactive", kind: "session", sessionId: "history" }])
+    expect(deps.contexts.active()).toBe(deps.inactive)
+    deps.history.dispose()
   })
 
   test("distinguishes explicit Local from missing placement and rejects descendant or empty directories", () => {

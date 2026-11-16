@@ -7,6 +7,34 @@ export type {
   SetHistoryExpanded,
 } from "../../../../src/shared/agent-history"
 
+/** Explicit user intent; directory authority stays in the extension host. */
+export type AgentManagerDialogMessage = { type: "agentManager.openDialog" } & (
+  | { dialog: "worktree" | "project" | "clone" | "shortcuts" | "orphans"; projectId?: string }
+  | { dialog: "apply"; projectId?: string; worktreeId: string }
+  | {
+      dialog: "transfer"
+      projectId: string
+      worktreeId: string | null
+      sessionId: string
+      action: "move" | "copy"
+      create?: boolean
+    }
+)
+
+export interface AgentManagerOpenDraftInTabRequest {
+  type: "agentManager.openDraftInTab"
+  projectId: string
+  worktreeId: string | null
+}
+
+export interface AgentManagerOpenSessionInTabRequest {
+  type: "agentManager.openSessionInTab"
+  projectId: string
+  sessionId: string
+  worktreeId?: string | null
+  requestId?: string
+}
+
 export type WorktreeErrorCode =
   | "git_not_found"
   | "not_git_repo"
