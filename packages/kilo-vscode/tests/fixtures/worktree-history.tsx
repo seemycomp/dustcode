@@ -1,5 +1,5 @@
 import { render } from "solid-js/web"
-import type { HistoryRequest } from "../../src/shared/agent-history"
+import type { HistoryMessage, HistoryRequest } from "../../src/shared/agent-history"
 import { post } from "../../webview-ui/src/utils/webview-message"
 import { VSCodeProvider, getVSCodeAPI } from "../../webview-ui/src/context/vscode"
 import { LanguageProvider } from "../../webview-ui/src/context/language"
@@ -38,30 +38,34 @@ const api = getVSCodeAPI()
 const send = api.postMessage
 let held = false
 let pending: HistoryRequest | undefined
+let failed: HistoryMessage | undefined
 let generation = 0
 window.addEventListener("message", (event) => {
   if (event.data?.type === "agentManager.history") generation = Math.max(generation, event.data.generation)
 })
-const respond = (error?: string) => {
+const respond = (error?: string, newer = false) => {
   if (!pending) return
   const message = pending
   pending = undefined
   if (!error) return send(message)
-  post({
+  failed = {
     ...message,
     type: "agentManager.history",
     rows: [],
     loading: false,
     more: true,
-    generation,
+    generation: generation + (newer ? 10 : 0),
     error,
-  })
+  }
+  post(failed)
 }
 window.addEventListener("history-control", (event) => {
   const action = (event as CustomEvent<string>).detail
   held = action === "hold"
   if (action === "release") respond()
   if (action === "fail") respond("History unavailable")
+  if (action === "unavailable") respond("The project is not ready.", true)
+  if (action === "stale" && failed) post({ ...failed, generation: generation + 10 })
 })
 api.postMessage = (message) => {
   if (message.type === "agentManager.requestHistory" && message.active !== false && held) {

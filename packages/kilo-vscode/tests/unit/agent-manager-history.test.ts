@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
-import type { Session } from "@kilocode/sdk/v2/client"
+import { createKiloClient, type Session } from "@kilocode/sdk/v2/client"
 import { AgentHistory } from "../../src/agent-manager/history"
+import { VscodeHost } from "../../src/agent-manager/vscode-host"
 import { ProjectContext } from "../../src/agent-manager/project/context"
 import { WorktreeStateManager } from "../../src/agent-manager/WorktreeStateManager"
 import type { HistoryMessage, HistoryRequest } from "../../src/shared/agent-history"
@@ -23,9 +24,10 @@ function setup() {
   const metadata = new Map<string, Session | Error | (() => Promise<Session | undefined>)>()
   const lookups: string[] = []
   const clock = { value: 50_000 }
+  const ready = { ok: true }
   const history = new AgentHistory({
     contexts: { resolve: (id) => (id === ctx.id ? ctx : undefined), values: () => [ctx].values() },
-    ready: async () => ({ ok: true, current: true, refsFixed: 0 }),
+    ready: async () => ({ ok: ready.ok, current: true, refsFixed: 0 }),
     sessions: () => ({
       listSessionPage: async (input) => {
         calls.push(input)
@@ -55,10 +57,156 @@ function setup() {
       requestId: "r",
       ...extra,
     })
-  return { history, state, wt, ctx, posts, pages, calls, metadata, lookups, clock, request }
+  return { history, state, wt, ctx, posts, pages, calls, metadata, lookups, clock, ready, request }
 }
 
 describe("Agent Manager lazy history", () => {
+  it.each(["local", "worktree"])(
+    "handles missing saved assignments through the production %s HTTP adapter",
+    async (scope) => {
+      const f = setup()
+      f.history.dispose()
+      const worktreeId = scope === "local" ? null : f.wt.id
+      const directory = scope === "local" ? f.ctx.root : f.wt.path
+      f.state.closeSession("missing", worktreeId)
+      const status = { value: 404 }
+      const routes: URL[] = []
+      const server = Bun.serve({
+        port: 0,
+        fetch(request) {
+          const url = new URL(request.url)
+          routes.push(url)
+          if (url.pathname === "/experimental/session") return Response.json([session("native", directory, 200)])
+          if (status.value === 200) return Response.json(session("missing", directory))
+          return Response.json(
+            { name: status.value === 404 ? "NotFoundError" : "RequestFailed", data: { message: "Unavailable" } },
+            { status: status.value },
+          )
+        },
+      })
+      const client = createKiloClient({ baseUrl: server.url.toString() })
+      const host = new VscodeHost(
+        {} as never,
+        { getClientAsync: async () => client } as never,
+        {} as never,
+        {} as never,
+      )
+      const history = new AgentHistory({
+        contexts: { resolve: () => f.ctx, values: () => [f.ctx].values() },
+        ready: async () => ({ ok: true, current: true, refsFixed: 0 }),
+        sessions: () => host.historySessions(),
+        post: (message) => f.posts.push(message),
+        exists: () => true,
+      })
+      const request: HistoryRequest = {
+        type: "agentManager.requestHistory",
+        projectId: f.ctx.id,
+        worktreeId,
+        query: "",
+        requestId: "http",
+      }
+      try {
+        await history.request(request)
+        expect(f.posts.at(-1)).toMatchObject({ rows: [{ id: "native" }], loading: false, more: false })
+        expect(f.posts.at(-1)?.error).toBeUndefined()
+        await history.request({ ...request, requestId: "cached" })
+        expect(routes.filter((url) => url.pathname === "/session/missing")).toHaveLength(1)
+        expect(f.posts.at(-1)?.error).toBeUndefined()
+        for (const code of [500, 403]) {
+          status.value = code
+          await history.request({ ...request, refresh: true })
+          expect(f.posts.at(-1)?.error).toBeTruthy()
+          expect(f.posts.at(-1)?.rows.map((row) => row.id)).toEqual(["native"])
+        }
+        status.value = 200
+        await history.request({ ...request, refresh: true })
+        expect(f.posts.at(-1)?.error).toBeUndefined()
+        expect(f.posts.at(-1)?.rows.map((row) => row.id)).toEqual(["native", "missing"])
+        expect(routes.every((url) => url.searchParams.get("directory") === directory)).toBe(true)
+      } finally {
+        history.dispose()
+        server.stop(true)
+      }
+    },
+  )
+
+  it("recovers a genuine first-page failure and reuses its cache after a higher-generation readiness failure", async () => {
+    const f = setup()
+    try {
+      f.pages.push(new Error("initial history unavailable"))
+      await f.request()
+      expect(f.posts.at(-1)).toMatchObject({ rows: [], error: "initial history unavailable", loading: false })
+      f.pages.push({ sessions: [session("cached", f.ctx.root)] })
+      await f.request({ requestId: "recovered" })
+      expect(f.posts.at(-1)?.error).toBeUndefined()
+      const generation = f.posts.at(-1)!.generation
+      f.ready.ok = false
+      await f.request({ requestId: "unavailable" })
+      expect(f.posts.at(-1)).toMatchObject({ error: "The project is not ready.", loading: false })
+      expect(f.posts.at(-1)!.generation).toBeGreaterThan(generation)
+      f.ready.ok = true
+      await f.request({ requestId: "cached" })
+      expect(f.posts.at(-1)).toMatchObject({
+        requestId: "cached",
+        generation,
+        rows: [{ id: "cached" }],
+        loading: false,
+      })
+      expect(f.posts.at(-1)?.error).toBeUndefined()
+      expect(f.calls).toHaveLength(2)
+    } finally {
+      f.history.dispose()
+    }
+  })
+
+  it.each(["local", "worktree"])(
+    "does not report a redundant assigned lookup failure after the %s page validates that conversation",
+    async (scope) => {
+      const f = setup()
+      const worktreeId = scope === "local" ? null : f.wt.id
+      const directory = scope === "local" ? f.ctx.root : f.wt.path
+      f.state.addSession("known", worktreeId)
+      f.metadata.set("known", new Error("assigned lookup failed"))
+      f.pages.push({ sessions: [session("known", directory)] })
+      try {
+        await f.request({ worktreeId })
+        expect(f.posts.at(-1)).toMatchObject({ rows: [{ id: "known" }], loading: false, more: false })
+        expect(f.posts.at(-1)?.error).toBeUndefined()
+        await f.request({ worktreeId, requestId: "cached" })
+        expect(f.calls).toHaveLength(1)
+        expect(f.posts.at(-1)?.error).toBeUndefined()
+      } finally {
+        f.history.dispose()
+      }
+    },
+  )
+
+  it.each(["session.updated", "session.deleted"])(
+    "ignores an assigned lookup failure superseded by %s",
+    async (type) => {
+      const f = setup()
+      f.state.closeSession("assigned", f.wt.id)
+      const pending = Promise.withResolvers<Session | undefined>()
+      f.metadata.set("assigned", () => pending.promise)
+      f.pages.push({ sessions: [] })
+      try {
+        const loading = f.request({ worktreeId: f.wt.id })
+        await Bun.sleep(0)
+        f.history.event({
+          type,
+          properties: { info: { ...session("assigned", f.ctx.root, 300, "Latest title"), parentID: null } },
+        })
+        pending.reject(new Error("obsolete lookup failed"))
+        await loading
+        expect(f.posts.at(-1)?.rows.map((row) => row.id)).toEqual(type === "session.deleted" ? [] : ["assigned"])
+        expect(f.posts.at(-1)?.error).toBeUndefined()
+        expect(f.posts.at(-1)?.loading).toBe(false)
+      } finally {
+        f.history.dispose()
+      }
+    },
+  )
+
   it("keeps raw paired cursors independent of projected rows and preserves a failed next page", async () => {
     const f = setup()
     f.state.addSession("moved", f.wt.id)
@@ -191,6 +339,29 @@ describe("Agent Manager lazy history", () => {
     await loading
     expect(f.posts.at(-1)).toMatchObject({ requestId: "refreshed", rows: [{ id: "b-new" }] })
     f.history.dispose()
+  })
+
+  it.each(["query", "refresh", "reconnect"])("rejects a late failure after a successful %s response", async (mode) => {
+    const f = setup()
+    const pending = Promise.withResolvers<SessionPage>()
+    f.pages.push(() => pending.promise)
+    try {
+      const previous = f.request({ requestId: "obsolete" })
+      await Bun.sleep(0)
+      f.pages.push({ sessions: [session("fresh", f.ctx.root)] })
+      if (mode === "reconnect") {
+        f.history.reconnect()
+        await Bun.sleep(20)
+      }
+      if (mode !== "reconnect")
+        await f.request({ requestId: "current", query: mode === "query" ? "fresh" : "", refresh: mode === "refresh" })
+      pending.reject(new Error("obsolete failure"))
+      await previous
+      expect(f.posts.at(-1)).toMatchObject({ rows: [{ id: "fresh" }], loading: false })
+      expect(f.posts.at(-1)?.error).toBeUndefined()
+    } finally {
+      f.history.dispose()
+    }
   })
 
   it("reuses root metadata, revalidates assignments, and applies title search without adopting tabs", async () => {
@@ -504,6 +675,7 @@ describe("Agent Manager lazy history", () => {
     await f.request({ worktreeId: f.wt.id })
     await Bun.sleep(20)
     expect(f.posts.at(-1)?.error).toBe("metadata offline")
+    expect(f.posts.at(-1)?.rows.map((row) => row.id)).toEqual(["a", "native"])
     f.metadata.set("b", session("b", f.ctx.root, 150))
     await f.request({ worktreeId: f.wt.id })
     expect(f.posts.at(-1)?.error).toBeUndefined()

@@ -45,7 +45,8 @@ export function createHistoryState(projectId: string) {
       if (opts.more && (value.data.loading || !value.data.more)) return
       value.request = crypto.randomUUID()
       value.paging = opts.more === true
-      value.set({ loading: true, error: undefined })
+      // Generations order responses within a request, not a reused host cache across requests.
+      value.set({ loading: true, error: undefined, generation: -1 })
       send({
         type: "agentManager.requestHistory",
         projectId,
@@ -57,15 +58,17 @@ export function createHistoryState(projectId: string) {
     }
     const stop = () => {
       if (!send) return
+      const value = current()
       send({
         type: "agentManager.requestHistory",
         projectId,
         worktreeId,
         query: query(),
-        requestId: current().request,
+        requestId: value.request,
         active: false,
       })
-      current().set("loading", false)
+      value.request = ""
+      value.set("loading", false)
     }
     const change = (value: string) => {
       if (value === query()) return

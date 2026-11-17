@@ -27,6 +27,7 @@ import type { AutoApproveController } from "../commands/toggle-auto-approve"
 import type { RemoteStatusService } from "../services/RemoteStatusService"
 import type { CaffeinationService } from "../services/caffeination"
 import { fetchSessionPage } from "../kilo-provider/session-page"
+import { isNotFoundError } from "../kilo-provider/handlers/not-found"
 import type { NativeSessionTarget } from "../kilo-provider/native-session-tabs"
 import type { AgentManagerOpenSessionInTabRequest } from "../../webview-ui/src/types/messages/agent-manager"
 import type { AgentManagerProvider } from "./AgentManagerProvider"
@@ -120,7 +121,13 @@ export class VscodeHost implements Host {
       getSessionInfo: async (sessionID, directory) => {
         if (!directory) throw new Error("A project directory is required.")
         const client = await this.connectionService.getClientAsync(directory)
-        return (await client.session.get({ sessionID, directory }, { throwOnError: true })).data
+        return client.session
+          .get({ sessionID, directory }, { throwOnError: true })
+          .then((result) => result.data)
+          .catch((error: unknown) => {
+            if (isNotFoundError(error)) return undefined
+            throw error
+          })
       },
       listSessionPage: async ({ directory, ...input }) =>
         fetchSessionPage(await this.connectionService.getClientAsync(directory), { dir: directory, ...input }),

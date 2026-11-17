@@ -438,15 +438,20 @@ export class AgentHistory {
   }
 
   private applyAssigned(entry: Entry, fetched: Assigned[], revision: number): string | undefined {
+    let error: string | undefined
     for (const result of fetched) {
-      if (result.error) continue
-      entry.checked.add(result.id)
       const change = entry.changes.get(result.id)
-      if (change && change.revision > revision) continue
+      // The raw page or a newer lifecycle event already owns this result.
+      if (entry.checked.has(result.id) || (change && change.revision > revision)) continue
+      if (result.error) {
+        error ??= result.error
+        continue
+      }
+      entry.checked.add(result.id)
       entry.candidates.delete(result.id)
       if (result.info?.time && result.info.parentID == null) this.merge(entry, metadata(result.info), revision)
     }
-    return fetched.find((result) => result.error)?.error
+    return error
   }
 
   private apply(

@@ -88,7 +88,7 @@
         {
           "id": "dustcode-ActivityBar",
           "title": "Dustcode",
-          "icon": "assets/icons/dustcode.png"
+          "icon": "assets/icons/dustcode-activity.svg"
         }
       ]
     },
