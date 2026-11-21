@@ -118,7 +118,8 @@ import * as McpOAuth from "./kilo-provider/mcp-oauth"
 import { mcpAuth } from "./services/mcp-auth"
 import { mcpRemoval } from "./services/mcp-removal"
 import { marketplaceBundles } from "./services/marketplace/bundles"
-import { retryable, backoff, MAX_RETRIES } from "./util/retry"
+import { retryable, backoff, MAX_RETRIES, RetryWaits } from "./util/retry"
+import type { RetrySessionRequest } from "../webview-ui/src/types/messages/webview-messages"
 import { hasGit } from "./kilo-provider/git-status"
 import {
   handleRequestMigrationData,
@@ -1428,6 +1429,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           exportTranscript: (sessionID) => this.handleExportSessionTranscript(sessionID),
           openSessionInTab: this.opts.openSessionInTab,
           resume: (sessionID, messageID, requestID) => this.handleResumeSession(sessionID, messageID, requestID),
+          retry: (input) => this.handleRetrySession(input),
           copy: (text) => vscode.env.clipboard.writeText(text),
           openSessions: (ids) => this.trackOpenSessions(ids),
           activity: (state) => {
@@ -4692,6 +4694,11 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   /** Abort controllers for active retry loops, keyed by session ID */
   private retryAbortControllers = new Map<string, AbortController>()
+  private retryWaits = new RetryWaits()
+
+  private retryKey(sessionID: string, directory: string): string {
+    return `${directory}\u0000${sessionID}`
+  }
 
   /** Execute an SDK call with visible exponential backoff for retryable HTTP errors. */
   private async withRetry(
@@ -4730,26 +4737,22 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         const delay = backoff(attempt, result.response?.headers)
         console.log(`[Dustcode] KiloProvider: Retry on ${status}, attempt ${attempt}/${MAX_RETRIES}, delay ${delay}ms`)
 
-        this.postMessage({
-          type: "sessionStatus",
-          sessionID: sid,
-          status: "retry",
-          attempt,
-          message: `Error (${status}). Retrying...`,
-          next: Date.now() + delay,
-        })
-
-        // Wait for delay or until aborted
-        await new Promise<void>((resolve) => {
-          const done = () => {
-            clearTimeout(timer)
-            abortController.signal.removeEventListener("abort", done)
-            resolve()
-          }
-          const timer = setTimeout(done, delay)
-          abortController.signal.addEventListener("abort", done, { once: true })
-        })
+        const info = { attempt, next: Date.now() + delay }
+        const directory = this.routeSessionDirectory(sid)
+        if (directory === null) return
+        const dir = directory ?? this.getWorkspaceDirectory(sid)
+        await this.retryWaits.wait(this.retryKey(sid, dir), info, abortController.signal, () =>
+          this.postMessage({
+            type: "sessionStatus",
+            sessionID: sid,
+            status: "retry",
+            attempt,
+            message: `Error (${status}). Retrying...`,
+            next: info.next,
+          }),
+        )
         if (this.confirmations.has(messageID)) return
+        if (!abortController.signal.aborted) this.postMessage({ type: "sessionStatus", sessionID: sid, status: "busy" })
       }
     } finally {
       this.retryAbortControllers.delete(sid)
@@ -5333,6 +5336,37 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       scope,
       strict,
     )
+  }
+
+  private async handleRetrySession(input: RetrySessionRequest): Promise<void> {
+    const result = { type: "sessionRetryResult", sessionID: input.sessionID, requestID: input.requestID } as const
+    try {
+      const routed = this.routeSessionDirectory(input.sessionID)
+      if (routed === null) throw new Error("This session is ambiguous across projects")
+      const directory = routed ?? this.getWorkspaceDirectory(input.sessionID)
+      if (this.retryWaits.retry(this.retryKey(input.sessionID, directory), input)) {
+        this.postMessage({ ...result, accepted: true })
+        return
+      }
+      if (!this.client) throw new Error("Not connected to CLI backend")
+      const response = await this.client.kilocode.retrySession(
+        {
+          sessionID: input.sessionID,
+          attempt: input.attempt,
+          next: input.next,
+          directory,
+        },
+        { throwOnError: true },
+      )
+      this.postMessage({
+        ...result,
+        accepted: response.data === true,
+        error: response.data === true ? undefined : "Retry wait is no longer active",
+      })
+    } catch (error) {
+      console.error("[Dustcode] Failed to retry session:", error)
+      this.postMessage({ ...result, accepted: false, error: getErrorMessage(error) })
+    }
   }
 
   private async handleResumeSession(sessionID: string, messageID: string, requestID: string): Promise<void> {

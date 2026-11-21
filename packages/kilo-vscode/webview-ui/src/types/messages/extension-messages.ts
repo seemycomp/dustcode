@@ -179,6 +179,14 @@ export interface SessionResumeResultMessage {
   error?: string
 }
 
+export interface SessionRetryResultMessage {
+  type: "sessionRetryResult"
+  sessionID: string
+  requestID: string
+  accepted: boolean
+  error?: string
+}
+
 export interface SessionCommandCompletedMessage {
   type: "sessionCommandCompleted"
   messageID: string
@@ -1877,6 +1885,7 @@ export type ExtensionMessage =
   | ErrorMessage
   | SendMessageFailedMessage
   | SessionResumeResultMessage
+  | SessionRetryResultMessage
   | SessionCommandCompletedMessage
   | PartUpdatedMessage
   | PartsUpdatedMessage

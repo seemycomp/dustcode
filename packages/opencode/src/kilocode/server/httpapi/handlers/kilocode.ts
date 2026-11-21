@@ -2,6 +2,7 @@ import { Cause, Effect, Scope } from "effect"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { KiloSessionContinuation } from "@/kilocode/session/continuation"
+import { KiloSessionRetry } from "@/kilocode/session/retry"
 import { KiloSessionRetention } from "@/kilocode/session/retention"
 import { Suggestion } from "@/kilocode/suggestion"
 import { Permission } from "@/permission"
@@ -73,6 +74,7 @@ import {
   RemoveSnapshotPayload,
   TeardownWorktreePayload,
   ResumeSessionPayload,
+  RetrySessionPayload,
   DrainSessionPayload,
   BackgroundJobInfo,
   BackgroundJobsQuery,
@@ -158,6 +160,14 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       yield* drain.wait(ctx.params.sessionID)
       yield* events.publish(Drained, { sessionID: ctx.params.sessionID, token: ctx.payload.token })
       return true
+    })
+
+    const retrySession = Effect.fn("KilocodeHttpApi.retrySession")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof RetrySessionPayload.Type
+    }) {
+      yield* mapStorageNotFound(sessions.get(ctx.params.sessionID))
+      return yield* KiloSessionRetry.wake({ sessionID: ctx.params.sessionID, ...ctx.payload })
     })
 
     const resumeSession = Effect.fn("KilocodeHttpApi.resumeSession")(function* (ctx: {
@@ -592,6 +602,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     })
 
     return handlers
+      .handle("retrySession", retrySession)
       .handle("resumeSession", resumeSession)
       .handle("drainSession", drainSession)
       .handle("sessionBoard", sessionBoard)

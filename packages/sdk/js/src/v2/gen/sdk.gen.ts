@@ -221,6 +221,8 @@ import type {
   KilocodeRetentionRunResponses,
   KilocodeRetentionStatusErrors,
   KilocodeRetentionStatusResponses,
+  KilocodeRetrySessionErrors,
+  KilocodeRetrySessionResponses,
   KilocodeSessionBoardErrors,
   KilocodeSessionBoardResponses,
   KilocodeSessionImportMessageErrors,
@@ -8741,6 +8743,51 @@ export class SessionTransfer extends HeyApiClient {
 }
 
 export class Kilocode extends HeyApiClient {
+  /**
+   * Retry a waiting provider request immediately
+   *
+   * Wake only the current retry wait matching the supplied attempt and next timestamp, without starting a new turn.
+   */
+  public retrySession<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      attempt: number
+      next: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "attempt" },
+            { in: "body", key: "next" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeRetrySessionResponses,
+      KilocodeRetrySessionErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/session/{sessionID}/retry",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
   /**
    * Resume an interrupted session
    *

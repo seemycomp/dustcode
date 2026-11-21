@@ -178,6 +178,49 @@ const setup = Effect.fn("SessionProcessorTest.setup")(function* (dir: string) {
 })
 
 describe("session processor empty tool-calls", () => {
+  for (const cause of [undefined, "APIError", "ContextOverflowError"] as const) {
+    it.live(`persists aborted tool cause ${cause ?? "without an error"} during cleanup`, () =>
+      provideTmpdirProject(
+        (dir) =>
+          Effect.gen(function* () {
+            const state = yield* setup(dir)
+            const reason = cause === "APIError" ? "error" : "stop"
+            yield* state.handle.metadata("call_1", { metadata: { source: "test" } })
+            yield* state.test.script(
+              Stream.make(
+                LLMEvent.stepStart({ index: 0 }),
+                LLMEvent.toolInputStart({ id: "call_1", name: "lookup" }),
+                LLMEvent.toolInputEnd({ id: "call_1", name: "lookup" }),
+                LLMEvent.toolCall({ id: "call_1", name: "lookup", input: {}, providerExecuted: true }),
+                LLMEvent.stepFinish({
+                  index: 0,
+                  reason,
+                  usage: cause === "ContextOverflowError" ? { inputTokens: 200_000, outputTokens: 1 } : usage(),
+                }),
+                LLMEvent.finish({ reason }),
+              ),
+            )
+
+            expect(yield* state.handle.process(state.input)).toBe(
+              cause === "ContextOverflowError" ? "compact" : cause === "APIError" ? "stop" : "continue",
+            )
+            const parts = yield* MessageV2.parts(state.handle.message.id)
+            const call = parts.find((part) => part.type === "tool")
+            expect(call?.state.status).toBe("error")
+            if (call?.state.status !== "error") return
+            expect(call.state.error).toBe("Tool execution aborted")
+            expect(call.state.metadata).toEqual({
+              source: "test",
+              interrupted: true,
+              ...(cause ? { abortCause: { name: cause } } : {}),
+            })
+            if (cause === "ContextOverflowError") expect(state.handle.message.error).toBeUndefined()
+          }),
+        { git: true },
+      ),
+    )
+  }
+
   it.effect("converts finish to stop when model returns tool-calls with no tools", () =>
     provideTmpdirProject(
       (dir) =>

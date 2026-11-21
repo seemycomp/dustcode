@@ -1,5 +1,6 @@
 import type { Message, Part } from "../types/messages"
 import { visibleParts, type MessageTurn, type RevertBoundary } from "./session-queue"
+import { hasCompaction } from "./session-compaction"
 
 interface TranscriptMeta {
   turn: string
@@ -34,6 +35,7 @@ export interface TranscriptAssistantRow extends TranscriptMeta {
   copy?: string
   timing?: TurnTiming
   process?: boolean
+  compaction?: boolean
 }
 
 export interface TranscriptWorkRow extends TranscriptMeta {
@@ -117,6 +119,7 @@ function sameAssistant(a: TranscriptAssistantRow, b: TranscriptAssistantRow) {
     same(a.parts, b.parts) &&
     a.copy === b.copy &&
     a.process === b.process &&
+    a.compaction === b.compaction &&
     sameTiming(a.timing, b.timing)
   )
 }
@@ -154,12 +157,12 @@ function diffs(msg: Message) {
  * (not-yet-parented) turns whose synthetic user message reuses an assistant
  * timestamp.
  */
-function turnTiming(turn: MessageTurn, revert?: RevertBoundary) {
+function turnTiming(turn: MessageTurn, revert?: RevertBoundary, started?: number) {
   if (turn.partial) return undefined
   if (turn.assistant.some((msg) => revert?.partID && msg.id === revert.messageID)) return undefined
   const last = turn.assistant.at(-1)
-  if (!last?.finish || last.finish === "tool-calls" || last.finish === "unknown") return undefined
-  const end = last.time?.completed
+  const settled = last?.finish && last.finish !== "tool-calls" && last.finish !== "unknown"
+  const end = settled ? last.time?.completed : started
   if (typeof end !== "number") return undefined
   const start = turn.user.time?.created
   if (typeof start !== "number") return { completedAt: end }
@@ -178,6 +181,17 @@ function attachTiming(rows: TranscriptAssistantRow[], copied: string | undefined
   if (!timing || !copied) return
   const owner = rows.find((row) => row.parts.some((part) => part.id === copied))
   if (owner) owner.timing = timing
+}
+
+function compactionGroup(turn: MessageTurn, user: Part[], parts: (id: string) => Part[]) {
+  if (!hasCompaction(user)) return undefined
+  const msgs = turn.assistant.filter((msg) => msg.summary === true)
+  const group = msgs.length > 0 ? msgs : turn.assistant
+  return {
+    message: group.at(-1) ?? turn.user,
+    parts: group.flatMap((msg) => parts(msg.id)),
+    messages: group,
+  }
 }
 
 export function userContent(parts: Part[]) {
@@ -204,12 +218,29 @@ function copy(messages: Message[], getParts: (id: string) => Part[], live: boole
   return undefined
 }
 
+function finalizing(turn: MessageTurn, parts: (id: string) => Part[], live: boolean) {
+  if (!live) return undefined
+  const last = turn.assistant.at(-1)
+  if (!last) return undefined
+  const visible = parts(last.id)
+  const content = visible.slice(visible.findLastIndex((part) => part.type === "tool" || part.type === "reasoning") + 1)
+  const final = (part: Part) => {
+    if (part.type !== "text" || part.synthetic || !part.text.trim()) return false
+    const provider = part.metadata?.openai
+    return !!provider && typeof provider === "object" && "phase" in provider && provider.phase === "final_answer"
+  }
+  const end = content.findLast((part) => part.type === "text" && !part.synthetic && part.text.trim())
+  if (!end || !final(end)) return undefined
+  return { start: content.find(final)!, end }
+}
+
 function conclusion(
   turn: MessageTurn,
   parts: (id: string) => Part[],
   copied: string | undefined,
   timing: TurnTiming | undefined,
   live: boolean,
+  explicit?: Part,
 ) {
   if (live || !timing || !copied || turn.assistant.some((msg) => msg.error)) return undefined
   const index = turn.assistant.findIndex((msg) => parts(msg.id).some((part) => part.id === copied))
@@ -218,9 +249,9 @@ function conclusion(
   const visible = parts(msg.id)
   const end = visible.findIndex((part) => part.id === copied)
   const boundary = visible.slice(0, end).findLastIndex((part) => part.type === "tool" || part.type === "reasoning") + 1
-  const start = visible
-    .slice(boundary, end + 1)
-    .find((part) => part.type === "text" && !part.synthetic && part.text.trim())
+  const start =
+    explicit ??
+    visible.slice(boundary, end + 1).find((part) => part.type === "text" && !part.synthetic && part.text.trim())
   if (!start) return undefined
   const content = (part: Part) => {
     if (part.type === "tool") {
@@ -261,6 +292,7 @@ export function disclosedRows(rows: TranscriptRow[], expanded: ReadonlySet<strin
   return rows.filter((row) => row.type !== "assistant" || !row.process || expanded.has(disclosure(row)))
 }
 
+// eslint-disable-next-line complexity
 export function transcriptRows(
   turns: MessageTurn[],
   getParts: (id: string) => Part[],
@@ -280,8 +312,16 @@ export function transcriptRows(
       live: opts.live?.has(turn.id) === true,
     }
     const copied = copy(turn.assistant, parts, meta.live)
-    const timing = turnTiming(turn, opts.revert)
-    const final = conclusion(turn, parts, copied, timing, meta.live)
+    // Explicit final-answer metadata lets us fold tools before generation ends,
+    // without mistaking streamed progress text for the conclusion.
+    const streamed = finalizing(turn, parts, meta.live)
+    const anchor = copied ?? streamed?.end.id
+    const timing = turnTiming(
+      turn,
+      opts.revert,
+      streamed?.start.type === "text" ? streamed.start.time?.start : undefined,
+    )
+    const final = conclusion(turn, parts, anchor, timing, meta.live && !streamed, streamed?.start)
     const user = turn.partial ? [] : parts(turn.user.id)
 
     if (!turn.partial && userContent(user)) {
@@ -299,7 +339,21 @@ export function transcriptRows(
     if (final) rows.push({ ...meta, type: "work", key: `${turn.id}:work`, message: turn.user, timing: timing! })
     let process = !!final
     const assistant: TranscriptAssistantRow[] = []
+    const grouped = compactionGroup(turn, user, parts)
+    if (grouped) {
+      assistant.push({
+        ...meta,
+        type: "assistant",
+        key: `${turn.id}:compaction`,
+        message: grouped.message,
+        parts: grouped.parts,
+        copy: copied,
+        process: false,
+        compaction: true,
+      })
+    }
     for (const msg of turn.assistant) {
+      if (grouped?.messages.includes(msg)) continue
       const visible = parts(msg.id)
       if (visible.length === 0) {
         assistant.push({
@@ -313,7 +367,7 @@ export function transcriptRows(
         })
         continue
       }
-      for (const chunk of chunks(visible, size, final, copied)) {
+      for (const chunk of chunks(visible, size, final, anchor)) {
         if (chunk.at(0)!.id === final) process = false
         const row: TranscriptAssistantRow = {
           ...meta,
@@ -325,7 +379,7 @@ export function transcriptRows(
           process,
         }
         assistant.push(row)
-        if (chunk.some((part) => part.id === copied)) process = !!final
+        if (chunk.some((part) => part.id === anchor)) process = !!final
       }
     }
 

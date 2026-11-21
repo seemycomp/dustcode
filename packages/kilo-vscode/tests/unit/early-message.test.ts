@@ -59,6 +59,22 @@ describe("routeEarlyMessage resume", () => {
   })
 })
 
+describe("routeEarlyMessage retry", () => {
+  it("forwards only the target wait and correlation without resending a prompt", async () => {
+    const calls: unknown[] = []
+    const ctx = {
+      retry: async (input: unknown) => {
+        calls.push(input)
+      },
+    } as Ctx
+    const message = { type: "retrySession", sessionID: "ses_1", attempt: 2, next: 12345, requestID: "retry-1" }
+    expect(await routeEarlyMessage(message, ctx)).toBe(true)
+    expect(calls).toEqual([message])
+    expect(await routeEarlyMessage({ ...message, next: undefined }, ctx)).toBe(true)
+    expect(calls).toHaveLength(1)
+  })
+})
+
 describe("routeEarlyMessage activity", () => {
   it("forwards authoritative webview presentation state without interpreting session events", async () => {
     const calls: unknown[] = []

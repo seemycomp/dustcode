@@ -1,3 +1,11 @@
+[data-slot="tool-error-cause"] {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-weak);
+  font-size: var(--font-size-small);
+  overflow-wrap: anywhere;
+}
+
 html[data-theme="kilo-vscode"] [data-component="tool-part-wrapper"][data-part-type="tool"][data-tool="question"] {
   border: 1px solid color-mix(in srgb, var(--vscode-charts-green, #89d185) 45%, transparent);
   border-radius: var(--radius-sm);
@@ -135,6 +143,21 @@ html[data-theme="kilo-vscode"] [data-component="tool-part-wrapper"][data-part-ty
   [data-slot="task-agent-avatar"] svg[data-component="agent-avatar"] circle[data-lit] {
     animation: none;
   }
+}
+
+[data-component="compaction-output"] {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-height: 200px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-tool-output-base);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 [data-component="tool-output"][data-scrollable]:has([data-component="task-tools"]) {

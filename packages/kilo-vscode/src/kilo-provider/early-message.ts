@@ -8,6 +8,7 @@ import { buildChatSettingsMessage } from "./chat-settings"
 import { buildThroughputSettingMessage } from "./throughput-settings"
 import { buildAutoApprovalReasonSettingMessage } from "./auto-approval-reason-settings"
 import type { ModelUsageMessage } from "./model-usage"
+import type { RetrySessionRequest } from "../../webview-ui/src/types/messages/webview-messages"
 
 type Ctx = {
   question: SuggestionContext
@@ -19,6 +20,7 @@ type Ctx = {
   exportTranscript: (sessionID: string) => Promise<void>
   openSessionInTab?: (sessionID: string) => Promise<void>
   resume: (sessionID: string, messageID: string, requestID: string) => Promise<void>
+  retry: (input: RetrySessionRequest) => Promise<void>
   copy: (text: string) => PromiseLike<void>
   openSessions: (ids: string[]) => void
   activity: (state: unknown) => void
@@ -42,6 +44,11 @@ async function routeBackgroundMessage(
   }
   if (message.type === "toggleCaffeination") {
     ctx.caffeination()
+    return true
+  }
+  if (message.type === "retrySession") {
+    const input = message as Partial<RetrySessionRequest>
+    if (isRetry(input)) await ctx.retry(input)
     return true
   }
   if (message.type === "requestSessionBoard" || message.type === "resetSessionBoard") return ctx.board(message)
@@ -77,6 +84,15 @@ function isResume(input: { sessionID?: unknown; messageID?: unknown; requestID?:
 } {
   return (
     typeof input.sessionID === "string" && typeof input.messageID === "string" && typeof input.requestID === "string"
+  )
+}
+
+function isRetry(input: Partial<RetrySessionRequest>): input is RetrySessionRequest {
+  return (
+    typeof input.sessionID === "string" &&
+    typeof input.requestID === "string" &&
+    Number.isInteger(input.attempt) &&
+    Number.isFinite(input.next)
   )
 }
 

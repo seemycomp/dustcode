@@ -50,6 +50,14 @@ export interface ResumeSessionRequest {
   requestID: string
 }
 
+export interface RetrySessionRequest {
+  type: "retrySession"
+  sessionID: string
+  attempt: number
+  next: number
+  requestID: string
+}
+
 export interface AbortRequest {
   type: "abort"
   sessionID: string
@@ -1813,6 +1821,7 @@ export type WebviewMessage =
   | DocumentSendCommentsMessage
   | SendMessageRequest
   | ResumeSessionRequest
+  | RetrySessionRequest
   | AbortRequest
   | RequestBackgroundJobsMessage
   | RequestSessionBoardMessage

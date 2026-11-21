@@ -68,3 +68,34 @@ export function backoff(attempt: number, headers?: Headers): number {
 }
 
 export { MAX_RETRIES, MAX_MS }
+
+type Wait = { attempt: number; next: number }
+
+/** Wake the existing submission backoff without aborting or resending the turn. */
+export class RetryWaits {
+  private entries = new Map<string, Wait & { done: () => void }>()
+
+  wait(key: string, info: Wait, signal: AbortSignal, ready: () => void): Promise<void> {
+    if (signal.aborted) return Promise.resolve()
+    const pending = Promise.withResolvers<void>()
+    const done = () => {
+      clearTimeout(timer)
+      signal.removeEventListener("abort", done)
+      if (this.entries.get(key) === entry) this.entries.delete(key)
+      pending.resolve()
+    }
+    const entry = { ...info, done }
+    const timer = setTimeout(done, Math.max(0, info.next - Date.now()))
+    this.entries.set(key, entry)
+    signal.addEventListener("abort", done, { once: true })
+    ready()
+    return pending.promise
+  }
+
+  retry(key: string, info: Wait): boolean {
+    const entry = this.entries.get(key)
+    if (!entry || entry.attempt !== info.attempt || entry.next !== info.next) return false
+    entry.done()
+    return true
+  }
+}

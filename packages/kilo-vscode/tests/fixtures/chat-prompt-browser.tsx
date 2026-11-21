@@ -17,11 +17,24 @@ import { LocalTabsProvider } from "../../webview-ui/src/context/local-tabs"
 import { SessionTabStrip } from "../../webview-ui/src/components/chat/SessionTabStrip"
 import { getVSCodeAPI } from "../../webview-ui/src/context/vscode"
 import { ActivityIcon } from "../../webview-ui/src/components/shared/ActivityIcon"
+import { WorkingIndicator } from "../../webview-ui/src/components/shared/WorkingIndicator"
 import type { Activity } from "../../webview-ui/src/utils/session-activity"
 import "../../webview-ui/agent-manager/agent-manager.css"
 
 applyKiloTheme("kilo-vscode", applyVscodeTheme("dark-modern"))
 const sid = "prompt-browser"
+if (location.search.includes("working")) {
+  window.addEventListener("fixtureReply", (event) => post((event as CustomEvent).detail))
+  const api = getVSCodeAPI()
+  const send = api.postMessage
+  api.postMessage = (message) => {
+    if (message.type === "retrySession" || message.type === "abort") {
+      document.body.dataset.control = JSON.stringify(message)
+      document.body.dataset.controls = String(Number(document.body.dataset.controls ?? 0) + 1)
+    }
+    send(message)
+  }
+}
 if (location.search.includes("tabs")) {
   const api = getVSCodeAPI()
   let state: unknown = { sidebarSessionTabIDs: [sid, "other-session"], sidebarActiveSessionTabID: sid }
@@ -127,6 +140,22 @@ if (location.search.includes("internal")) {
   }
 }
 
+if (location.search.includes("compact-layout")) {
+  messages.splice(
+    0,
+    messages.findIndex((message) => message.id === "internal-30"),
+  )
+  messages.at(-1)!.summary = true
+  parts["continuation-30"] = [
+    {
+      id: "compact-summary",
+      messageID: "continuation-30",
+      type: "text",
+      text: Array.from({ length: 40 }, (_, i) => `Summary line ${i}: ${"docs/long-path/".repeat(30)}`).join("\n"),
+    },
+  ]
+}
+
 if (location.search.includes("todos")) {
   parts["assistant-30"]!.push({
     id: "todo-part",
@@ -189,6 +218,51 @@ if (location.search.includes("disclosure")) {
   }
 }
 
+if (location.search.includes("read-grep")) {
+  messages.splice(0, messages.length - 2)
+  parts["assistant-30"] = Array.from(
+    { length: 20 },
+    (_, i): Part => ({
+      id: `lookup-${i}`,
+      messageID: "assistant-30",
+      type: "tool",
+      tool: i % 2 ? "grep" : "read",
+      callID: `lookup-${i}`,
+      state: {
+        status: "completed",
+        input: i % 2 ? { pattern: "compaction", path: "src/session" } : { filePath: "src/session/compaction.ts" },
+        output: "Compaction source",
+        metadata: {},
+      },
+    }),
+  )
+}
+
+if (location.search.includes("tool-error")) {
+  messages.splice(0, messages.length - 2)
+  if (location.search.includes("interrupted")) {
+    messages.at(-1)!.error = { name: "MessageAbortedError", data: { message: "Aborted" } }
+  }
+  parts["assistant-30"] = [
+    {
+      id: "failed-tool",
+      messageID: "assistant-30",
+      sessionID: sid,
+      type: "tool",
+      tool: "bash",
+      callID: "failed-call",
+      state: {
+        status: "error",
+        input: {},
+        error: "Tool execution aborted",
+        metadata: location.search.includes("known")
+          ? { interrupted: true, abortCause: { name: "APIError", code: "ECONNRESET", statusCode: 503 } }
+          : { interrupted: true },
+      },
+    },
+  ]
+}
+
 function App() {
   if (location.search.includes("activity")) {
     const states: Activity[] = ["idle", "busy", "retry", "waiting", "error", "done", "scheduled"]
@@ -218,9 +292,34 @@ function App() {
     label: "Thinking",
     submitting: false,
     blocked: false,
+    next: Date.now() + 30000,
   })
   const working = location.search.includes("working")
   const timing = { active: 2000, since: Date.now() }
+  if (location.search.includes("read-grep")) {
+    const append = () => {
+      messages.at(-1)!.time = { created: 3_050, completed: 6_000 }
+      messages.push({
+        ...messages.at(-1)!,
+        id: "final-answer",
+        finish: undefined,
+        time: { created: 6_100 },
+      })
+      parts["final-answer"] = [
+        {
+          id: "final-text",
+          messageID: "final-answer",
+          type: "text",
+          text: "Compact context replaces older history with a summary.",
+          time: { start: 7_000 },
+          metadata: { openai: { phase: "final_answer" } },
+        },
+      ]
+      refresh((value) => value + 1)
+    }
+    window.addEventListener("fixtureAnswer", append)
+    onCleanup(() => window.removeEventListener("fixtureAnswer", append))
+  }
   const change = (event: Event) => {
     const next = (event as CustomEvent<Partial<ReturnType<typeof work>>>).detail
     if (location.search.includes("disclosure") && next.type === "idle") {
@@ -232,6 +331,15 @@ function App() {
   }
   window.addEventListener("fixtureStatus", change)
   onCleanup(() => window.removeEventListener("fixtureStatus", change))
+  if (location.search.includes("compact-layout")) {
+    const append = () => {
+      const part = parts["continuation-30"]!.at(0)!
+      if (part.type === "text") part.text += `\n${"Additional summary detail. ".repeat(500)}`
+      refresh((value) => value + 1)
+    }
+    window.addEventListener("fixtureCompaction", append)
+    onCleanup(() => window.removeEventListener("fixtureCompaction", append))
+  }
   const session = {
     ...mockSessionValue({ id: sid, status: "busy" }),
     messages: () => {
@@ -255,7 +363,7 @@ function App() {
     statusInfo: () => {
       if (!working) return { type: "busy" as const }
       const type = work().type
-      if (type === "retry") return { type, attempt: 1, message: work().label, next: Date.now() + 30000 }
+      if (type === "retry") return { type, attempt: 1, message: work().label, next: work().next }
       if (type === "offline") return { type, message: work().label }
       return { type }
     },
@@ -266,6 +374,14 @@ function App() {
     },
     resubmitMessage: async () => true,
   }
+  if (location.search.includes("retry"))
+    return (
+      <StoryProviders noPadding config={{}}>
+        <SessionContext.Provider value={session as unknown as SessionContextValue}>
+          <WorkingIndicator />
+        </SessionContext.Provider>
+      </StoryProviders>
+    )
   return (
     <StoryProviders data={{ ...defaultMockData, message: { [sid]: messages }, part: parts }} noPadding config={{}}>
       <SessionContext.Provider value={session as unknown as SessionContextValue}>
@@ -332,6 +448,9 @@ function App() {
                 <Composer />
               </LocalTabsProvider>
             </Show>
+          </Show>
+          <Show when={location.search.includes("compact-layout")}>
+            <Composer />
           </Show>
         </div>
       </SessionContext.Provider>

@@ -1,6 +1,5 @@
-import { type Component, Show, createEffect } from "solid-js"
+import { type Component, For, Show, createEffect } from "solid-js"
 import { DiffChanges } from "@kilocode/kilo-ui/diff-changes"
-import { Icon } from "@kilocode/kilo-ui/icon"
 import { Button } from "@kilocode/kilo-ui/button"
 import { useI18n } from "@kilocode/kilo-ui/context/i18n"
 import type { AssistantMessage as SDKAssistantMessage, Part as SDKPart, SnapshotFileDiff } from "@kilocode/sdk/v2"
@@ -15,6 +14,8 @@ import { AssistantMessage } from "./AssistantMessage"
 import { ErrorDisplay, type ErrorDisplayProps } from "./ErrorDisplay"
 import { VscodeUserMessage } from "./VscodeUserMessage"
 import { formatDuration } from "../../utils/message-time"
+import { BasicTool } from "@kilocode/kilo-ui/basic-tool"
+import { Icon } from "@kilocode/kilo-ui/icon"
 
 interface TranscriptRowViewProps {
   row: TranscriptRow
@@ -125,29 +126,62 @@ export const TranscriptRowView: Component<TranscriptRowViewProps> = (props) => {
       <Show when={props.row.type === "assistant" ? props.row : undefined}>
         {(row) => (
           <div class="vscode-session-turn-assistant">
-            <AssistantMessage
-              message={row().message as unknown as SDKAssistantMessage}
-              parts={row().parts as unknown as SDKPart[]}
-              showAssistantCopyPartID={row().copy}
-              timing={row().timing}
-              highlight={props.highlight}
-              readonly={props.readonly}
-              interactivePrompts={props.interactivePrompts}
-              feedback={{
-                enabled: feedback.telemetryEnabled(),
-                rating: feedback.getRating(row().message.id),
-                onRate: (next) =>
-                  feedback.rate({
-                    messageID: row().message.id,
-                    sessionID: row().message.sessionID,
-                    parentMessageID: row().message.parentID ?? "",
-                    providerID: row().message.providerID ?? row().message.model?.providerID ?? "",
-                    modelID: row().message.modelID ?? row().message.model?.modelID ?? "",
-                    variant: row().message.model?.variant,
-                    next,
-                  }),
-              }}
-            />
+            <Show
+              when={row().compaction}
+              fallback={
+                <AssistantMessage
+                  message={row().message as unknown as SDKAssistantMessage}
+                  parts={row().parts as unknown as SDKPart[]}
+                  showAssistantCopyPartID={row().copy}
+                  timing={row().timing}
+                  highlight={props.highlight}
+                  readonly={props.readonly}
+                  interactivePrompts={props.interactivePrompts}
+                  feedback={{
+                    enabled: feedback.telemetryEnabled(),
+                    rating: feedback.getRating(row().message.id),
+                    onRate: (next) =>
+                      feedback.rate({
+                        messageID: row().message.id,
+                        sessionID: row().message.sessionID,
+                        parentMessageID: row().message.parentID ?? "",
+                        providerID: row().message.providerID ?? row().message.model?.providerID ?? "",
+                        modelID: row().message.modelID ?? row().message.model?.modelID ?? "",
+                        variant: row().message.model?.variant,
+                        next,
+                      }),
+                  }}
+                />
+              }
+            >
+              <div data-component="tool-part-wrapper" data-tool="compaction">
+                <BasicTool
+                  icon="brain"
+                  tool="compaction"
+                  partID={row().key}
+                  trigger={<span data-slot="compaction-trigger">Compacting</span>}
+                  defaultOpen={row().live}
+                >
+                  <div data-component="compaction-output">
+                    <For each={row().parts}>
+                      {(part) => (
+                        <Show when={part.type !== "compaction"}>
+                          <div data-slot="compaction-item">
+                            {part.type === "tool"
+                              ? part.tool
+                              : part.type === "reasoning"
+                                ? "Thinking"
+                                : part.type === "text"
+                                  ? part.text
+                                  : "Context update"}
+                          </div>
+                        </Show>
+                      )}
+                    </For>
+                  </div>
+                </BasicTool>
+              </div>
+            </Show>
           </div>
         )}
       </Show>

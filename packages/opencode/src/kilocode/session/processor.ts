@@ -7,12 +7,13 @@ import { MessageV2 } from "@/session/message-v2"
 import { isRecord } from "@/util/record"
 import { parseReviewCommand, reviewCommandName } from "@/kilocode/review/command"
 import * as Log from "@opencode-ai/core/util/log"
-import { Cause, Duration, Effect, Exit } from "effect"
+import { Cause, Clock, Duration, Effect, Exit } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { EffectBridge } from "@/effect/bridge"
 import type { LLMEvent, ProviderMetadata, Usage } from "@opencode-ai/llm"
 import type { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionRetry } from "@/session/retry"
+import { KiloSessionRetry } from "@/kilocode/session/retry"
 import { computeMetrics as computeMetricsHelper, type TokenRates } from "@/kilocode/session/metrics"
 import { InvalidArgumentsError } from "@/tool/tool"
 import { Branding } from "@opencode-ai/core/kilocode/branding"
@@ -163,6 +164,21 @@ export namespace KiloSessionProcessor {
     const id = value.trim()
     if (!/^gen_[A-Za-z0-9_-]{1,200}$/.test(id)) return
     return id
+  }
+
+  export function abortCause(
+    error: MessageV2.Assistant["error"],
+  ): { name: string; code?: string; statusCode?: number } | undefined {
+    if (!error) return
+    const code = "metadata" in error.data ? error.data.metadata?.code : undefined
+    const status = "statusCode" in error.data ? error.data.statusCode : undefined
+    return {
+      name: error.name,
+      ...(typeof code === "string" && /^[A-Za-z0-9_.-]{1,100}$/.test(code) ? { code } : {}),
+      ...(typeof status === "number" && Number.isInteger(status) && status >= 100 && status <= 599
+        ? { statusCode: status }
+        : {}),
+    }
   }
 
   /**
@@ -348,6 +364,15 @@ export namespace KiloSessionProcessor {
     const limit = Flag.KILO_SESSION_RETRY_LIMIT
     return {
       limit: limit === undefined ? undefined : Math.max(0, limit - (input.used ?? 0)),
+      wait: (
+        info: { attempt: number; message: string; action?: SessionRetry.Retryable["action"]; next: number },
+        set: (info: {
+          attempt: number
+          message: string
+          action?: SessionRetry.Retryable["action"]
+          next: number
+        }) => Effect.Effect<void>,
+      ) => KiloSessionRetry.wait({ ...info, sessionID: input.sessionID, publish: set(info) }),
       offline: (info: { error: unknown; message: string }) =>
         handleOffline({
           error: info.error,
@@ -468,6 +493,7 @@ export namespace KiloSessionProcessor {
   }
 
   export function recover(input: {
+    sessionID?: SessionID
     run: () => Effect.Effect<void, unknown>
     replayable: () => boolean
     discard: () => Effect.Effect<void>
@@ -483,7 +509,13 @@ export namespace KiloSessionProcessor {
         yield* input.discard()
         if (index === INCOMPLETE_RESPONSE_RETRIES) return yield* Effect.fail(error ?? new IncompleteResponseError())
         const wait = SessionRetry.delay(index + 1)
-        yield* input.set({ attempt: index + 1, message: INCOMPLETE_RESPONSE_MESSAGE, next: Date.now() + wait })
+        const now = yield* Clock.currentTimeMillis
+        const info = { attempt: index + 1, message: INCOMPLETE_RESPONSE_MESSAGE, next: now + wait }
+        if (input.sessionID) {
+          yield* KiloSessionRetry.wait({ ...info, sessionID: input.sessionID, publish: () => input.set(info) })
+          continue
+        }
+        yield* input.set(info)
         yield* Effect.sleep(`${wait} millis`)
       }
     })

@@ -892,7 +892,13 @@ const layer = Layer.effect(
               ...part.state,
               status: "error",
               error: "Tool execution aborted",
-              metadata: { ...metadata, interrupted: true },
+              // kilocode_change start - retain a safe root cause for interrupted tools
+              metadata: {
+                ...metadata,
+                interrupted: true,
+                abortCause: KiloSessionProcessor.abortCause(ctx.assistantMessage.error ?? ctx.compactionError),
+              },
+              // kilocode_change end
               time: { start: "time" in part.state ? part.state.time.start : end, end },
             },
           })
@@ -1082,6 +1088,7 @@ const layer = Layer.effect(
           const recover = () => {
             const baseline = new Set<string>()
             return KiloSessionProcessor.recover({
+              sessionID: ctx.sessionID, // kilocode_change
               run: Effect.fn("SessionProcessor.incompleteAttempt")(function* () {
                 baseline.clear()
                 for (const part of yield* MessageV2.parts(ctx.assistantMessage.id).pipe(

@@ -16968,6 +16968,43 @@ export type KiloCloudSessionImportResponses = {
 
 export type KiloCloudSessionImportResponse = KiloCloudSessionImportResponses[keyof KiloCloudSessionImportResponses]
 
+export type KilocodeRetrySessionData = {
+  body?: {
+    attempt: number
+    next: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/session/{sessionID}/retry"
+}
+
+export type KilocodeRetrySessionErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type KilocodeRetrySessionError = KilocodeRetrySessionErrors[keyof KilocodeRetrySessionErrors]
+
+export type KilocodeRetrySessionResponses = {
+  /**
+   * Current retry wait awakened
+   */
+  200: boolean
+}
+
+export type KilocodeRetrySessionResponse = KilocodeRetrySessionResponses[keyof KilocodeRetrySessionResponses]
+
 export type KilocodeResumeSessionData = {
   body?: {
     messageID: string

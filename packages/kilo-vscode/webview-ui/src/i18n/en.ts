@@ -857,6 +857,12 @@ export const dict = {
 
   "ui.sessionTurn.cancel": "Cancel",
   "ui.sessionTurn.status.thinking": "Thinking...",
+  "ui.sessionTurn.status.compacting": "Compacting...",
+  "chat.toolError.cause": "{{tool}} · Cause: {{cause}}",
+  "chat.toolError.interrupted": "Interrupted (source not recorded)",
+  "chat.toolError.unavailable": "Unavailable (turn ended before tool completed)",
+  "chat.toolError.failed": "Tool failure",
+  "chat.toolError.debug": "Call: {{call}}\nPart: {{part}}\nMessage: {{message}}",
   "ui.sessionTurn.status.consideringNextSteps": "Considering next steps...",
 
   "dialog.model.noProviders": "No providers",

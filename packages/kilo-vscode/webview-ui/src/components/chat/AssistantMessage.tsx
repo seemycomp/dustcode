@@ -43,6 +43,7 @@ import { Tooltip } from "@kilocode/kilo-ui/tooltip"
 import { QuestionDock } from "./QuestionDock"
 import { SuggestBar } from "./SuggestBar"
 import { toolDefaultOpen } from "./tool-default-open"
+import { toolErrorCause } from "../../utils/errorUtils"
 
 /** Extract plan path from a completed plan_exit tool part. */
 function planExitInfo(part: SDKPart): { plan: string } | undefined {
@@ -342,6 +343,24 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
             if (!planExitInfo(part)) return
             return part as unknown as ToolPart
           })
+          const failure = createMemo(() => {
+            if (part.type !== "tool" || part.state.status !== "error") return
+            if (part.tool === "question" && part.state.error.includes("dismissed this question")) return
+            const cause = toolErrorCause(part, props.message.error)
+            const reason =
+              cause === "MessageAbortedError"
+                ? language.t("chat.toolError.interrupted")
+                : (cause ??
+                  language.t(
+                    part.state.error.includes("Tool execution aborted")
+                      ? "chat.toolError.unavailable"
+                      : "chat.toolError.failed",
+                  ))
+            return {
+              label: language.t("chat.toolError.cause", { tool: part.tool, cause: reason }),
+              debug: language.t("chat.toolError.debug", { call: part.callID, part: part.id, message: part.messageID }),
+            }
+          })
           // Reasoning blocks are excluded: they animate their own height and
           // their header and body bleed 6px past this wrapper, so the grow-in
           // clip would trim their sides for the whole stream and then release
@@ -480,6 +499,13 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
                     }
                   >
                     {(req) => <QuestionDock request={req()} />}
+                  </Show>
+                  <Show when={failure()}>
+                    {(info) => (
+                      <span data-slot="tool-error-cause" title={info().debug}>
+                        {info().label}
+                      </span>
+                    )}
                   </Show>
                 </div>
               </div>

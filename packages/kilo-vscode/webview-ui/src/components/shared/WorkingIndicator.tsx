@@ -27,6 +27,8 @@ export const WorkingIndicator: Component<WorkingIndicatorProps> = (props) => {
 
   const [elapsed, setElapsed] = createSignal(0)
   const [retryCountdown, setRetryCountdown] = createSignal(0)
+  const [pending, setPending] = createSignal<string>()
+  const [error, setError] = createSignal<string>()
   const goal = () => running(session.currentSession()?.goal, session.status(), session.closeReason())
 
   createEffect(() => {
@@ -50,6 +52,40 @@ export const WorkingIndicator: Component<WorkingIndicatorProps> = (props) => {
 
     onCleanup(() => clearInterval(id))
   })
+
+  const wait = createMemo(() => {
+    const info = session.statusInfo()
+    return `${session.currentSessionID()}:${info.type === "retry" ? `${info.attempt}:${info.next}` : info.type}`
+  })
+  createEffect(() => {
+    // Stream updates may replace status objects without starting a new wait.
+    wait()
+    setPending(undefined)
+    setError(undefined)
+  })
+
+  onCleanup(
+    vscode.onMessage((message) => {
+      if (
+        message.type !== "sessionRetryResult" ||
+        message.sessionID !== session.currentSessionID() ||
+        message.requestID !== pending()
+      )
+        return
+      setPending(undefined)
+      setError(message.accepted ? undefined : message.error || "Retry wait is no longer active")
+    }),
+  )
+
+  const retry = () => {
+    const sessionID = session.currentSessionID()
+    const info = session.statusInfo()
+    if (!sessionID || info.type !== "retry" || pending()) return
+    const requestID = crypto.randomUUID()
+    setPending(requestID)
+    setError(undefined)
+    vscode.postMessage({ type: "retrySession", sessionID, requestID, attempt: info.attempt, next: info.next })
+  }
 
   createEffect(() => {
     const info = session.statusInfo()
@@ -121,6 +157,9 @@ export const WorkingIndicator: Component<WorkingIndicatorProps> = (props) => {
         <span class="sr-only">{language.t("session.messages.scrollToBottom")}</span>
       </Button>
       <Show when={isRetrying()}>
+        <Button variant="secondary" size="small" onClick={retry} disabled={!!pending()} class="working-retry">
+          {language.t("common.retry")}
+        </Button>
         <Button
           variant="secondary"
           size="small"
@@ -130,6 +169,11 @@ export const WorkingIndicator: Component<WorkingIndicatorProps> = (props) => {
         >
           {language.t("ui.sessionTurn.cancel") || "Cancel"}
         </Button>
+      </Show>
+      <Show when={error()}>
+        <span class="working-error" role="alert">
+          {error()}
+        </span>
       </Show>
     </div>
   )

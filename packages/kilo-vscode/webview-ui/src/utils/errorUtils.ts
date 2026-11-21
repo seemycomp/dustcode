@@ -1,4 +1,33 @@
-import type { AssistantMessage } from "@kilocode/sdk/v2"
+import type { AssistantMessage, ToolPart } from "@kilocode/sdk/v2"
+
+export function toolErrorCause(part: ToolPart, error?: AssistantMessage["error"]) {
+  if (part.state.status !== "error") return
+  if (part.state.error.replace(/^Error:\s*/, "").trim() !== "Tool execution aborted") return
+  const stored = part.state.metadata?.abortCause
+  const cause =
+    stored && typeof stored === "object" && !Array.isArray(stored)
+      ? (stored as Record<string, unknown>)
+      : error && { name: error.name, ...error.data }
+  if (!cause) return
+  const token = (value: unknown) =>
+    typeof value === "string" && /^[A-Za-z0-9_.-]{1,100}$/.test(value) ? value : undefined
+  const name = token(cause.name)
+  if (!name) return
+  if (name === "MessageAbortedError") return name
+  const metadata =
+    "metadata" in cause && cause.metadata && typeof cause.metadata === "object"
+      ? (cause.metadata as Record<string, unknown>)
+      : undefined
+  const code = token(cause.code ?? metadata?.code)
+  const status =
+    typeof cause.statusCode === "number" &&
+    Number.isInteger(cause.statusCode) &&
+    cause.statusCode >= 100 &&
+    cause.statusCode <= 599
+      ? `HTTP ${cause.statusCode}`
+      : undefined
+  return [name, code, status].filter(Boolean).join(" / ")
+}
 
 function parse(value: string) {
   try {

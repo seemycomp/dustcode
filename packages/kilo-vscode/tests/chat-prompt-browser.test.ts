@@ -30,7 +30,7 @@ const browserFixturePlugin = {
   },
 }
 
-it("keeps prompts in the readable lane, clamps display, and pins live and virtual turns", async () => {
+async function createFixture() {
   const bundle = await build({
     entryPoints: [path.join(import.meta.dir, "fixtures/chat-prompt-browser.tsx")],
     bundle: true,
@@ -72,6 +72,117 @@ it("keeps prompts in the readable lane, clamps display, and pins live and virtua
     },
   })
   const browser = await chromium.launch({ headless: true })
+  return { browser, server }
+}
+
+it("folds a long Read/Grep sequence while its final answer is still streaming", async () => {
+  const { browser, server } = await createFixture()
+  try {
+    for (const width of [420, 1000]) {
+      const page = await browser.newPage({ viewport: { width, height: 850 } })
+      await page.goto(`${server.url}?working&read-grep`)
+      const tools = page.locator('[data-component="tool-part-wrapper"][data-part-id][data-part-type="tool"]')
+      await check(tools).toHaveCount(20)
+      await check(page.locator('[data-row="work"]')).toHaveCount(0)
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("fixtureAnswer")))
+      const disclosure = page.locator('[data-row="work"] button')
+      await check(disclosure).toHaveText("Worked for 4s")
+      await check(disclosure).toHaveAttribute("aria-expanded", "false")
+      await check(tools).toHaveCount(0)
+      const answer = page.getByText("Compact context replaces older history with a summary.", { exact: true })
+      await check(answer).toBeVisible()
+      await check(page.locator('[data-slot="message-list-working"]')).toBeVisible()
+      await disclosure.click()
+      await check(tools).toHaveCount(20)
+      await check(answer).toBeVisible()
+      await disclosure.click()
+      await check(tools).toHaveCount(0)
+      await check(answer).toBeVisible()
+      await page.close()
+    }
+  } finally {
+    await browser.close()
+    await server.stop(true)
+  }
+}, 120000)
+
+it("shows small tool-error cause labels without guessing who cancelled the turn", async () => {
+  const { browser, server } = await createFixture()
+  try {
+    for (const width of [320, 1000]) {
+      const page = await browser.newPage({ viewport: { width, height: 850 } })
+      for (const cause of ["unavailable", "known", "interrupted"]) {
+        await page.goto(`${server.url}?tool-error&${cause}`)
+        const label = page.locator('[data-slot="tool-error-cause"]')
+        await check(page.getByText("Tool execution aborted", { exact: true })).toBeVisible()
+        await check(label).toHaveText(
+          cause === "known"
+            ? "bash · Cause: APIError / ECONNRESET / HTTP 503"
+            : cause === "interrupted"
+              ? "bash · Cause: Interrupted (source not recorded)"
+              : "bash · Cause: Unavailable (turn ended before tool completed)",
+        )
+        await check(label).toHaveAttribute("title", /failed-call/)
+        expect(await label.evaluate((node) => parseFloat(getComputedStyle(node).fontSize))).toBeLessThanOrEqual(12)
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
+      }
+      await page.close()
+    }
+  } finally {
+    await browser.close()
+    await server.stop(true)
+  }
+}, 120000)
+
+it("keeps streaming compaction content inside the chat lane and a bounded scroll area", async () => {
+  const { browser, server } = await createFixture()
+  try {
+    for (const width of [320, 800, 1460]) {
+      const page = await browser.newPage({ viewport: { width, height: 850 }, reducedMotion: "reduce" })
+      page.setDefaultTimeout(10000)
+      await page.goto(`${server.url}?internal&compaction&compact-layout`, { waitUntil: "domcontentloaded" })
+      const row = page.locator('[data-row-key="internal-30:compaction"]')
+      const card = row.locator('[data-component="collapsible"]')
+      const output = row.locator('[data-component="compaction-output"]')
+      await check(output).toBeVisible({ timeout: 10000 })
+      await check(card.locator('[data-component="tool-trigger"] use[href$="-brain"]')).toHaveCount(1)
+      const lane = (await page.locator(".prompt-input-container").boundingBox())!
+      const box = (await card.boundingBox())!
+      expect(box.width).toBeLessThanOrEqual(lane.width + 16)
+      expect(Math.abs(box.x + box.width / 2 - lane.x - lane.width / 2)).toBeLessThanOrEqual(2)
+      const before = (await output.boundingBox())!
+      expect(before.height).toBeLessThanOrEqual(200)
+      const bounds = await output.evaluate((node) => ({
+        scroll: node.scrollHeight,
+        height: node.clientHeight,
+        width: node.clientWidth,
+        content: node.scrollWidth,
+      }))
+      expect(bounds.scroll).toBeGreaterThan(bounds.height)
+      expect(bounds.content).toBeLessThanOrEqual(bounds.width)
+      await output.evaluate((node) => {
+        node.scrollTop = 100
+      })
+      expect(await output.evaluate((node) => node.scrollTop)).toBeGreaterThan(0)
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("fixtureCompaction")))
+      await check(output).toContainText("Additional summary detail.", { timeout: 10000 })
+      expect((await output.boundingBox())!.height).toBeLessThanOrEqual(200)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
+      const trigger = card.locator('[data-slot="collapsible-trigger"]')
+      await trigger.click()
+      await check(output).not.toBeVisible({ timeout: 10000 })
+      await trigger.click()
+      await check(output).toBeVisible({ timeout: 10000 })
+      await page.close()
+    }
+  } finally {
+    await browser.close()
+    await server.stop(true)
+  }
+}, 120000)
+
+it("keeps prompts in the readable lane, clamps display, and pins live and virtual turns", async () => {
+  const { browser, server } = await createFixture()
   try {
     const activity = await browser.newPage()
     await activity.goto(`${server.url}?activity`)
@@ -535,9 +646,12 @@ it("keeps prompts in the readable lane, clamps display, and pins live and virtua
       await check(label).toHaveAttribute("aria-label", "Retrying request")
       await check(status.getByRole("button", { name: "Cancel", exact: true })).toBeVisible()
       await check(status.locator(".working-count")).toContainText(/\d+s/)
+      const retry = status.getByRole("button", { name: "Retry", exact: true })
+      await check(retry).toBeVisible()
       await change({ type: "offline", label: "Reconnecting" })
       await check(label).toHaveAttribute("aria-label", "Reconnecting")
       await check(status.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0)
+      await check(retry).toHaveCount(0)
       await change({ type: "busy", blocked: true })
       await check(status).toHaveCount(0)
       await change({ type: "idle", blocked: false })
@@ -553,3 +667,75 @@ it("keeps prompts in the readable lane, clamps display, and pins live and virtua
     await server.stop(true)
   }
 }, 180000)
+
+it("retries the active wait without resending a prompt and keeps Cancel available", async () => {
+  const { browser, server } = await createFixture()
+  try {
+    for (const width of [320, 420, 1000]) {
+      const page = await browser.newPage({ viewport: { width, height: 850 } })
+      page.setDefaultTimeout(10000)
+      await page.goto(`${server.url}?working&retry`, { waitUntil: "domcontentloaded", timeout: 30000 })
+      const status = page.locator(".working-indicator")
+      const next = Date.now() + 120_000
+      await page.evaluate(
+        (next) =>
+          window.dispatchEvent(
+            new CustomEvent("fixtureStatus", {
+              detail: { type: "retry", label: "Rate limited on the configured account", next },
+            }),
+          ),
+        next,
+      )
+      const retry = status.getByRole("button", { name: "Retry", exact: true })
+      const cancel = status.getByRole("button", { name: "Cancel", exact: true })
+      await check(retry).toBeVisible()
+      await check(status.locator(".working-count")).toContainText(/\d+s/)
+      for (const button of [retry, cancel]) {
+        const box = (await button.boundingBox())!
+        expect(box.x).toBeGreaterThanOrEqual(0)
+        expect(box.x + box.width).toBeLessThanOrEqual(width)
+      }
+      await retry.click()
+      await check(retry).toBeDisabled()
+      const request = JSON.parse((await page.locator("body").getAttribute("data-control"))!)
+      expect(request).toMatchObject({ type: "retrySession", sessionID: "prompt-browser", attempt: 1, next })
+      expect(request.requestID).toBeTruthy()
+      expect(request).not.toHaveProperty("text")
+      await page.evaluate(
+        (request) =>
+          window.dispatchEvent(
+            new CustomEvent("fixtureReply", {
+              detail: { ...request, type: "sessionRetryResult", requestID: "stale", accepted: false },
+            }),
+          ),
+        request,
+      )
+      await check(retry).toBeDisabled()
+      await page.evaluate(
+        (request) =>
+          window.dispatchEvent(
+            new CustomEvent("fixtureReply", {
+              detail: { ...request, type: "sessionRetryResult", accepted: false, error: "Retry request failed" },
+            }),
+          ),
+        request,
+      )
+      await check(retry).toBeEnabled()
+      await check(status.getByRole("alert")).toHaveText("Retry request failed")
+      await cancel.click()
+      expect(JSON.parse((await page.locator("body").getAttribute("data-control"))!)).toEqual({
+        type: "abort",
+        sessionID: "prompt-browser",
+        scope: "session",
+      })
+      expect(await page.locator("body").getAttribute("data-controls")).toBe("2")
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("fixtureStatus", { detail: { type: "busy" } })))
+      await check(retry).toHaveCount(0)
+      await check(status.getByRole("alert")).toHaveCount(0)
+      await page.close()
+    }
+  } finally {
+    await browser.close()
+    await server.stop(true)
+  }
+}, 120000)

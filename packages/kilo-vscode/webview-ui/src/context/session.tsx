@@ -104,6 +104,7 @@ import { clearSessionDraftDiscarded, deleteDraftsForSession } from "../utils/dra
 import { createAbortState } from "./abort-state"
 import { goalControl } from "../../../src/kilo-provider/command-completion"
 import { continuation } from "./session-continuation"
+import { compacting } from "./session-compaction"
 import { clearIfOn, createCloudPrune } from "./session-cloud-prune"
 import { isSameSessionTree } from "./model-usage"
 import { createDraftAgentSeed, resolvePromptAgent, resolveScopeAgent } from "./session-agent"
@@ -2890,7 +2891,6 @@ export const SessionProvider: ParentComponent = (props) => {
     if (!id || costs.size === 0) return []
     return buildCostBreakdown(id, costs, familyLabels(), language.t("context.stats.thisSession"))
   })
-
   // Status text derived from current turn's assistant message parts
   const statusText = createMemo<string | undefined>(() => {
     if (status() === "idle") return undefined
@@ -2899,6 +2899,7 @@ export const SessionProvider: ParentComponent = (props) => {
     const id = currentSessionID()
     const msgs = messages()
     const activeID = activeUserMessageID(msgs, statusInfo(), (msg) => getParts(msg.id), submitting())
+    if (compacting(msgs, (messageID) => getParts(messageID))) return language.t("ui.sessionTurn.status.compacting")
     const activeIdx = activeID
       ? msgs.findIndex((msg) => msg.id === activeID)
       : msgs.findLastIndex((m) => m.role === "user")
@@ -2922,7 +2923,6 @@ export const SessionProvider: ParentComponent = (props) => {
     }
     return thinking
   })
-
   const modelUsage = createMemo<SessionModelUsage | undefined>(() => {
     const id = currentSessionID()
     return id ? store.modelUsage[id]?.data : undefined

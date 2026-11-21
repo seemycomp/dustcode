@@ -1020,6 +1020,7 @@ it.live("session.processor effect tests mark pending tools as aborted on cleanup
         if (call?.state.status === "error") {
           expect(call.state.error).toBe("Tool execution aborted")
           expect(call.state.metadata?.interrupted).toBe(true)
+          expect(call.state.metadata?.abortCause).toEqual({ name: "MessageAbortedError" }) // kilocode_change
           expect(call.state.time.end).toBeDefined()
         }
       }),

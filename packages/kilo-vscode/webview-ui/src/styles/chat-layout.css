@@ -295,6 +295,7 @@ body.vscode-high-contrast-light .chat-view {
   --working-status-ease: cubic-bezier(0.22, 1, 0.36, 1);
 
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 8px;
@@ -322,6 +323,17 @@ body.vscode-high-contrast-light .chat-view {
   transition:
     background-color 150ms ease,
     color 150ms ease;
+}
+
+.working-retry,
+.working-cancel {
+  flex-shrink: 0;
+}
+
+.working-error {
+  flex-basis: 100%;
+  color: var(--vscode-errorForeground);
+  overflow-wrap: anywhere;
 }
 
 .message-list-working {

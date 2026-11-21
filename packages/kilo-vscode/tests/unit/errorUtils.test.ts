@@ -1,14 +1,70 @@
 import { describe, it, expect } from "bun:test"
-import type { AssistantMessage } from "@kilocode/sdk/v2"
+import type { AssistantMessage, ToolPart } from "@kilocode/sdk/v2"
 import {
   unwrapError,
   parseAssistantError,
   parseProviderAuthError,
   isUnauthorizedPaidModelError,
   isUnauthorizedPromotionLimitError,
+  toolErrorCause,
 } from "../../webview-ui/src/utils/errorUtils"
 
 type AssistantError = AssistantMessage["error"]
+
+describe("toolErrorCause", () => {
+  const part = (metadata?: Record<string, unknown>): ToolPart => ({
+    id: "part",
+    sessionID: "session",
+    messageID: "message",
+    callID: "call",
+    type: "tool",
+    tool: "bash",
+    state: { status: "error", input: {}, error: "Tool execution aborted", metadata, time: { start: 1, end: 2 } },
+  })
+
+  it("uses the captured cause rather than a later message error", () => {
+    expect(
+      toolErrorCause(part({ abortCause: { name: "APIError", code: "ECONNRESET", statusCode: 503 } }), {
+        name: "MessageAbortedError",
+        data: { message: "Aborted" },
+      }),
+    ).toBe("APIError / ECONNRESET / HTTP 503")
+  })
+
+  it("uses the message error for older history without captured metadata", () => {
+    expect(
+      toolErrorCause(part(), { name: "APIError", data: { message: "Failed", isRetryable: false, statusCode: 429 } }),
+    ).toBe("APIError / HTTP 429")
+    expect(
+      toolErrorCause(part(), {
+        name: "APIError",
+        data: { message: "Failed", isRetryable: false, metadata: { code: "ETIMEDOUT" } },
+      }),
+    ).toBe("APIError / ETIMEDOUT")
+  })
+
+  it("does not infer user cancellation from cleanup bookkeeping", () => {
+    expect(toolErrorCause(part({ interrupted: true }))).toBeUndefined()
+    expect(toolErrorCause(part(), { name: "MessageAbortedError", data: { message: "Aborted" } })).toBe(
+      "MessageAbortedError",
+    )
+  })
+
+  it("does not expose raw messages, headers, or malformed diagnostic values", () => {
+    expect(
+      toolErrorCause(
+        part({ abortCause: { name: "APIError", code: "Bearer secret", statusCode: 999, message: "secret" } }),
+      ),
+    ).toBe("APIError")
+    expect(toolErrorCause(part({ abortCause: { name: "APIError", statusCode: 503.5 } }))).toBe("APIError")
+  })
+
+  it("does not attribute an ordinary tool failure to the surrounding message error", () => {
+    const tool = part()
+    if (tool.state.status === "error") tool.state.error = "Permission denied"
+    expect(toolErrorCause(tool, { name: "MessageAbortedError", data: { message: "Aborted" } })).toBeUndefined()
+  })
+})
 
 describe("unwrapError", () => {
   it("returns plain string messages unchanged", () => {

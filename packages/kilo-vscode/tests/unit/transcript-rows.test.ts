@@ -29,6 +29,37 @@ const tool = (id: string, messageID: string): Part => ({
 const lookup = (values: Record<string, Part[]>) => (id: string) => values[id] ?? []
 
 describe("transcriptRows", () => {
+  it("keeps a compaction response in one stable row from empty through completion", () => {
+    const marker: Part = { id: "compact", messageID: "u1", type: "compaction", auto: true }
+    const msg = assistant("a1", "u1", { summary: true })
+    const turns = messageTurns([user("u1"), msg])
+    const initial = transcriptRows(turns, lookup({ u1: [marker] }), { live: new Set(["u1"]) })
+    const content = Array.from({ length: 20 }, (_, i) => part(`summary-${i}`, "a1"))
+    const streamed = transcriptRows(
+      turns,
+      lookup({ u1: [marker], a1: content }),
+      { size: 2, live: new Set(["u1"]) },
+      initial,
+    )
+    expect(initial).toHaveLength(1)
+    expect(streamed).toHaveLength(1)
+    expect(streamed[0]).toMatchObject({ key: initial[0]!.key, type: "assistant", compaction: true, parts: content })
+    const complete = transcriptRows(
+      messageTurns([
+        user("u1"),
+        { ...msg, finish: "stop", time: { created: 1, completed: 20 } },
+        assistant("a2", "u1"),
+      ]),
+      lookup({ u1: [marker], a1: content, a2: [part("resumed", "a2")] }),
+    )
+    expect(complete[0]).toMatchObject({ key: initial[0]!.key, compaction: true })
+    expect(complete.filter((row) => row.type === "assistant" && row.message.id === "a2")).toHaveLength(1)
+    expect(complete.find((row) => row.type === "assistant" && row.message.id === "a2")).not.toHaveProperty(
+      "compaction",
+      true,
+    )
+  })
+
   it("keeps trailing tools inside work and all final text outside, across messages and chunks", () => {
     const turns = messageTurns([
       user("u1"),
@@ -150,6 +181,69 @@ describe("transcriptRows", () => {
     expect(rows.filter((row) => row.type === "assistant" && row.process)).toHaveLength(2)
   })
 
+  it("collapses read and grep work as soon as an explicitly final answer starts streaming", () => {
+    const turns = messageTurns([
+      user("u1", { time: { created: 1_000 } }),
+      assistant("a1", "u1", { finish: "tool-calls", time: { created: 1_100, completed: 4_000 } }),
+      assistant("a2", "u1", { time: { created: 4_100 } }),
+    ])
+    const tools = Array.from({ length: 20 }, (_, i) => ({
+      ...tool(`tool-${i}`, "a1"),
+      tool: i % 2 ? "grep" : "read",
+    }))
+    const answer: Part = {
+      ...part("answer", "a2"),
+      time: { start: 5_000 },
+      metadata: { openai: { phase: "final_answer" } },
+    }
+    const opts = { live: new Set(["u1"]), size: 2 }
+    const rows = transcriptRows(turns, lookup({ a1: tools, a2: [answer] }), opts)
+    expect(rows.find((row) => row.type === "work")).toMatchObject({ timing: { durationMs: 4_000 } })
+    expect(disclosedRows(rows, new Set()).map((row) => row.type)).toEqual(["work", "assistant"])
+    expect(rows.filter((row) => row.type === "assistant" && row.process).flatMap((row) => row.parts)).toEqual(tools)
+    expect(rows.at(-1)).toMatchObject({ process: false, parts: [answer], copy: undefined })
+    expect(rows.find((row) => row.type === "assistant" && !row.process)?.timing).toBeUndefined()
+    const next = transcriptRows(
+      turns,
+      lookup({ a1: tools, a2: [{ ...answer, text: "More final answer text" }] }),
+      opts,
+      rows,
+    )
+    expect(next.find((row) => row.type === "work")).toBe(rows.find((row) => row.type === "work"))
+    expect(disclosedRows(next, new Set(["session:u1"]))).toEqual(next)
+  })
+
+  it("keeps streaming commentary visible and does not mistake it for a final answer", () => {
+    const turns = messageTurns([user("u1"), assistant("a1", "u1")])
+    for (const phase of ["commentary", undefined]) {
+      const rows = transcriptRows(
+        turns,
+        lookup({
+          a1: [tool("read", "a1"), { ...part("progress", "a1"), time: { start: 5 }, metadata: { openai: { phase } } }],
+        }),
+        { live: new Set(["u1"]) },
+      )
+      expect(rows.some((row) => row.type === "work")).toBe(false)
+      expect(disclosedRows(rows, new Set())).toEqual(rows)
+    }
+  })
+
+  it("keeps every streamed final text part outside work and commentary in the same message", () => {
+    const turns = messageTurns([user("u1"), assistant("a1", "u1")])
+    const answers: Part[] = ["first", "second"].map((id) => ({
+      ...part(id, "a1"),
+      time: { start: 10 },
+      metadata: { openai: { phase: "final_answer" } },
+    }))
+    const rows = transcriptRows(turns, lookup({ a1: [tool("read", "a1"), part("commentary", "a1"), ...answers] }), {
+      live: new Set(["u1"]),
+      size: 1,
+    })
+    expect(disclosedRows(rows, new Set()).flatMap((row) => (row.type === "assistant" ? row.parts : []))).toEqual(
+      answers,
+    )
+  })
+
   it("does not collapse live, failed, interrupted, partial, or answer-only turns", () => {
     for (const opts of [{ live: new Set(["u1"]) }, {}, { partial: true }]) {
       for (const error of [undefined, { name: "ProviderError" }, { name: "MessageAbortedError" }]) {
@@ -231,7 +325,11 @@ describe("transcriptRows", () => {
     for (const opts of [{}, { live: new Set(["u1"]) }, { queued: new Set(["u1"]) }]) {
       for (const parts of cases) {
         const rows = transcriptRows(messageTurns([user("u1")]), lookup({ u1: parts }), opts)
-        expect(rows).toEqual([])
+        if (parts.some((part) => part.type === "compaction")) {
+          expect(rows).toMatchObject([{ type: "assistant", compaction: true }])
+        } else {
+          expect(rows).toEqual([])
+        }
       }
     }
   })

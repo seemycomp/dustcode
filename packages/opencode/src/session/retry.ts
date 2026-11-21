@@ -90,7 +90,8 @@ export function retryable(error: Err, _provider?: string): Retryable | undefined
     const status = error.data.statusCode
     // kilocode_change start - Current Kilo errors require user action (login/signup), don't retry
     if (isKiloError(error)) return undefined
-    if (error.data.isRetryable === false && (status === undefined || status < 500) && !error.data.responseBody) return undefined
+    if (error.data.isRetryable === false && (status === undefined || status < 500) && !error.data.responseBody)
+      return undefined
     // kilocode_change end
 
     // 5xx errors are transient server failures and should always be retried,
@@ -142,6 +143,15 @@ export function policy(opts: {
   // kilocode_change start
   limit?: number
   offline?: (input: { error: unknown; message: string }) => Effect.Effect<"retry" | "blocked" | "aborted">
+  wait?: (
+    input: { attempt: number; message: string; action?: Retryable["action"]; next: number },
+    set: (input: {
+      attempt: number
+      message: string
+      action?: Retryable["action"]
+      next: number
+    }) => Effect.Effect<void>,
+  ) => Effect.Effect<void>
   // kilocode_change end
 }) {
   const state = { offline: 0 } // kilocode_change
@@ -180,12 +190,19 @@ export function policy(opts: {
         // kilocode_change end
         const wait = delay(attempt, SessionV1.APIError.isInstance(error) ? error : undefined) // kilocode_change
         const now = yield* Clock.currentTimeMillis
-        yield* opts.set({
+        // kilocode_change start - register before publishing and let the optional wait own the delay
+        const info = {
           attempt, // kilocode_change
           message: retry.message,
           action: retry.action,
           next: now + wait,
-        })
+        }
+        if (opts.wait) {
+          yield* opts.wait(info, opts.set)
+          return [attempt, Duration.zero] as [number, Duration.Duration]
+        }
+        yield* opts.set(info)
+        // kilocode_change end
         return [attempt, Duration.millis(wait)] as [number, Duration.Duration] // kilocode_change
       })
     }),

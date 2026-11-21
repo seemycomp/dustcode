@@ -94,6 +94,8 @@ export const ResumeSessionPayload = Schema.Struct({
 
 export const DrainSessionPayload = Schema.Struct({ token: Token })
 
+export const RetrySessionPayload = Schema.Struct({ attempt: Schema.Int, next: Schema.Number })
+
 export const SessionBoard = BoardStore.SessionBoard
 export const SessionBoardQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
@@ -164,6 +166,7 @@ export const KilocodePaths = {
   agentManagerReject: `${root}/agent-manager/:requestID/reject`,
   sessionModelUsage: `/session/:sessionID/model-usage`,
   resumeSession: `${root}/session/:sessionID/resume`,
+  retrySession: `${root}/session/:sessionID/retry`,
   drainSession: `${root}/session/:sessionID/drain`,
   sessionBoard: `${root}/session/:sessionID/board`,
   resetSessionBoard: `${root}/session/:sessionID/board/reset`,
@@ -180,6 +183,20 @@ export const KilocodeApi = HttpApi.make("kilocode")
   .add(
     HttpApiGroup.make("kilocode")
       .add(
+        HttpApiEndpoint.post("retrySession", KilocodePaths.retrySession, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: RetrySessionPayload,
+          success: described(Schema.Boolean, "Current retry wait awakened"),
+          error: ApiNotFoundError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.retrySession",
+            summary: "Retry a waiting provider request immediately",
+            description:
+              "Wake only the current retry wait matching the supplied attempt and next timestamp, without starting a new turn.",
+          }),
+        ),
         HttpApiEndpoint.post("resumeSession", KilocodePaths.resumeSession, {
           params: { sessionID: SessionID },
           query: WorkspaceRoutingQuery,
